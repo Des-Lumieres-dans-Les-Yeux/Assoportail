@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Aperçu : {{ campaign.name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('mailing.list_campaigns') }}">Emailing</a></li>
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('mailing.detail', campaign_id=campaign.id) }}">{{ campaign.name }}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Aperçu</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Aperçu du rendu final</h1>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+
+    {# ── Mode toggle (audience "both" only) ── #}
+    {% if audience == "both" %}
+    <div class="btn-group btn-group-sm" role="group" aria-label="Mode de prévisualisation">
+      <a href="{{ url_for('mailing.preview', campaign_id=campaign.id, mode='members') }}"
+         class="btn btn-{{ 'primary' if preview_mode == 'members' else 'outline-secondary' }}">
+        <i class="bi bi-person me-1" aria-hidden="true"></i>Membre
+      </a>
+      <a href="{{ url_for('mailing.preview', campaign_id=campaign.id, mode='center_contacts') }}"
+         class="btn btn-{{ 'primary' if preview_mode == 'center_contacts' else 'outline-secondary' }}">
+        <i class="bi bi-building me-1" aria-hidden="true"></i>Centre
+      </a>
+    </div>
+    {% endif %}
+
+    {# ── Member selector ── #}
+    {% if preview_mode in ("members", "both") and members %}
+    <form id="preview-member-form" method="get"
+          action="{{ url_for('mailing.preview', campaign_id=campaign.id) }}" class="d-inline">
+      {% if audience == "both" %}<input type="hidden" name="mode" value="members">{% endif %}
+      <select name="member_id" class="form-select form-select-sm" style="max-width: 22rem;"
+              data-auto-submit="preview-member-form">
+        {% for m in members %}
+        <option value="{{ m.id }}"
+                {{ 'selected' if selected_member and selected_member.id == m.id }}>
+          {{ m.full_name }} — {{ m.email }}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+    {% endif %}
+
+    {# ── Center selector ── #}
+    {% if preview_mode in ("center_contacts", "both") and centers %}
+    <form id="preview-center-form" method="get"
+          action="{{ url_for('mailing.preview', campaign_id=campaign.id) }}" class="d-inline">
+      {% if audience == "both" %}<input type="hidden" name="mode" value="center_contacts">{% endif %}
+      <select name="center_id" class="form-select form-select-sm" style="max-width: 22rem;"
+              data-auto-submit="preview-center-form">
+        {% for c in centers %}
+        <option value="{{ c.id }}"
+                {{ 'selected' if selected_center and selected_center.id == c.id }}>
+          {{ c.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+    {% endif %}
+
+    {# ── Tombola participant selector ── #}
+    {% if preview_mode == "tombola" and tombola_participants %}
+    <form id="preview-tombola-form" method="get"
+          action="{{ url_for('mailing.preview', campaign_id=campaign.id) }}" class="d-inline">
+      <select name="participant_email" class="form-select form-select-sm" style="max-width: 22rem;"
+              data-auto-submit="preview-tombola-form">
+        {% for p in tombola_participants %}
+        <option value="{{ p.email }}"
+                {{ 'selected' if selected_participant and selected_participant.email == p.email }}>
+          {% if p.first_name or p.last_name %}
+            {{ (p.first_name or '') ~ ' ' ~ (p.last_name or '') | trim }} — {{ p.email }}
+          {% else %}
+            {{ p.email }}
+          {% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+    {% endif %}
+
+    <a href="{{ url_for('mailing.detail', campaign_id=campaign.id) }}"
+       class="btn btn-outline-secondary btn-sm">Retour</a>
+  </div>
+</div>
+
+{# ── Email preview card ── #}
+<div class="card mb-4">
+  <div class="card-header bg-white">
+    <div class="row mb-2">
+      <div class="col-sm-2 text-muted small">De :</div>
+      <div class="col-sm-10">Assoportail &lt;votre-association@gmail.com&gt;</div>
+    </div>
+    <div class="row mb-2">
+      <div class="col-sm-2 text-muted small">À :</div>
+      <div class="col-sm-10">{{ preview_name }} &lt;{{ preview_email }}&gt;</div>
+    </div>
+    <div class="row">
+      <div class="col-sm-2 text-muted small">Sujet :</div>
+      <div class="col-sm-10"><strong>{{ subject }}</strong></div>
+    </div>
+  </div>
+  <div class="card-body bg-light p-0">
+    <div class="bg-white m-3 p-4 border shadow-sm mx-auto" style="max-width: 800px; min-height: 400px;">
+      {{ body | safe }}
+    </div>
+  </div>
+</div>
+
+{# ── Context info ── #}
+<div class="alert alert-info small">
+  <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+  {% if preview_mode == "members" %}
+  Simulation pour <strong>{{ preview_name }}</strong> ({{ preview_email }}).
+  Les balises centre (<code>[[lien_panne]]</code>, <code>[[lien_livre_or]]</code>) sont remplacées
+  par des liens fictifs car les membres ne reçoivent pas de liens centrés sur un établissement.
+  {% elif preview_mode == "center_contacts" %}
+  Simulation pour le centre <strong>{{ preview_name }}</strong>.
+  Les balises sont remplacées par les liens réels de l'établissement sélectionné.
+  {% elif preview_mode == "tombola" %}
+  Simulation pour <strong>{{ preview_email }}</strong>.
+  <code>[[numeros_tombola]]</code> affiche les vrais numéros de billets de ce participant.
+  {% else %}
+  Aperçu simulé — les balises de personnalisation sont remplacées par des valeurs d'exemple.
+  {% endif %}
+</div>
+{% endblock %}

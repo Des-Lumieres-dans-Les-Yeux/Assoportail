@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% set is_edit = poll is not none %}
+{% block title %}{{ 'Modifier' if is_edit else 'Nouveau' }} sondage — Assoportail{% endblock %}
+
+{% block extra_css %}
+<style nonce="{{ csp_nonce() }}">
+  .option-row { display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem; }
+  .option-row input { flex:1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('polls.list_polls') }}">Sondages</a></li>
+    {% if is_edit %}
+    <li class="breadcrumb-item"><a href="{{ url_for('polls.detail', poll_id=poll.id) }}">{{ poll.title }}</a></li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">{{ 'Modifier' if is_edit else 'Nouveau sondage' }}</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ 'Modifier le sondage' if is_edit else 'Nouveau sondage' }}</h1>
+
+<form method="post" enctype="multipart/form-data" novalidate style="max-width:42rem;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  {# Title #}
+  <div class="mb-3">
+    <label for="{{ form.title.id }}" class="form-label">{{ form.title.label.text }} *</label>
+    {{ form.title(class="form-control", maxlength=200, placeholder="Titre du sondage") }}
+    {% if form.title.errors %}
+    <div class="invalid-feedback d-block">{{ form.title.errors | join(', ') }}</div>
+    {% endif %}
+  </div>
+
+  {# Description #}
+  <div class="mb-3">
+    <label for="{{ form.description.id }}" class="form-label">{{ form.description.label.text }}</label>
+    {{ form.description(class="form-control", rows=4, maxlength=3000, placeholder="Description ou contexte du sondage (optionnel)") }}
+  </div>
+
+  {# Cover image #}
+  <div class="mb-3">
+    <label for="cover" class="form-label">Image de couverture <span class="text-muted small">(optionnel, max 5 Mo)</span></label>
+    {% if is_edit and poll.cover_document_id %}
+    <div class="mb-2">
+      <img src="{{ url_for('documents.download', document_id=poll.cover_document_id) }}"
+           alt="" style="height:80px;object-fit:cover;border-radius:.375rem;">
+      <span class="text-muted small ms-2">Image actuelle — téléversez-en une nouvelle pour remplacer.</span>
+    </div>
+    {% endif %}
+    <input type="file" id="cover" name="cover" class="form-control form-control-sm"
+           accept="image/jpeg,image/png,image/gif,image/webp">
+  </div>
+
+  {# Deadline #}
+  <div class="mb-3">
+    <label for="deadline" class="form-label">Date limite <span class="text-muted small">(optionnel)</span></label>
+    <input type="datetime-local" id="deadline" name="deadline" class="form-control"
+           value="{{ deadline_str if deadline_str is defined else '' }}">
+  </div>
+
+  {# Allows multiple #}
+  <div class="mb-4 form-check">
+    {{ form.allows_multiple(class="form-check-input") }}
+    <label class="form-check-label" for="{{ form.allows_multiple.id }}">
+      {{ form.allows_multiple.label.text }}
+    </label>
+  </div>
+
+  {# Options #}
+  <div class="mb-4">
+    <label class="form-label fw-semibold">Options *</label>
+    {% if is_edit and poll.votes %}
+    <p class="text-muted small mb-2">
+      <i class="bi bi-lock me-1" aria-hidden="true"></i>Des votes existent déjà — les options ne peuvent plus être modifiées.
+    </p>
+    {% for opt in poll.options %}
+    <div class="option-row">
+      <input type="text" class="form-control form-control-sm" value="{{ opt.text }}" disabled>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div id="options-list">
+      {% if is_edit %}
+        {% for opt in poll.options %}
+        <div class="option-row">
+          <input type="text" name="option_text" class="form-control form-control-sm"
+                 value="{{ opt.text }}" placeholder="Option" maxlength="300" required>
+          <button type="button" class="btn btn-outline-danger btn-sm remove-option-btn" aria-label="Supprimer">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="option-row">
+          <input type="text" name="option_text" class="form-control form-control-sm" placeholder="Option 1" maxlength="300" required>
+          <button type="button" class="btn btn-outline-danger btn-sm remove-option-btn" aria-label="Supprimer" disabled>
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="option-row">
+          <input type="text" name="option_text" class="form-control form-control-sm" placeholder="Option 2" maxlength="300" required>
+          <button type="button" class="btn btn-outline-danger btn-sm remove-option-btn" aria-label="Supprimer" disabled>
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </div>
+      {% endif %}
+    </div>
+    <button type="button" id="add-option-btn" class="btn btn-outline-secondary btn-sm mt-2">
+      <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Ajouter une option
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-check-lg me-1" aria-hidden="true"></i>{{ 'Enregistrer' if is_edit else 'Créer le sondage' }}
+    </button>
+    <a href="{{ url_for('polls.detail', poll_id=poll.id) if is_edit else url_for('polls.list_polls') }}"
+       class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  var list = document.getElementById('options-list');
+  var addBtn = document.getElementById('add-option-btn');
+  if (!list || !addBtn) return;
+
+  function updateRemoveButtons() {
+    var rows = list.querySelectorAll('.option-row');
+    rows.forEach(function (row) {
+      var btn = row.querySelector('.remove-option-btn');
+      if (btn) btn.disabled = rows.length <= 2;
+    });
+  }
+
+  addBtn.addEventListener('click', function () {
+    var count = list.querySelectorAll('.option-row').length + 1;
+    var row = document.createElement('div');
+    row.className = 'option-row';
+    row.innerHTML =
+      '<input type="text" name="option_text" class="form-control form-control-sm"'
+      + ' placeholder="Option ' + count + '" maxlength="300" required>'
+      + '<button type="button" class="btn btn-outline-danger btn-sm remove-option-btn" aria-label="Supprimer">'
+      + '<i class="bi bi-x-lg" aria-hidden="true"></i></button>';
+    list.appendChild(row);
+    row.querySelector('input').focus();
+    updateRemoveButtons();
+  });
+
+  list.addEventListener('click', function (e) {
+    var btn = e.target.closest('.remove-option-btn');
+    if (!btn || btn.disabled) return;
+    btn.closest('.option-row').remove();
+    updateRemoveButtons();
+  });
+
+  updateRemoveButtons();
+}());
+</script>
+{% endblock %}

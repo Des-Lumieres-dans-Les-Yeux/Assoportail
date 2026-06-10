@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Modifier' if campaign else 'Nouvelle' }} campagne — Emailing — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('mailing.list_campaigns') }}">Emailing</a></li>
+    {% if campaign %}
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('mailing.detail', campaign_id=campaign.id) }}">{{ campaign.name }}</a>
+    </li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">
+      {% if campaign %}Modifier{% else %}Nouvelle campagne{% endif %}
+    </li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ 'Modifier la campagne' if campaign else 'Nouvelle campagne' }}</h1>
+
+<form method="post" action="" novalidate style="max-width: 52rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="mb-3">
+    <label for="{{ form.name.id }}" class="form-label">{{ form.name.label.text }} *</label>
+    {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""),
+                 id=form.name.id, placeholder="Ex : Newsletter mars 2026") }}
+    {% for e in form.name.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.subject.id }}" class="form-label">{{ form.subject.label.text }} *</label>
+    {{ form.subject(class="form-control" + (" is-invalid" if form.subject.errors else ""),
+                    id=form.subject.id, placeholder="Objet de l'email") }}
+    {% for e in form.subject.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.body_html.id }}" class="form-label">{{ form.body_html.label.text }} *</label>
+    {{ form.body_html(class="form-control font-monospace" + (" is-invalid" if form.body_html.errors else ""),
+                      id=form.body_html.id, rows=12,
+                      placeholder="<p>Bonjour,</p>\n<p>...</p>") }}
+    {% for e in form.body_html.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+    <div class="form-text">
+      Contenu HTML de l'email. Les balises de style inline sont recommandées pour la compatibilité des clients mail.<br>
+      Balises disponibles, personnalisées par destinataire :
+      <ul class="mb-0 mt-1">
+        <li><code>[[lien_panne]]</code> — lien de signalement de panne (centres).</li>
+        <li><code>[[lien_livre_or]]</code> — lien livre d'or (centres).</li>
+        <li><code>[[numeros_tombola]]</code> — liste des numéros de billet du participant (tombola).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.audience.id }}" class="form-label">{{ form.audience.label.text }}</label>
+    {{ form.audience(class="form-select", id=form.audience.id, style="max-width: 26rem;") }}
+  </div>
+
+  <div class="row g-3 mb-3" id="member-filter-group">
+    <div class="col-sm-6">
+      <label for="{{ form.membership_status.id }}" class="form-label">{{ form.membership_status.label.text }}</label>
+      {{ form.membership_status(class="form-select", id=form.membership_status.id) }}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.role.id }}" class="form-label">{{ form.role.label.text }}</label>
+      {{ form.role(class="form-select", id=form.role.id) }}
+    </div>
+    <div class="form-text col-12">Ces filtres s'appliquent uniquement aux membres de l'association.</div>
+  </div>
+
+  <div class="mb-3 d-none" id="tombola-filter-group">
+    <label for="tombola_id" class="form-label">Tombola cible</label>
+    <select name="tombola_id" id="tombola_id" class="form-select" style="max-width: 26rem;">
+      <option value="">— Sélectionner une tombola —</option>
+      {% for t in tombolas %}
+      {% set current_tid = (campaign.recipients_filter or {}).get('tombola_id') if campaign else none %}
+      {% set is_selected = (current_tid == t.id) or (not campaign and preselect_tombola_id == t.id) %}
+      <option value="{{ t.id }}" {% if is_selected %}selected{% endif %}>
+        {{ t.name }}{% if t.draw_date %} ({{ t.draw_date.strftime('%d/%m/%Y') }}){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    <div class="form-text">
+      Seuls les participants avec un numéro de billet attribué recevront l'email.
+      Utilisez <code>[[numeros_tombola]]</code> dans le corps pour insérer leurs numéros.
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <label for="{{ form.scheduled_at.id }}" class="form-label">{{ form.scheduled_at.label.text }}</label>
+    {{ form.scheduled_at(class="form-control" + (" is-invalid" if form.scheduled_at.errors else ""),
+                         id=form.scheduled_at.id, style="max-width: 20rem;") }}
+    <div class="form-text">Laissez vide pour enregistrer comme brouillon et envoyer manuellement.</div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+      {% if campaign %}Enregistrer{% else %}Créer le brouillon{% endif %}
+    </button>
+    <a href="{% if campaign %}{{ url_for('mailing.detail', campaign_id=campaign.id) }}{% else %}{{ url_for('mailing.list_campaigns') }}{% endif %}"
+       class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  var audience = document.getElementById('{{ form.audience.id }}');
+  var memberGroup = document.getElementById('member-filter-group');
+  var tombolaGroup = document.getElementById('tombola-filter-group');
+  if (!audience) return;
+  function toggle() {
+    var v = audience.value;
+    if (memberGroup)  memberGroup.classList.toggle('d-none',  v === 'center_contacts' || v === 'tombola');
+    if (tombolaGroup) tombolaGroup.classList.toggle('d-none', v !== 'tombola');
+  }
+  audience.addEventListener('change', toggle);
+  toggle();
+}());
+</script>
+{% endblock %}

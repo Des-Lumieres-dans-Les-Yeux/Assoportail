@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Convention de prêt — {{ machine.display_name }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 20mm 18mm; line-height: 1.5; }
+    h1 { font-size: 20px; text-align: center; text-transform: uppercase;
+         letter-spacing: 1px; margin-bottom: 4px; }
+    .doc-ref { text-align: center; font-size: 10px; color: #6b7280; margin-bottom: 24px; }
+    h2 { font-size: 13px; font-weight: bold; text-transform: uppercase;
+         letter-spacing: 0.5px; margin-top: 20px; margin-bottom: 8px;
+         border-bottom: 1px solid #374151; padding-bottom: 3px; }
+    .party-block { border: 1px solid #d1d5db; padding: 12px 16px; margin-bottom: 16px;
+                   background: #f9fafb; border-radius: 4px; }
+    .party-block strong { display: block; font-size: 13px; margin-bottom: 6px; color: #1e40af; }
+    table.fields { width: 100%; border-collapse: collapse; }
+    table.fields td { padding: 3px 0; }
+    table.fields td:first-child { width: 10rem; color: #374151; font-weight: bold; }
+    .article { margin-bottom: 14px; }
+    .article p { margin: 4px 0; text-align: justify; }
+    .signature-area { display: flex; gap: 40px; margin-top: 30px; }
+    .sig-box { flex: 1; border-top: 1px solid #374151; padding-top: 8px; }
+    .sig-box .sig-label { font-weight: bold; font-size: 11px; color: #374151; }
+    .sig-box .sig-name { font-size: 11px; color: #6b7280; margin-top: 2px; }
+    .sig-space { height: 50px; }
+    .footer { margin-top: 30px; font-size: 9px; color: #9ca3af; text-align: center;
+              border-top: 1px solid #e5e7eb; padding-top: 8px; }
+    @page { size: A4 portrait; margin: 20mm 18mm; }
+  </style>
+</head>
+<body>
+
+<h1>Convention de prêt de matériel</h1>
+<p class="doc-ref">
+  Réf. : CONV-{{ machine.id }}-{{ today.strftime('%Y%m%d') }}
+  &nbsp;|&nbsp; Date : {{ today.strftime('%d/%m/%Y') }}
+</p>
+
+<h2>Entre les soussignés</h2>
+
+<div class="party-block">
+  <strong>Le prêteur (association)</strong>
+  <table class="fields">
+    {% if cfg.name %}<tr><td>Nom</td><td>{{ cfg.name }}</td></tr>{% endif %}
+    {% if cfg.address %}<tr><td>Adresse</td><td>{{ cfg.address }}</td></tr>{% endif %}
+    {% if cfg.zip_code and cfg.city %}<tr><td>Code postal / Ville</td><td>{{ cfg.zip_code }} {{ cfg.city }}</td></tr>{% endif %}
+    {% if cfg.siret %}<tr><td>SIRET</td><td>{{ cfg.siret }}</td></tr>{% endif %}
+    {% if cfg.rna %}<tr><td>RNA</td><td>{{ cfg.rna }}</td></tr>{% endif %}
+    {% if cfg.representative_name %}
+    <tr><td>Représentant·e</td>
+    <td>{{ cfg.representative_name }}{% if cfg.representative_title %}, {{ cfg.representative_title }}{% endif %}</td></tr>
+    {% endif %}
+  </table>
+</div>
+
+<div class="party-block">
+  <strong>L'emprunteur (centre partenaire)</strong>
+  {% if center %}
+  <table class="fields">
+    <tr><td>Nom</td><td>{{ center.name }}</td></tr>
+    {% if center.address %}<tr><td>Adresse</td><td>{{ center.address }}</td></tr>{% endif %}
+    {% if center.zip_code and center.city %}
+    <tr><td>Code postal / Ville</td><td>{{ center.zip_code }} {{ center.city }}</td></tr>
+    {% endif %}
+    {% if center.contacts %}
+    {% set primary = center.contacts[0] %}
+    <tr><td>Représentant·e</td><td>{{ primary.name }}{% if primary.role %}, {{ primary.role }}{% endif %}</td></tr>
+    {% if primary.email %}<tr><td>Email</td><td>{{ primary.email }}</td></tr>{% endif %}
+    {% endif %}
+  </table>
+  {% else %}
+  <p style="color:#dc2626;">Machine non installée — centre non déterminé.</p>
+  {% endif %}
+</div>
+
+<h2>Article 1 — Objet du prêt</h2>
+<div class="article">
+  <p>Le prêteur met à disposition à titre gratuit le matériel suivant :</p>
+  <table class="fields" style="margin-top:6px; margin-bottom:6px;">
+    <tr><td>Désignation</td><td>{{ machine.manufacturer }} {{ machine.model }}</td></tr>
+    {% if machine.internal_number %}<tr><td>N° interne</td><td>{{ machine.internal_number }}</td></tr>{% endif %}
+    {% if machine.serial_number %}<tr><td>N° de série</td><td>{{ machine.serial_number }}</td></tr>{% endif %}
+    {% if machine.year %}<tr><td>Année</td><td>{{ machine.year }}</td></tr>{% endif %}
+    <tr><td>Date de mise à disposition</td><td>{{ active_inst.installed_at.strftime('%d/%m/%Y') if active_inst else today.strftime('%d/%m/%Y') }}</td></tr>
+  </table>
+</div>
+
+<h2>Article 2 — Durée</h2>
+<div class="article">
+  <p>Le prêt est consenti pour une durée indéterminée, renouvelable par tacite reconduction.
+     Chaque partie peut y mettre fin par lettre ou email avec un préavis de 30 jours.</p>
+</div>
+
+<h2>Article 3 — Conditions d'utilisation</h2>
+<div class="article">
+  <p>L'emprunteur s'engage à :</p>
+  <ul style="margin:4px 0 4px 20px; padding:0;">
+    <li>utiliser le matériel dans le cadre de ses activités et à des fins non commerciales ;</li>
+    <li>assurer la garde et l'entretien courant du matériel ;</li>
+    <li>signaler sans délai toute panne ou dégradation au prêteur ;</li>
+    <li>ne pas sous-louer ni prêter le matériel à des tiers sans accord préalable.</li>
+  </ul>
+</div>
+
+<h2>Article 4 — Responsabilité et assurance</h2>
+<div class="article">
+  <p>L'emprunteur est responsable de tout dommage causé au matériel pendant la durée du prêt.
+     Il s'engage à souscrire une assurance couvrant les risques liés à l'utilisation du matériel
+     ou à vérifier que sa police d'assurance actuelle couvre ce risque.</p>
+</div>
+
+<h2>Article 5 — Restitution</h2>
+<div class="article">
+  <p>À la fin du prêt, l'emprunteur restituera le matériel dans l'état dans lequel il l'a reçu,
+     usure normale exceptée. Un procès-verbal de restitution pourra être établi.</p>
+</div>
+
+<h2>Signatures</h2>
+<p style="margin-bottom:16px;">Fait en deux exemplaires, à __________, le __________.</p>
+
+<div class="signature-area">
+  <div class="sig-box">
+    <div class="sig-label">Le prêteur</div>
+    <div class="sig-name">{% if cfg.name %}{{ cfg.name }}{% else %}_____________________{% endif %}</div>
+    <div class="sig-space"></div>
+    <div class="sig-name">Signature :</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-label">L'emprunteur</div>
+    <div class="sig-name">{{ center.name }}</div>
+    <div class="sig-space"></div>
+    <div class="sig-name">Signature :</div>
+  </div>
+</div>
+
+<div class="footer">
+  Assoportail — Convention de prêt réf. CONV-{{ machine.id }}-{{ today.strftime('%Y%m%d') }} — {{ today.strftime('%d/%m/%Y') }}
+</div>
+
+</body>
+</html>

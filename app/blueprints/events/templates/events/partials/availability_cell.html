@@ -1,0 +1,41 @@
+{#
+  Availability toggle cell for the current user on a single EventSlot.
+
+  Context:
+    slot       — EventSlot instance (with .availabilities loaded)
+    event      — Event instance
+    my_avail   — SlotAvailability|None for current_user
+    avail_form — AvailabilityForm (for CSRF token)
+
+  Used both as a Jinja2 include in the planning table AND returned
+  directly by the set_availability route for HTMX outerHTML swap.
+#}
+<div id="avail-slot-{{ slot.id }}">
+  <form method="post"
+        action="{{ url_for('events.set_availability', event_id=event.id, slot_id=slot.id) }}"
+        hx-post="{{ url_for('events.set_availability', event_id=event.id, slot_id=slot.id) }}"
+        hx-target="#avail-slot-{{ slot.id }}"
+        hx-swap="outerHTML"
+        class="d-flex gap-1"
+        aria-label="Votre disponibilité pour ce créneau">
+    {{ avail_form.hidden_tag() }}
+    <button type="submit" name="status" value="present"
+            class="btn btn-sm {% if my_avail and my_avail.status.value == 'present' %}btn-success{% else %}btn-outline-success{% endif %}"
+            aria-label="Présent"
+            aria-pressed="{{ 'true' if my_avail and my_avail.status.value == 'present' else 'false' }}">
+      <i class="bi bi-check-lg" aria-hidden="true"></i>
+    </button>
+    <button type="submit" name="status" value="maybe"
+            class="btn btn-sm {% if my_avail and my_avail.status.value == 'maybe' %}btn-warning{% else %}btn-outline-warning{% endif %}"
+            aria-label="Peut-être"
+            aria-pressed="{{ 'true' if my_avail and my_avail.status.value == 'maybe' else 'false' }}">
+      <i class="bi bi-question-lg" aria-hidden="true"></i>
+    </button>
+    <button type="submit" name="status" value="absent"
+            class="btn btn-sm {% if my_avail and my_avail.status.value == 'absent' %}btn-danger{% else %}btn-outline-danger{% endif %}"
+            aria-label="Absent"
+            aria-pressed="{{ 'true' if my_avail and my_avail.status.value == 'absent' else 'false' }}">
+      <i class="bi bi-x-lg" aria-hidden="true"></i>
+    </button>
+  </form>
+</div>

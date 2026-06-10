@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('events.list_events') }}">Événements</a></li>
+    {% if event %}
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('events.detail', event_id=event.id) }}">{{ event.title }}</a>
+    </li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ title }}</h1>
+
+<form method="post" action="" novalidate style="max-width: 42rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="mb-3">
+    <label for="{{ form.title.id }}" class="form-label">{{ form.title.label.text }} *</label>
+    {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""),
+                  id=form.title.id) }}
+    {% for e in form.title.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.event_date.id }}" class="form-label">{{ form.event_date.label.text }} *</label>
+      {{ form.event_date(class="form-control" + (" is-invalid" if form.event_date.errors else ""),
+                         id=form.event_date.id, type="datetime-local") }}
+      {% for e in form.event_date.errors %}
+      <div class="invalid-feedback">{{ e }}</div>
+      {% endfor %}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.end_date.id }}" class="form-label">{{ form.end_date.label.text }}</label>
+      {{ form.end_date(class="form-control" + (" is-invalid" if form.end_date.errors else ""),
+                       id=form.end_date.id, type="datetime-local") }}
+      {% for e in form.end_date.errors %}
+      <div class="invalid-feedback">{{ e }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.location.id }}" class="form-label">{{ form.location.label.text }}</label>
+    {{ form.location(class="form-control" + (" is-invalid" if form.location.errors else ""),
+                     id=form.location.id, placeholder="Ex : Centre de Reims") }}
+    {% for e in form.location.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.status.id }}" class="form-label">{{ form.status.label.text }}</label>
+    {{ form.status(class="form-select" + (" is-invalid" if form.status.errors else ""),
+                   id=form.status.id) }}
+    {% for e in form.status.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="mb-3"
+       data-extra-dates-widget
+       data-existing-dates="{{ existing_dates_json | tojson | e }}">
+    <label class="form-label">Jours non consécutifs <small class="text-muted fw-normal">(optionnel)</small></label>
+    <div class="d-flex gap-2 align-items-center mb-2">
+      <input type="date" class="form-control" style="max-width:180px;" data-date-input aria-label="Ajouter un jour">
+      <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" data-add-date>
+        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Ajouter un jour
+      </button>
+    </div>
+    <div data-date-tags class="d-flex flex-wrap gap-1 mb-1"></div>
+    <div data-date-hidden></div>
+    <small class="text-muted">
+      Si l'événement se déroule sur des jours non consécutifs (ex : plusieurs samedis), listez chaque jour ici.
+      Laissez vide pour un événement sur jours consécutifs — Début&nbsp;/&nbsp;Fin suffisent.
+    </small>
+  </div>
+
+  <div class="mb-4">
+    <label for="{{ form.description.id }}" class="form-label">{{ form.description.label.text }}</label>
+    {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""),
+                        id=form.description.id, rows=5,
+                        placeholder="Description de l'événement…") }}
+    {% for e in form.description.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+      {% if event %}Enregistrer{% else %}Créer{% endif %}
+    </button>
+    <a href="{% if event %}{{ url_for('events.detail', event_id=event.id) }}{% else %}{{ url_for('events.list_events') }}{% endif %}"
+       class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+{% endblock %}

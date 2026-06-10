@@ -1,0 +1,218 @@
+/* ==========================================================================
+   Assoportail — custom styles
+   Complements Bootstrap 5, never overrides its core reset.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Layout
+   -------------------------------------------------------------------------- */
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #f4f6f9;
+  overflow-x: hidden;
+}
+
+main {
+  flex: 1;
+}
+
+/* --------------------------------------------------------------------------
+   HTMX loading state
+   -------------------------------------------------------------------------- */
+
+[aria-busy="true"] {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* --------------------------------------------------------------------------
+   List groups — house style (no cards, list-based UI)
+   -------------------------------------------------------------------------- */
+
+.list-group-item-action:focus-visible {
+  outline: 3px solid var(--bs-primary);
+  outline-offset: -3px;
+}
+
+/* --------------------------------------------------------------------------
+   Accessibility — focus ring
+   -------------------------------------------------------------------------- */
+
+:focus-visible {
+  outline: 3px solid var(--bs-primary);
+  outline-offset: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Navbar brand
+   -------------------------------------------------------------------------- */
+
+.navbar-brand {
+  letter-spacing: 0.04em;
+}
+
+/* --------------------------------------------------------------------------
+   KPI values on dashboard
+   -------------------------------------------------------------------------- */
+
+.kpi-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Section headings — consistent visual rhythm
+   -------------------------------------------------------------------------- */
+
+main section h2 {
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid var(--bs-border-color);
+  margin-bottom: 0.75rem;
+}
+
+/* --------------------------------------------------------------------------
+   Inline form panels
+   -------------------------------------------------------------------------- */
+
+.inline-form-panel {
+  background-color: #fff;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  padding: 1rem;
+}
+
+/* --------------------------------------------------------------------------
+   Empty state messages
+   -------------------------------------------------------------------------- */
+
+.empty-state {
+  color: var(--bs-secondary-color);
+  font-style: italic;
+  padding: 0.5rem 0;
+}
+
+/* --------------------------------------------------------------------------
+   Help floating action button (bottom-right corner)
+   -------------------------------------------------------------------------- */
+
+.help-fab {
+  position: fixed;
+  bottom: 1.75rem;
+  right: 1.75rem;
+  width: 3rem;
+  height: 3rem;
+  z-index: 1040;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  border-radius: 50% !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.help-fab:hover,
+.help-fab:focus-visible,
+.help-fab:active {
+  transform: scale(1.08);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+
+/* --------------------------------------------------------------------------
+   Help offcanvas content
+   -------------------------------------------------------------------------- */
+
+#helpOffcanvas .offcanvas-body h3 {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bs-secondary-color);
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
+}
+
+#helpOffcanvas .offcanvas-body ul {
+  padding-left: 1.2rem;
+}
+
+#helpOffcanvas .offcanvas-body li {
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
+}
+
+#helpOffcanvas .offcanvas-body p {
+  font-size: 0.9rem;
+}
+
+/* --------------------------------------------------------------------------
+   Status badges — slightly rounded pill look
+   -------------------------------------------------------------------------- */
+
+.badge {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* --------------------------------------------------------------------------
+   Copy-to-clipboard button — smooth color transition on success feedback
+   -------------------------------------------------------------------------- */
+
+[data-copy],
+[data-copy-target] {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+/* --------------------------------------------------------------------------
+   Dashboard KPI cards — hover lift effect
+   -------------------------------------------------------------------------- */
+
+.kpi-card {
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.kpi-card:hover,
+.kpi-card:active {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* --------------------------------------------------------------------------
+   Mobile responsive adjustments
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 576px) {
+  .kpi-value {
+    font-size: 1.5rem;
+  }
+
+  .help-fab {
+    bottom: 1rem;
+    right: 1rem;
+    width: 2.75rem;
+    height: 2.75rem;
+    font-size: 1.1rem;
+  }
+
+  .inline-form-panel {
+    padding: 0.75rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Email HTML body iframe
+   -------------------------------------------------------------------------- */
+.email-html-iframe {
+  width: 100%;
+  min-height: 300px;
+  height: 300px; /* overridden by JS auto-resize on load */
+  border: 0;
+  display: block;
+}

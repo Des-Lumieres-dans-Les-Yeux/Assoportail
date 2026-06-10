@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}{{ post.title or 'Nouveau post' }} — Publications sociales — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('social.list_posts') }}">Publications</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ post.title or 'Nouveau post' }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">{{ post.title or 'Nouveau post' }}</h1>
+    {% if post.platforms %}
+    <div class="d-flex gap-1 mt-1">
+      {% for p in post.platforms %}
+      <span class="badge bg-light text-dark border">{{ p }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    {% if post.is_editable %}
+    <a href="{{ url_for('social.edit', post_id=post.id) }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-pencil me-1" aria-hidden="true"></i>Modifier texte
+    </a>
+    <form method="post" action="{{ url_for('social.publish', post_id=post.id) }}"
+          data-confirm="Publier ce post sur les plateformes sélectionnées ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary btn-sm">
+        <i class="bi bi-send me-1" aria-hidden="true"></i>Publier
+      </button>
+    </form>
+    <form method="post" action="{{ url_for('social.delete', post_id=post.id) }}"
+          data-confirm="Supprimer ce post ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{# Status + meta #}
+<dl class="row mb-4 small text-muted" style="max-width: 36rem;">
+  <dt class="col-sm-4">Statut</dt>
+  <dd class="col-sm-8">
+    {% if post.status == 'draft' %}<span class="badge bg-secondary">Brouillon</span>
+    {% elif post.status == 'scheduled' %}<span class="badge bg-info text-dark">Planifié</span>
+    {% elif post.status == 'publishing' %}<span class="badge bg-warning text-dark">En cours</span>
+    {% elif post.status == 'published' %}<span class="badge bg-success">Publié</span>
+    {% elif post.status == 'partial' %}<span class="badge bg-warning text-dark">Partiel</span>
+    {% elif post.status == 'failed' %}<span class="badge bg-danger">Échoué</span>
+    {% endif %}
+  </dd>
+  <dt class="col-sm-4">Créé par</dt>
+  <dd class="col-sm-8">{{ post.created_by.full_name }} — {{ post.created_at.strftime('%d/%m/%Y %H:%M') }}</dd>
+  {% if post.scheduled_at %}
+  <dt class="col-sm-4">Planifié le</dt>
+  <dd class="col-sm-8">{{ post.scheduled_at.strftime('%d/%m/%Y à %H:%M') }}</dd>
+  {% endif %}
+</dl>
+
+{# Content preview #}
+<section class="mb-4">
+  <h2 class="h5">Contenu</h2>
+  <div class="border rounded p-3 bg-light small" style="max-height: 20rem; overflow-y: auto;">
+    <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0;">{{ post.body_html }}</pre>
+  </div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════ #}
+{# IMAGES                                                                     #}
+{# ══════════════════════════════════════════════════════════════════════════ #}
+<section class="mb-4">
+  <h2 class="h5 mb-3">Images ({{ post.images | length }})</h2>
+
+  {% if post.is_editable %}
+  {# ── Upload zone (drag & drop + click) ─────────────────────────────── #}
+  <div class="border border-2 border-dashed rounded p-4 mb-3 text-center bg-light"
+       id="drop-zone" role="button" tabindex="0"
+       style="cursor: pointer; transition: background 0.2s;">
+    <form method="post" action="{{ url_for('social.upload_image', post_id=post.id) }}"
+          enctype="multipart/form-data" id="upload-form">
+      {{ upload_form.hidden_tag() }}
+      <input type="file" name="file" id="file-input"
+             accept="image/jpeg,image/png,image/webp"
+             multiple class="d-none">
+    </form>
+    <i class="bi bi-cloud-arrow-up" style="font-size: 2rem;" aria-hidden="true"></i>
+    <p class="mb-1 fw-semibold">Glissez vos images ici ou cliquez pour importer</p>
+    <small class="text-muted">JPG, PNG ou WebP</small>
+  </div>
+
+  {# ── Gallery picker (inline, not modal) ────────────────────────────── #}
+  <details class="mb-3">
+    <summary class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-images me-1" aria-hidden="true"></i>Choisir dans la galerie
+    </summary>
+    <div class="border rounded p-3 mt-2 bg-light">
+      {% if gallery_photos %}
+      <div class="row g-2">
+        {% for photo in gallery_photos %}
+        <div class="col-3 col-md-2">
+          <form method="post" action="{{ url_for('social.pick_gallery_image', post_id=post.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="document_id" value="{{ photo.id }}">
+            <button type="submit" class="btn p-0 border-0 w-100"
+                    title="{{ photo.original_filename }}">
+              <img src="{{ url_for('documents.download', document_id=photo.id) }}"
+                   alt="{{ photo.original_filename }}"
+                   class="img-fluid rounded"
+                   style="aspect-ratio: 1; object-fit: cover; width: 100%;"
+                   loading="lazy">
+            </button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">Aucune photo dans la galerie.</p>
+      {% endif %}
+    </div>
+  </details>
+  {% endif %}
+
+  {# ── Current images ────────────────────────────────────────────────── #}
+  {% if post.images %}
+  <div class="row g-3">
+    {% for img in post.images %}
+    <div class="col-6 col-md-4 col-lg-3">
+      <div class="card h-100 {% if img.is_featured %}border-primary border-2{% endif %}">
+        <div class="card-body p-2 text-center">
+          <img src="{{ url_for('social.serve_image', img_id=img.id) }}"
+               alt="{{ img.original_filename }}"
+               class="img-fluid rounded" style="max-height: 180px; object-fit: cover; width: 100%;"
+               loading="lazy">
+          <p class="small text-truncate mt-2 mb-1" title="{{ img.original_filename }}">
+            {{ img.original_filename }}
+          </p>
+          {% if img.is_featured %}
+          <span class="badge bg-primary mb-1">
+            <i class="bi bi-star-fill me-1" aria-hidden="true"></i>Mise en avant
+          </span>
+          {% endif %}
+        </div>
+        {% if post.is_editable %}
+        <div class="card-footer p-2 d-flex gap-1 justify-content-center">
+          {% if not img.is_featured %}
+          <form method="post" action="{{ url_for('social.set_featured', post_id=post.id, img_id=img.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-primary btn-sm"
+                    title="Définir comme image mise en avant (WordPress)"
+                    data-bs-toggle="tooltip" data-bs-placement="top">
+              <i class="bi bi-star" aria-hidden="true"></i>
+            </button>
+          </form>
+          {% endif %}
+          <form method="post" action="{{ url_for('social.delete_image', post_id=post.id, img_id=img.id) }}"
+                data-confirm="Retirer cette image ?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm"
+                    title="Retirer du post"
+                    data-bs-toggle="tooltip" data-bs-placement="top">
+              <i class="bi bi-trash" aria-hidden="true"></i>
+            </button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% elif not post.is_editable %}
+  <p class="text-muted">Aucune image attachée.</p>
+  {% endif %}
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════ #}
+{# PUBLISH LOGS                                                               #}
+{# ══════════════════════════════════════════════════════════════════════════ #}
+{% if post.publish_logs %}
+<section class="mb-4">
+  <h2 class="h5">Journal de publication</h2>
+  <ul class="list-group list-group-flush border rounded">
+    {% for log in post.publish_logs %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <span class="badge bg-light text-dark border">{{ log.platform }}</span>
+        {% if log.status == 'success' %}
+        <span class="badge bg-success ms-1">OK</span>
+        {% if log.remote_url %}
+        <a href="{{ log.remote_url }}" target="_blank" class="ms-1 small">Voir</a>
+        {% endif %}
+        {% elif log.status == 'failed' %}
+        <span class="badge bg-danger ms-1">Échoué</span>
+        {% if log.error_message %}
+        <small class="text-muted ms-1">{{ log.error_message[:100] }}</small>
+        {% endif %}
+        {% else %}
+        <span class="badge bg-secondary ms-1">En attente</span>
+        {% endif %}
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <small class="text-muted">{{ log.attempted_at.strftime('%d/%m %H:%M') }}</small>
+        {% if log.status == 'failed' %}
+        <form method="post"
+              action="{{ url_for('social.retry_platform', post_id=post.id, platform=log.platform) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-warning btn-sm">Réessayer</button>
+        </form>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<div id="modal-container"></div>
+{% endblock %}
+
+{% block extra_js %}
+{% if post.is_editable %}
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const form = document.getElementById('upload-form');
+  if (!dropZone || !fileInput || !form) return;
+
+  // Click to open file picker
+  dropZone.addEventListener('click', function () { fileInput.click(); });
+  dropZone.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+  });
+
+  // Auto-submit on file selection
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files.length > 0) form.submit();
+  });
+
+  // Drag & drop visual feedback
+  dropZone.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    dropZone.style.background = '#e8f0fe';
+  });
+  dropZone.addEventListener('dragleave', function () {
+    dropZone.style.background = '';
+  });
+  dropZone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dropZone.style.background = '';
+    if (e.dataTransfer.files.length > 0) {
+      fileInput.files = e.dataTransfer.files;
+      form.submit();
+    }
+  });
+}());
+</script>
+{% endif %}
+{% endblock %}

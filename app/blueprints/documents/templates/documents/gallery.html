@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Galerie — Documents — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Galerie &amp; Documents</h1>
+  {% if current_user.is_bureau %}
+  <a href="{{ url_for('documents.upload') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-upload me-1" aria-hidden="true"></i>Téléverser
+  </a>
+  {% endif %}
+</div>
+
+{# Type filter #}
+<form method="get" action="{{ url_for('documents.gallery') }}"
+      class="d-flex flex-wrap gap-2 mb-4" id="gallery-filter-form">
+  <select name="type" class="form-select form-select-sm" style="width: auto;" aria-label="Type"
+          data-auto-submit="gallery-filter-form">
+    <option value="" {% if not type_filter %}selected{% endif %}>Tous les types</option>
+    {% for member in DocumentType %}
+    <option value="{{ member.value }}" {% if type_filter == member.value %}selected{% endif %}>
+      {% if member.value == 'photo' %}Photos
+      {% elif member.value == 'video' %}Vidéos
+      {% elif member.value == 'invoice' %}Factures
+      {% elif member.value == 'report' %}Rapports
+      {% elif member.value == 'contract' %}Contrats
+      {% else %}Autres{% endif %}
+    </option>
+    {% endfor %}
+  </select>
+  {% if type_filter %}
+  <a href="{{ url_for('documents.gallery') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-x-lg me-1" aria-hidden="true"></i>Réinitialiser
+  </a>
+  {% endif %}
+</form>
+
+{% set photo_types = ['photo', 'video'] %}
+{% set show_grid = not type_filter or type_filter in photo_types %}
+{% set media_docs = documents | selectattr('type', 'in', photo_types) | list %}
+{% set other_docs = documents | rejectattr('type', 'in', photo_types) | list %}
+
+{% if not documents %}
+<p class="text-muted empty-state">Aucun document.</p>
+{% else %}
+
+{# ── Photo/video grid ─────────────────────────────────────────────────────── #}
+{% if media_docs and (not type_filter or type_filter in photo_types) %}
+<section aria-labelledby="media-gallery-heading" class="mb-5">
+  <h2 class="h5 mb-3" id="media-gallery-heading">
+    <i class="bi bi-images me-1" aria-hidden="true"></i>Photos &amp; Vidéos
+    <small class="text-muted">({{ media_docs | length }})</small>
+  </h2>
+  <div class="row g-2">
+    {% for doc in media_docs %}
+    <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+      <div class="card border-0 h-100">
+        {% if doc.type == 'photo' %}
+          <a href="{{ url_for('documents.download', document_id=doc.id) }}"
+             target="_blank" class="d-block rounded overflow-hidden border"
+             style="aspect-ratio:1;" title="{{ doc.original_filename }}">
+            <img src="{{ url_for('documents.download', document_id=doc.id) }}"
+                 alt="{{ doc.original_filename }}" loading="lazy"
+                 class="w-100 h-100" style="object-fit:cover;">
+          </a>
+        {% else %}
+          <a href="{{ url_for('documents.download', document_id=doc.id) }}"
+             target="_blank" rel="noopener"
+             class="d-flex flex-column align-items-center justify-content-center rounded border bg-light text-muted text-decoration-none"
+             style="aspect-ratio:1;" title="{{ doc.original_filename }}">
+            <i class="bi bi-camera-video fs-1 mb-1" aria-hidden="true"></i>
+            <small class="text-truncate px-2" style="max-width:100%;">{{ doc.original_filename }}</small>
+          </a>
+        {% endif %}
+        <div class="card-body p-1">
+          {% if doc.description %}
+          <p class="card-text small text-muted mb-0 text-truncate">{{ doc.description }}</p>
+          {% endif %}
+          <small class="text-muted d-block">{{ doc.uploaded_at.strftime('%d/%m/%Y') }}</small>
+          {% if current_user.is_bureau %}
+          <form method="post" action="{{ url_for('documents.delete', document_id=doc.id) }}"
+                class="mt-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm w-100 py-0"
+                    aria-label="Supprimer {{ doc.original_filename }}">
+              <i class="bi bi-trash" aria-hidden="true"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ── Other documents list ─────────────────────────────────────────────────── #}
+{% if other_docs and (not type_filter or type_filter not in photo_types) %}
+<section aria-labelledby="docs-list-heading" class="mb-4">
+  <h2 class="h5 mb-3" id="docs-list-heading">
+    <i class="bi bi-file-earmark me-1" aria-hidden="true"></i>Documents
+    <small class="text-muted">({{ other_docs | length }})</small>
+  </h2>
+  <ul class="list-group list-group-flush border rounded" aria-label="Liste des documents">
+    {% for doc in other_docs %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <a href="{{ url_for('documents.download', document_id=doc.id) }}"
+             class="fw-semibold text-decoration-none">
+            <i class="bi bi-file-earmark-{% if doc.type == 'invoice' %}text{% elif doc.type == 'report' %}bar-chart{% elif doc.type == 'contract' %}check{% else %}earmark{% endif %} me-1"
+               aria-hidden="true"></i>{{ doc.original_filename }}
+          </a>
+          <small class="badge bg-secondary-subtle text-secondary ms-2">{{ doc.type }}</small>
+          {% if doc.category %}
+          <small class="text-muted ms-1">— {{ doc.category }}</small>
+          {% endif %}
+          {% if doc.description %}
+          <p class="mb-0 small text-muted">{{ doc.description }}</p>
+          {% endif %}
+        </div>
+        <div class="d-flex gap-2 align-items-center text-nowrap ms-3">
+          <small class="text-muted">{{ (doc.size_bytes / 1024) | round(1) }} Ko</small>
+          <small class="text-muted">{{ doc.uploaded_at.strftime('%d/%m/%Y') }}</small>
+          {% if current_user.is_bureau %}
+          <form method="post" action="{{ url_for('documents.delete', document_id=doc.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm"
+                    aria-label="Supprimer {{ doc.original_filename }}">
+              <i class="bi bi-trash" aria-hidden="true"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<p class="text-muted">
+  <small>{{ documents | length }} fichier{{ 's' if documents | length != 1 }}</small>
+</p>
+{% endif %}
+{% endblock %}

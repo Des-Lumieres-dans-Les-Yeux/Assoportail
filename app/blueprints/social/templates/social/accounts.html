@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Comptes sociaux — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('social.list_posts') }}">Publications</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Comptes sociaux</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-2">
+    <h1 class="h3 mb-0">Comptes sociaux</h1>
+    <button type="button" class="btn btn-link p-0 text-muted"
+            data-bs-toggle="tooltip" data-bs-placement="right"
+            title="Chaque plateforme connectée ici apparaît comme checkbox lors de la création d'un post. Vous choisissez sur quels réseaux publier à chaque post.">
+      <i class="bi bi-question-circle" aria-hidden="true"></i>
+      <span class="visually-hidden">Aide</span>
+    </button>
+  </div>
+  <a href="{{ url_for('social.add_account') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Ajouter un compte
+  </a>
+</div>
+
+{# Guide de configuration #}
+<div class="alert alert-light border small mb-4" role="note">
+  <h2 class="h6 mb-2"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>Comment configurer</h2>
+  <div class="row g-3">
+    <div class="col-md-6 col-lg-3">
+      <strong><i class="bi bi-facebook me-1" aria-hidden="true"></i>Facebook + Instagram</strong>
+      <ol class="mb-0 ps-3 mt-1">
+        <li>Cliquez « Connecter Facebook » ci-dessous</li>
+        <li>Autorisez l'application sur Facebook</li>
+        <li>Choisissez la page (si plusieurs)</li>
+        <li>Instagram est auto-détecté si lié à la page</li>
+      </ol>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <strong><i class="bi bi-wordpress me-1" aria-hidden="true"></i>WordPress</strong>
+      <ol class="mb-0 ps-3 mt-1">
+        <li>Dans WordPress : Utilisateurs &rarr; Profil</li>
+        <li>Section « Mots de passe d'application »</li>
+        <li>Créez un mot de passe, copiez-le</li>
+        <li>Ici : « Ajouter un compte » &rarr; WordPress</li>
+      </ol>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <strong><i class="bi bi-linkedin me-1" aria-hidden="true"></i>LinkedIn</strong>
+      <ol class="mb-0 ps-3 mt-1">
+        <li>Créez une app sur developer.linkedin.com</li>
+        <li>Ajoutez <code>LINKEDIN_CLIENT_ID</code> et <code>LINKEDIN_CLIENT_SECRET</code> au <code>.env</code></li>
+        <li>Ici : « Ajouter un compte » &rarr; LinkedIn</li>
+      </ol>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <strong><i class="bi bi-check2-circle me-1 text-success" aria-hidden="true"></i>Vérifier</strong>
+      <p class="mb-0 mt-1">
+        Cliquez <i class="bi bi-plug"></i> sur chaque compte pour tester la connexion.
+        Un post n'apparaîtra sur un réseau que si son compte est connecté <strong>et actif</strong>.
+      </p>
+    </div>
+  </div>
+</div>
+
+{% if accounts %}
+<ul class="list-group list-group-flush border rounded">
+  {% for account in accounts %}
+  <li class="list-group-item d-flex justify-content-between align-items-center">
+    <div>
+      {% if account.platform == 'facebook' %}
+      <span class="badge bg-primary me-1"><i class="bi bi-facebook me-1" aria-hidden="true"></i>Facebook</span>
+      {% elif account.platform == 'instagram' %}
+      <span class="badge bg-gradient me-1" style="background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);">
+        <i class="bi bi-instagram me-1" aria-hidden="true"></i>Instagram
+      </span>
+      {% elif account.platform == 'wordpress' %}
+      <span class="badge bg-dark me-1"><i class="bi bi-wordpress me-1" aria-hidden="true"></i>WordPress</span>
+      {% elif account.platform == 'linkedin' %}
+      <span class="badge bg-info text-dark me-1"><i class="bi bi-linkedin me-1" aria-hidden="true"></i>LinkedIn</span>
+      {% else %}
+      <span class="badge bg-light text-dark border me-1">{{ account.platform }}</span>
+      {% endif %}
+      <strong>{{ account.display_name }}</strong>
+      {% if not account.is_active %}
+      <span class="badge bg-secondary ms-1">Inactif</span>
+      {% endif %}
+      <br>
+      <small class="text-muted">
+        Connecté par {{ account.connected_by.full_name }}
+        le {{ account.connected_at.strftime('%d/%m/%Y') }}
+      </small>
+    </div>
+    <div class="d-flex gap-1">
+      <form method="post" action="{{ url_for('social.test_account', account_id=account.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-secondary btn-sm"
+                title="Tester la connexion"
+                data-bs-toggle="tooltip" data-bs-placement="top">
+          <i class="bi bi-plug" aria-hidden="true"></i>
+        </button>
+      </form>
+      <a href="{{ url_for('social.edit_account', account_id=account.id) }}"
+         class="btn btn-outline-secondary btn-sm"
+         title="Modifier les credentials"
+         data-bs-toggle="tooltip" data-bs-placement="top">
+        <i class="bi bi-pencil" aria-hidden="true"></i>
+      </a>
+      <form method="post" action="{{ url_for('social.delete_account', account_id=account.id) }}"
+            data-confirm="Supprimer le compte {{ account.platform }} ? Les publications futures ne seront plus envoyées sur ce réseau.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-danger btn-sm"
+                title="Supprimer ce compte"
+                data-bs-toggle="tooltip" data-bs-placement="top">
+          <i class="bi bi-trash" aria-hidden="true"></i>
+        </button>
+      </form>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-muted">Aucun compte connecté. Ajoutez-en un pour commencer à publier.</p>
+{% endif %}
+
+{% set connected_platforms = accounts | map(attribute='platform') | list %}
+{% if 'facebook' not in connected_platforms %}
+<div class="mt-4">
+  <h2 class="h5">Connexion rapide via OAuth</h2>
+  <a href="{{ url_for('social.fb_oauth_start') }}" class="btn btn-outline-primary btn-sm">
+    <i class="bi bi-facebook me-1" aria-hidden="true"></i>Connecter Facebook + Instagram
+  </a>
+  <p class="text-muted small mt-2">
+    Connecte automatiquement votre page Facebook et le compte Instagram lié.
+    Si vous gérez plusieurs pages, un écran de sélection s'affichera.
+  </p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_help %}
+<h3>Comptes sociaux</h3>
+<p>Chaque plateforme connectée ici apparaît comme option lors de la création d'un post.</p>
+
+<h3>Facebook + Instagram</h3>
+<ul>
+  <li>Un seul clic « Connecter Facebook » suffit pour les deux.</li>
+  <li>Instagram doit être un <strong>compte professionnel</strong> lié à votre page Facebook dans Meta Business Suite.</li>
+  <li>Si vous gérez plusieurs pages, vous choisirez laquelle connecter.</li>
+  <li>Le token obtenu est <strong>permanent</strong> (pas d'expiration).</li>
+</ul>
+
+<h3>WordPress</h3>
+<ul>
+  <li>Utilisez un <strong>mot de passe d'application</strong> (pas votre mot de passe principal).</li>
+  <li>Générez-le dans WordPress : Utilisateurs &rarr; Profil &rarr; Mots de passe d'application.</li>
+  <li>Le portail publie via l'API REST WordPress (articles + images).</li>
+</ul>
+
+<h3>LinkedIn</h3>
+<ul>
+  <li>Nécessite une application LinkedIn Developer avec les scopes <code>w_organization_social</code>.</li>
+  <li>Les clés <code>LINKEDIN_CLIENT_ID</code> et <code>LINKEDIN_CLIENT_SECRET</code> vont dans le fichier <code>.env</code> du serveur.</li>
+</ul>
+
+<h3>Tester un compte</h3>
+<p>Le bouton <i class="bi bi-plug"></i> vérifie que les credentials sont valides en faisant un appel API test.</p>
+{% endblock %}

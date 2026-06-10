@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carte des centres - Assoportail</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style nonce="{{ csp_nonce() }}">
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+        #map { height: 100%; width: 100%; }
+        .popup-content { font-family: sans-serif; min-width: 150px; }
+        .popup-title { font-weight: bold; font-size: 1.1em; color: #1e40af; margin-bottom: 4px; }
+        .popup-city { color: #64748b; font-size: 0.9em; margin-bottom: 8px; }
+        .popup-badge { 
+            display: inline-block; 
+            background: #dcfce7; 
+            color: #166534; 
+            padding: 2px 8px; 
+            border-radius: 9999px; 
+            font-size: 0.8em; 
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script nonce="{{ csp_nonce() }}">
+        const map = L.map('map', {
+            scrollWheelZoom: false // Désactivé pour faciliter la navigation dans WordPress
+        }).setView([48.3, 7.5], 8); // Centré sur l'Alsace
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        const centers = {{ centers_json | safe }};
+        const markers = [];
+
+        centers.forEach(center => {
+            if (center.lat && center.lng) {
+                const marker = L.marker([center.lat, center.lng]).addTo(map);
+                
+                const popupHtml = `
+                    <div class="popup-content">
+                        <div class="popup-title">${center.name}</div>
+                        <div class="popup-city">${center.city} (${center.zip_code})</div>
+                        <div style="font-size: 0.85em; color: #475569; margin-bottom: 8px;">
+                            ${center.pathology ? '🩺 ' + center.pathology.charAt(0).toUpperCase() + center.pathology.slice(1) : ''}
+                            ${center.pathology && center.target_audience ? ' • ' : ''}
+                            ${center.target_audience ? '👥 ' + center.target_audience.charAt(0).toUpperCase() + center.target_audience.slice(1) : ''}
+                        </div>
+                        <div class="popup-badge">🕹️ ${center.machine_name}</div>
+                    </div>
+                `;
+                
+                marker.bindPopup(popupHtml, {
+                    closeButton: false,
+                    offset: L.point(0, -20)
+                });
+
+                marker.on('mouseover', function(e) {
+                    this.openPopup();
+                });
+                
+                markers.push(marker);
+            }
+        });
+
+        if (markers.length > 0) {
+            const group = new L.featureGroup(markers);
+            map.fitBounds(group.getBounds().pad(0.2));
+        }
+
+        // Robust iframe sizing: only fitBounds once valid dimensions are known.
+        let fitted = false;
+
+        function fitMap() {
+            if (fitted || markers.length === 0) return;
+            const size = map.getSize();
+            if (size.x > 0 && size.y > 0) {
+                const group = new L.featureGroup(markers);
+                map.fitBounds(group.getBounds().pad(0.2));
+                fitted = true;
+            }
+        }
+
+        window.addEventListener('resize', function() {
+            map.invalidateSize();
+            fitMap();
+        });
+
+        [100, 500, 1500].forEach(function(delay) {
+            setTimeout(function() { map.invalidateSize(); fitMap(); }, delay);
+        });
+
+        if (typeof ResizeObserver !== 'undefined') {
+            new ResizeObserver(function() { map.invalidateSize(); fitMap(); })
+                .observe(document.getElementById('map'));
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Trésorerie — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('treasury.list_transactions') }}">Trésorerie</a></li>
+    {% if transaction %}
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('treasury.detail', transaction_id=transaction.id) }}">#{{ transaction.id }}</a>
+    </li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ title }}</h1>
+
+<form method="post" action="" novalidate style="max-width: 42rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.source.id }}" class="form-label">{{ form.source.label.text }}</label>
+      {{ form.source(class="form-select", id=form.source.id) }}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.type.id }}" class="form-label">{{ form.type.label.text }}</label>
+      {{ form.type(class="form-select" + (" is-invalid" if form.type.errors else ""),
+                   id=form.type.id) }}
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-4">
+      <label for="{{ form.amount.id }}" class="form-label">{{ form.amount.label.text }} *</label>
+      {{ form.amount(class="form-control" + (" is-invalid" if form.amount.errors else ""),
+                     id=form.amount.id, step="0.01", min="0.01") }}
+      {% for e in form.amount.errors %}
+      <div class="invalid-feedback">{{ e }}</div>
+      {% endfor %}
+    </div>
+    <div class="col-sm-4">
+      <label for="{{ form.date.id }}" class="form-label">{{ form.date.label.text }} *</label>
+      {{ form.date(class="form-control" + (" is-invalid" if form.date.errors else ""),
+                   id=form.date.id) }}
+      {% for e in form.date.errors %}
+      <div class="invalid-feedback">{{ e }}</div>
+      {% endfor %}
+    </div>
+    <div class="col-sm-4">
+      <label for="{{ form.category.id }}" class="form-label">{{ form.category.label.text }}</label>
+      {{ form.category(class="form-control" + (" is-invalid" if form.category.errors else ""),
+                       id=form.category.id, placeholder="Ex : loyer, carburant…") }}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.description.id }}" class="form-label">{{ form.description.label.text }} *</label>
+    {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""),
+                        id=form.description.id, rows=3) }}
+    {% for e in form.description.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+  </div>
+
+  {# Donor fields — shown when source = donation #}
+  <div id="donor-section"
+       class="border rounded p-3 bg-light mb-3{% if form.source.data != 'donation' %} d-none{% endif %}"
+       aria-label="Informations du donateur">
+    <h2 class="h6 mb-3">
+      <i class="bi bi-person me-1" aria-hidden="true"></i>Informations du donateur
+      <small class="text-muted fw-normal">(pour le CERFA)</small>
+    </h2>
+    <div class="mb-2">
+      <label class="form-label small">{{ form.donation_type.label.text }}</label>
+      <div class="d-flex gap-3 flex-wrap">
+        {% for value, label in form.donation_type.choices %}
+        <div class="form-check">
+          <input class="form-check-input" type="radio"
+                 name="donation_type" id="dt_{{ value }}" value="{{ value }}"
+                 {% if (form.donation_type.data or 'particulier') == value %}checked{% endif %}>
+          <label class="form-check-label small" for="dt_{{ value }}">{{ label }}</label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="row g-2 mb-2" id="donor-name-section">
+      <div class="col-sm-5" id="donor-firstname-wrap">
+        <label for="{{ form.donor_first_name.id }}" class="form-label small">{{ form.donor_first_name.label.text }}</label>
+        {{ form.donor_first_name(class="form-control form-control-sm", id=form.donor_first_name.id) }}
+      </div>
+      <div class="col-sm-7">
+        <label for="{{ form.donor_name.id }}" class="form-label small">{{ form.donor_name.label.text }}</label>
+        {{ form.donor_name(class="form-control form-control-sm", id=form.donor_name.id,
+                           placeholder="Nom ou raison sociale") }}
+      </div>
+    </div>
+    <div class="mb-2">
+      <label for="{{ form.donor_address.id }}" class="form-label small">{{ form.donor_address.label.text }}</label>
+      {{ form.donor_address(class="form-control form-control-sm", id=form.donor_address.id,
+                            placeholder="Numéro et nom de rue") }}
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-4">
+        <label for="{{ form.donor_zip.id }}" class="form-label small">{{ form.donor_zip.label.text }}</label>
+        {{ form.donor_zip(class="form-control form-control-sm", id=form.donor_zip.id) }}
+      </div>
+      <div class="col-8">
+        <label for="{{ form.donor_city.id }}" class="form-label small">{{ form.donor_city.label.text }}</label>
+        {{ form.donor_city(class="form-control form-control-sm", id=form.donor_city.id) }}
+      </div>
+    </div>
+    <div class="mb-2">
+      <label for="{{ form.donor_email.id }}" class="form-label small">{{ form.donor_email.label.text }}</label>
+      {{ form.donor_email(class="form-control form-control-sm", id=form.donor_email.id,
+                          placeholder="Pour envoi du reçu par email") }}
+      {% for e in form.donor_email.errors %}
+      <div class="invalid-feedback d-block">{{ e }}</div>
+      {% endfor %}
+    </div>
+    <div id="donor-description-wrap">
+      <label for="{{ form.donor_description.id }}" class="form-label small">{{ form.donor_description.label.text }}</label>
+      {{ form.donor_description(class="form-control form-control-sm", id=form.donor_description.id,
+                                rows=2, placeholder="Décrire la nature et l'objet du don") }}
+    </div>
+  </div>
+
+  {% if form.tag_ids.choices %}
+  <div class="mb-4">
+    <label class="form-label">{{ form.tag_ids.label.text }}</label>
+    <div class="d-flex flex-wrap gap-2">
+      {% for value, label in form.tag_ids.choices %}
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox"
+               name="tag_ids" value="{{ value }}" id="tag_{{ value }}"
+               {% if value in (form.tag_ids.data or []) %}checked{% endif %}>
+        <label class="form-check-label" for="tag_{{ value }}">{{ label }}</label>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+      {% if transaction %}Enregistrer{% else %}Créer{% endif %}
+    </button>
+    <a href="{% if transaction %}{{ url_for('treasury.detail', transaction_id=transaction.id) }}{% else %}{{ url_for('treasury.list_transactions') }}{% endif %}"
+       class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  var sourceSelect = document.getElementById('{{ form.source.id }}');
+  var typeSelect = document.getElementById('{{ form.type.id }}');
+  var donorSection = document.getElementById('donor-section');
+  var descWrap = document.getElementById('donor-description-wrap');
+  var firstnameWrap = document.getElementById('donor-firstname-wrap');
+  if (!sourceSelect || !donorSection) return;
+
+  function toggleDonorSection() {
+    var isDonation = sourceSelect.value === 'donation';
+    donorSection.classList.toggle('d-none', !isDonation);
+    if (isDonation && typeSelect) {
+      typeSelect.value = 'income';
+    }
+  }
+
+  function toggleDonationType() {
+    var selected = document.querySelector('input[name="donation_type"]:checked');
+    var dt = selected ? selected.value : 'particulier';
+    if (descWrap) descWrap.classList.toggle('d-none', dt !== 'nature');
+    if (firstnameWrap) firstnameWrap.classList.toggle('d-none', dt === 'mecena');
+  }
+
+  sourceSelect.addEventListener('change', toggleDonorSection);
+  document.querySelectorAll('input[name="donation_type"]').forEach(function (r) {
+    r.addEventListener('change', toggleDonationType);
+  });
+  toggleDonationType();
+})();
+</script>
+{% endblock %}

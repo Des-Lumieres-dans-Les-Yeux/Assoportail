@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('members.list_members') }}">Membres</a></li>
+    {% if member is defined %}
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('members.detail', user_id=member.id) }}">{{ member.full_name }}</a>
+    </li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ title }}</h1>
+
+<form method="post" novalidate style="max-width: 40rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.first_name.id }}" class="form-label">{{ form.first_name.label.text }}</label>
+      {{ form.first_name(class="form-control" + (" is-invalid" if form.first_name.errors else ""),
+                         id=form.first_name.id, autocomplete="given-name") }}
+      {% for error in form.first_name.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+      {% endfor %}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.last_name.id }}" class="form-label">{{ form.last_name.label.text }}</label>
+      {{ form.last_name(class="form-control" + (" is-invalid" if form.last_name.errors else ""),
+                        id=form.last_name.id, autocomplete="family-name") }}
+      {% for error in form.last_name.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.email.id }}" class="form-label">{{ form.email.label.text }}</label>
+    {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""),
+                  id=form.email.id, type="email", autocomplete="email") }}
+    {% for error in form.email.errors %}
+    <div class="invalid-feedback">{{ error }}</div>
+    {% endfor %}
+  </div>
+
+  {% if form.password is defined %}
+  <div class="mb-3">
+    <label for="{{ form.password.id }}" class="form-label">{{ form.password.label.text }}</label>
+    {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
+                     id=form.password.id, autocomplete="new-password") }}
+    {% for error in form.password.errors %}
+    <div class="invalid-feedback">{{ error }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.role.id }}" class="form-label">{{ form.role.label.text }}</label>
+      {{ form.role(class="form-select", id=form.role.id, data_permission_toggle="true") }}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.gender.id }}" class="form-label">{{ form.gender.label.text }}</label>
+      {{ form.gender(class="form-select", id=form.gender.id) }}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.phone.id }}" class="form-label">{{ form.phone.label.text }}</label>
+    {{ form.phone(class="form-control", id=form.phone.id, type="tel", autocomplete="tel") }}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.address.id }}" class="form-label">{{ form.address.label.text }}</label>
+    {{ form.address(class="form-control", id=form.address.id, autocomplete="street-address") }}
+  </div>
+
+  <div id="permissions-section" class="card mb-3 {% if form.role.data == 'bureau' %}d-none{% endif %}">
+    <div class="card-header py-2">
+      <h2 class="h6 mb-0">{{ form.permissions.label.text }}</h2>
+    </div>
+    <div class="card-body py-2">
+      <p class="text-muted small mb-2">Sélectionnez les modules accessibles pour ce membre.</p>
+      <div class="row row-cols-2 row-cols-md-3 g-2">
+        {% for subfield in form.permissions %}
+        <div class="col">
+          <div class="form-check">
+            {{ subfield(class="form-check-input") }}
+            {{ subfield.label(class="form-check-label small") }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {% if form.is_active is defined %}
+  <div class="mb-3 form-check">
+    {{ form.is_active(class="form-check-input", id=form.is_active.id) }}
+    <label class="form-check-label" for="{{ form.is_active.id }}">
+      {{ form.is_active.label.text }}
+    </label>
+  </div>
+  {% endif %}
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Enregistrer</button>
+    <a href="{{ url_for('members.list_members') }}" class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+
+{% endblock %}

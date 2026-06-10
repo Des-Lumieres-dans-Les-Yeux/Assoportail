@@ -1,0 +1,8 @@
+{# HTMX modal container.
+   Loaded once in base.html; content is swapped in via HTMX hx-target="#modal-container".
+   The trigger button on the calling page should use:
+     hx-get="<url>"
+     hx-target="#modal-container"
+     hx-swap="innerHTML"
+#}
+<div id="modal-container" aria-live="polite"></div>

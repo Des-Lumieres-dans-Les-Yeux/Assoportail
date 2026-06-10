@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Règles email — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Règles email</h1>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('mailbox.inbox') }}" class="btn btn-outline-secondary btn-sm">Boîte de réception</a>
+    <a href="{{ url_for('mailbox.create_rule') }}" class="btn btn-primary btn-sm">Nouvelle règle</a>
+  </div>
+</div>
+
+<p class="text-muted small">
+  Les règles sont évaluées dans l'ordre de priorité (0 = la plus haute) à chaque import d'email.
+</p>
+
+{% if rules %}
+<ul class="list-group list-group-flush border rounded" aria-label="Liste des règles">
+  {% for rule in rules %}
+  <li class="list-group-item">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="badge bg-secondary">{{ rule.priority }}</span>
+          <strong>{{ rule.name }}</strong>
+          {% if rule.is_active %}
+          <span class="badge bg-success">Active</span>
+          {% else %}
+          <span class="badge bg-light text-dark border">Inactive</span>
+          {% endif %}
+          <span class="badge bg-light text-dark border">
+            {{ 'Toutes les conditions' if rule.match_mode == 'all' else 'Au moins une' }}
+          </span>
+        </div>
+        <small class="text-muted">
+          {{ rule.conditions | length }} condition{{ 's' if rule.conditions | length != 1 }} ·
+          {{ rule.actions | length }} action{{ 's' if rule.actions | length != 1 }}
+          · Créée par {{ rule.created_by.full_name }}
+        </small>
+      </div>
+      <div class="d-flex gap-1 flex-shrink-0">
+        <a href="{{ url_for('mailbox.edit_rule', rule_id=rule.id) }}"
+           class="btn btn-outline-secondary btn-sm">Modifier</a>
+        <form method="post" action="{{ url_for('mailbox.toggle_rule', rule_id=rule.id) }}"
+              style="display: inline;">
+          {{ csrf_field() if csrf_field is defined else "" }}
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm {{ 'btn-outline-warning' if rule.is_active else 'btn-outline-success' }}">
+            {{ 'Désactiver' if rule.is_active else 'Activer' }}
+          </button>
+        </form>
+        <form method="post" action="{{ url_for('mailbox.delete_rule', rule_id=rule.id) }}"
+              style="display: inline;"
+              data-confirm="Supprimer la règle « {{ rule.name }} » ?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer</button>
+        </form>
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+<p class="text-muted mt-2 small">{{ rules | length }} règle{{ 's' if rules | length != 1 }}</p>
+{% else %}
+<p class="text-muted">Aucune règle configurée. Créez votre première règle pour automatiser le traitement des emails.</p>
+{% endif %}
+{% endblock %}

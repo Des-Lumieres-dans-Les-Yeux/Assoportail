@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Campagnes emailing — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Campagnes emailing</h1>
+  <a href="{{ url_for('mailing.create') }}" class="btn btn-primary btn-sm">Nouvelle campagne</a>
+</div>
+
+{% if campaigns %}
+<ul class="list-group list-group-flush border rounded" aria-label="Campagnes">
+  {% for c in campaigns %}
+  <li class="list-group-item">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <div>
+        <a href="{{ url_for('mailing.detail', campaign_id=c.id) }}"
+           class="fw-semibold text-decoration-none">{{ c.name }}</a>
+        <div class="text-muted small">{{ c.subject }}</div>
+        <small class="text-muted">Créée par {{ c.created_by.full_name }}</small>
+      </div>
+      <div class="d-flex flex-column align-items-end gap-1 text-nowrap">
+        <small class="text-muted">{{ c.created_at.strftime('%d/%m/%Y') }}</small>
+        {% if c.status == CampaignStatus.DRAFT.value %}
+        <span class="badge bg-secondary">Brouillon</span>
+        {% elif c.status == CampaignStatus.SCHEDULED.value %}
+        <span class="badge bg-info text-dark">Planifiée</span>
+        {% elif c.status == CampaignStatus.SENDING.value %}
+        <span class="badge bg-warning text-dark">En cours</span>
+        {% elif c.status == CampaignStatus.SENT.value %}
+        <span class="badge bg-success">Envoyée</span>
+        {% elif c.status == CampaignStatus.FAILED.value %}
+        <span class="badge bg-danger">Échouée</span>
+        {% endif %}
+        {% if c.status == CampaignStatus.SENT.value %}
+        <small class="text-muted">{{ c.stats_sent }} envoyés · {{ c.stats_bounced }} rebonds</small>
+        {% endif %}
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+<p class="text-muted mt-2 small">{{ campaigns | length }} campagne{{ 's' if campaigns | length != 1 }}</p>
+{% else %}
+<p class="text-muted">Aucune campagne. Créez votre première campagne pour envoyer un email groupé.</p>
+{% endif %}
+{% endblock %}

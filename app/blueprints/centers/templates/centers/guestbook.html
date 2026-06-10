@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Livre d'or — {{ center.name }} — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('centers.list_centers') }}">Centres</a></li>
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('centers.detail', center_id=center.id) }}">{{ center.name }}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Livre d'or</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">Livre d'or — {{ center.name }}</h1>
+
+{% if feedbacks %}
+<ul class="list-group list-group-flush border rounded" aria-label="Témoignages publiés">
+  {% for fb in feedbacks %}
+  <li class="list-group-item py-3">
+    <div class="d-flex justify-content-between align-items-start mb-1">
+      <strong>{{ fb.submitted_by }}</strong>
+      <small class="text-muted">{{ fb.published_at.strftime('%d/%m/%Y') if fb.published_at else fb.submitted_at.strftime('%d/%m/%Y') }}</small>
+    </div>
+    {% if fb.rating %}
+    <div class="text-warning mb-1" aria-label="{{ fb.rating }} étoiles sur 5">
+      {{ '★' * fb.rating }}{{ '☆' * (5 - fb.rating) }}
+    </div>
+    {% endif %}
+    <p class="mb-0">{{ fb.content }}</p>
+    {% if current_user.is_bureau %}
+    <div class="mt-2">
+      <form method="post"
+            action="{{ url_for('centers.unpublish_feedback', center_id=center.id, fb_id=fb.id) }}"
+            class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-secondary btn-sm">Retirer</button>
+      </form>
+    </div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+<p class="text-muted mt-2">
+  <small>{{ feedbacks | length }} témoignage{{ 's' if feedbacks | length != 1 }} publié{{ 's' if feedbacks | length != 1 }}</small>
+</p>
+{% else %}
+<p class="text-muted">Aucun témoignage publié pour ce centre.</p>
+{% endif %}
+{% endblock %}

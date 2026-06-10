@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Sondages — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h3 mb-0"><i class="bi bi-bar-chart-line me-2" aria-hidden="true"></i>Sondages</h1>
+  {% if current_user.is_bureau %}
+  <a href="{{ url_for('polls.create') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nouveau sondage
+  </a>
+  {% endif %}
+</div>
+
+{% if not polls %}
+<p class="text-muted">Aucun sondage pour le moment.</p>
+{% else %}
+<div class="row g-3">
+  {% for poll in polls %}
+  {% set has_voted = poll.has_voted(current_user.id) %}
+  {% set active = poll.is_active %}
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card h-100 shadow-sm">
+      {% if poll.cover_document_id %}
+      <img src="{{ url_for('documents.download', document_id=poll.cover_document_id) }}"
+           alt="" class="card-img-top" style="height:140px;object-fit:cover;" loading="lazy">
+      {% endif %}
+      <div class="card-body">
+        <div class="d-flex align-items-start gap-2 mb-1">
+          {% if poll.is_closed %}
+          <span class="badge bg-secondary">Clôturé</span>
+          {% elif poll.is_expired %}
+          <span class="badge bg-warning text-dark">Expiré</span>
+          {% else %}
+          <span class="badge bg-success">Ouvert</span>
+          {% endif %}
+          {% if has_voted %}
+          <span class="badge bg-primary">Voté</span>
+          {% endif %}
+        </div>
+        <h5 class="card-title mb-1">{{ poll.title }}</h5>
+        {% if poll.description %}
+        <p class="card-text text-muted small mb-2" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">{{ poll.description }}</p>
+        {% endif %}
+        <p class="card-text small text-muted mb-0">
+          <i class="bi bi-people me-1" aria-hidden="true"></i>{{ poll.voter_count() }} participant{{ 's' if poll.voter_count() != 1 else '' }}
+          {% if poll.deadline %}
+          &nbsp;·&nbsp;<i class="bi bi-clock me-1" aria-hidden="true"></i>
+          {{ poll.deadline.strftime('%d/%m/%Y %H:%M') }}
+          {% endif %}
+        </p>
+      </div>
+      <div class="card-footer bg-transparent border-top-0">
+        <a href="{{ url_for('polls.detail', poll_id=poll.id) }}" class="btn btn-outline-primary btn-sm w-100">
+          {% if active and not has_voted %}Voter{% else %}Voir les résultats{% endif %}
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_help %}
+<p>Liste des sondages ouverts aux membres.</p>
+<ul>
+  <li>Cliquez sur un sondage pour voter ou consulter les résultats.</li>
+  {% if current_user.is_bureau %}
+  <li>Bureau : créez un sondage avec le bouton en haut à droite.</li>
+  {% endif %}
+</ul>
+{% endblock %}

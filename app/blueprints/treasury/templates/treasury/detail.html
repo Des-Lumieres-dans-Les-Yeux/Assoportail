@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Transaction — Trésorerie — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('treasury.list_transactions') }}">Trésorerie</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Transaction #{{ transaction.id }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-1">{{ transaction.description }}</h1>
+    <span class="fs-4 fw-bold {{ 'text-success' if transaction.type == TransactionType.INCOME.value else 'text-danger' }}">
+      {{ '+' if transaction.type == TransactionType.INCOME.value else '−' }}
+      {{ "%.2f"|format(transaction.amount) }} €
+    </span>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if transaction.source == TransactionSource.DONATION.value %}
+    <a href="{{ url_for('treasury.generate_cerfa', transaction_id=transaction.id) }}"
+       class="btn btn-success btn-sm">
+      <i class="bi bi-file-earmark-word me-1" aria-hidden="true"></i>CERFA DOCX
+    </a>
+    {% if transaction.cerfa_drive_web_link %}
+    <a href="{{ transaction.cerfa_drive_web_link }}" target="_blank" rel="noopener"
+       class="btn btn-outline-success btn-sm">
+      <i class="bi bi-cloud-check me-1" aria-hidden="true"></i>Drive
+    </a>
+    {% endif %}
+    {% if transaction.donor_email %}
+    <form method="post" action="{{ url_for('treasury.send_cerfa_email', transaction_id=transaction.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-primary btn-sm"
+              {% if transaction.cerfa_sent_at %}title="Déjà envoyé le {{ transaction.cerfa_sent_at.strftime('%d/%m/%Y à %H:%M') }}"{% endif %}>
+        <i class="bi bi-envelope me-1" aria-hidden="true"></i>
+        {% if transaction.cerfa_sent_at %}Renvoyer{% else %}Envoyer par email{% endif %}
+      </button>
+    </form>
+    {% endif %}
+    {% endif %}
+    <a href="{{ url_for('treasury.edit', transaction_id=transaction.id) }}"
+       class="btn btn-outline-secondary btn-sm">Modifier</a>
+    <form method="post" action="{{ url_for('treasury.delete', transaction_id=transaction.id) }}"
+          data-confirm="Supprimer cette transaction ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer</button>
+    </form>
+  </div>
+</div>
+
+<section aria-labelledby="meta-heading">
+  <h2 class="h5" id="meta-heading">Informations</h2>
+  <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;">
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Type</span>
+      <span>{{ 'Recette' if transaction.type == TransactionType.INCOME.value else 'Dépense' }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Date</span>
+      <span>{{ transaction.date.strftime('%d/%m/%Y') }}</span>
+    </li>
+    {% if transaction.category %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Catégorie</span>
+      <span>{{ transaction.category }}</span>
+    </li>
+    {% endif %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Source</span>
+      <span>
+        {% if transaction.source == 'manual' %}Saisie manuelle
+        {% elif transaction.source == 'event' %}Événement
+        {% elif transaction.source == 'expense' %}Note de frais
+        {% elif transaction.source == 'donation' %}Don
+        {% elif transaction.source == 'membership' %}Adhésion
+        {% else %}{{ transaction.source }}{% endif %}
+      </span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Enregistrée par</span>
+      <span>{{ transaction.created_by.full_name }}</span>
+    </li>
+    {% if transaction.tags %}
+    <li class="list-group-item">
+      <span class="text-muted">Étiquettes</span>
+      <div class="mt-1">
+        {% for tag in transaction.tags %}
+        <span class="badge" style="background-color: {{ tag.color }};">{{ tag.label }}</span>
+        {% endfor %}
+      </div>
+    </li>
+    {% endif %}
+  </ul>
+</section>
+
+{% if transaction.source == TransactionSource.DONATION.value %}
+<section aria-labelledby="donor-heading" class="mt-4">
+  <h2 class="h5" id="donor-heading">Donateur</h2>
+  <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;">
+    {% if transaction.donation_type %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Type de don</span>
+      <span>
+        {% if transaction.donation_type == 'particulier' %}
+          <span class="badge bg-primary">Don particulier</span>
+        {% elif transaction.donation_type == 'mecena' %}
+          <span class="badge bg-warning text-dark">Mécénat entreprise</span>
+        {% elif transaction.donation_type == 'nature' %}
+          <span class="badge bg-secondary">Don en nature</span>
+        {% endif %}
+      </span>
+    </li>
+    {% endif %}
+    {% if transaction.donor_first_name or transaction.donor_name %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Nom</span>
+      <span>{{ [transaction.donor_first_name, transaction.donor_name] | select | join(' ') }}</span>
+    </li>
+    {% endif %}
+    {% if transaction.donor_address %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Adresse</span>
+      <span>{{ transaction.donor_address }}</span>
+    </li>
+    {% endif %}
+    {% if transaction.donor_zip or transaction.donor_city %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Ville</span>
+      <span>{{ transaction.donor_zip or '' }} {{ transaction.donor_city or '' }}</span>
+    </li>
+    {% endif %}
+    {% if transaction.donor_email %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Email</span>
+      <span>{{ transaction.donor_email }}</span>
+    </li>
+    {% endif %}
+    {% if transaction.donor_description %}
+    <li class="list-group-item">
+      <span class="text-muted d-block mb-1">Description du don</span>
+      <span class="small">{{ transaction.donor_description }}</span>
+    </li>
+    {% endif %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Reçu envoyé</span>
+      <span>
+        {% if transaction.cerfa_sent_at %}
+          <i class="bi bi-check-circle-fill text-success me-1" aria-hidden="true"></i>
+          {{ transaction.cerfa_sent_at.strftime('%d/%m/%Y à %H:%M') }}
+        {% else %}
+          <span class="text-muted">Non envoyé</span>
+        {% endif %}
+      </span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Archivé sur Drive</span>
+      <span>
+        {% if transaction.cerfa_drive_web_link %}
+          <a href="{{ transaction.cerfa_drive_web_link }}" target="_blank" rel="noopener"
+             class="text-success small">
+            <i class="bi bi-cloud-check-fill me-1" aria-hidden="true"></i>Voir sur Drive
+          </a>
+        {% else %}
+          <span class="text-muted small">Non archivé (générer le CERFA pour archiver)</span>
+        {% endif %}
+      </span>
+    </li>
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

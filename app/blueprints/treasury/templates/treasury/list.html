@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Trésorerie — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Trésorerie</h1>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('treasury.cerfa_stats') }}" class="btn btn-outline-secondary btn-sm">Synthèse CERFA</a>
+    <a href="{{ url_for('treasury.manage_tags') }}" class="btn btn-outline-secondary btn-sm">Étiquettes</a>
+    <a href="{{ url_for('treasury.association_config') }}" class="btn btn-outline-secondary btn-sm"
+       title="Configuration CERFA">
+      <i class="bi bi-gear" aria-hidden="true"></i>
+    </a>
+    <a href="{{ url_for('treasury.create') }}" class="btn btn-primary btn-sm">Nouvelle transaction</a>
+  </div>
+</div>
+
+{# Balance summary #}
+<section aria-labelledby="bilan-heading" class="mb-4">
+  <h2 class="h5" id="bilan-heading">Bilan{% if type_filter or source_filter or date_from or date_to %} (filtré){% endif %}</h2>
+  <ul class="list-group list-group-flush border rounded" style="max-width: 24rem;">
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Recettes</span>
+      <span class="text-success fw-semibold">+ {{ "%.2f"|format(total_income) }} €</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Dépenses</span>
+      <span class="text-danger fw-semibold">− {{ "%.2f"|format(total_expense) }} €</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between fw-bold">
+      <span>Solde</span>
+      <span class="{{ 'text-success' if balance >= 0 else 'text-danger' }}">
+        {{ "%.2f"|format(balance) }} €
+      </span>
+    </li>
+  </ul>
+</section>
+
+{# Filters #}
+<form method="get" action="{{ url_for('treasury.list_transactions') }}"
+      class="d-flex flex-wrap gap-2 mb-3">
+  <select name="type" class="form-select form-select-sm" style="width: auto;" aria-label="Type">
+    <option value="" {% if not type_filter %}selected{% endif %}>Tous les types</option>
+    <option value="income" {% if type_filter == 'income' %}selected{% endif %}>Recettes</option>
+    <option value="expense" {% if type_filter == 'expense' %}selected{% endif %}>Dépenses</option>
+  </select>
+  <select name="source" class="form-select form-select-sm" style="width: auto;" aria-label="Source">
+    <option value="" {% if not source_filter %}selected{% endif %}>Toutes les sources</option>
+    <option value="manual" {% if source_filter == 'manual' %}selected{% endif %}>Saisie manuelle</option>
+    <option value="event" {% if source_filter == 'event' %}selected{% endif %}>Événement</option>
+    <option value="expense" {% if source_filter == 'expense' %}selected{% endif %}>Note de frais</option>
+    <option value="donation" {% if source_filter == 'donation' %}selected{% endif %}>Don</option>
+    <option value="membership" {% if source_filter == 'membership' %}selected{% endif %}>Adhésion</option>
+  </select>
+  <input type="date" name="date_from" class="form-control form-control-sm" style="width: auto;"
+         value="{{ date_from }}" aria-label="Du">
+  <input type="date" name="date_to" class="form-control form-control-sm" style="width: auto;"
+         value="{{ date_to }}" aria-label="Au">
+  <button type="submit" class="btn btn-outline-primary btn-sm">Filtrer</button>
+  {% if type_filter or source_filter or date_from or date_to %}
+  <a href="{{ url_for('treasury.list_transactions') }}" class="btn btn-outline-secondary btn-sm">
+    Réinitialiser
+  </a>
+  {% endif %}
+</form>
+
+{% if transactions %}
+<ul class="list-group list-group-flush border rounded" aria-label="Liste des transactions">
+  {% for t in transactions %}
+  <li class="list-group-item">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <a href="{{ url_for('treasury.detail', transaction_id=t.id) }}"
+           class="fw-semibold text-decoration-none">{{ t.description }}</a>
+        {% if t.category %}
+        <small class="text-muted ms-2">{{ t.category }}</small>
+        {% endif %}
+        {% for tag in t.tags %}
+        <span class="badge ms-1" style="background-color: {{ tag.color }};">{{ tag.label }}</span>
+        {% endfor %}
+      </div>
+      <div class="d-flex gap-3 align-items-center text-nowrap">
+        <small class="text-muted">{{ t.date.strftime('%d/%m/%Y') }}</small>
+        <span class="fw-semibold {{ 'text-success' if t.type == TransactionType.INCOME.value else 'text-danger' }}">
+          {{ '+' if t.type == TransactionType.INCOME.value else '−' }}
+          {{ "%.2f"|format(t.amount) }} €
+        </span>
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+<p class="text-muted mt-2">
+  <small>{{ pagination.total }} transaction{{ 's' if pagination.total != 1 }}</small>
+</p>
+{% set endpoint = 'treasury.list_transactions' %}
+{% set kwargs = {'type': type_filter, 'source': source_filter, 'date_from': date_from, 'date_to': date_to} %}
+{% include "components/pagination.html" %}
+{% else %}
+<p class="text-muted">Aucune transaction.</p>
+{% endif %}
+{% endblock %}

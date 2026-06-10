@@ -1,0 +1,32 @@
+# Development infrastructure only.
+# Run the app, worker, and beat natively:
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   flask run --debug
+#   celery -A app.tasks worker --loglevel=debug
+#   celery -A app.tasks beat --loglevel=debug
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: assoportail
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: assoportail_dev
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assoportail -d assoportail_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+volumes:
+  pgdata_dev:

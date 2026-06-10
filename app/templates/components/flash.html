@@ -1,0 +1,26 @@
+{# Flash message component.
+   Renders all pending flash messages with Bootstrap 5 dismissible alerts.
+   Map Flask message categories to Bootstrap alert variants.
+#}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div aria-live="polite" aria-atomic="true">
+      {% for category, message in messages %}
+        {% set bs_class = {
+            'success': 'alert-success',
+            'info':    'alert-info',
+            'warning': 'alert-warning',
+            'danger':  'alert-danger',
+            'error':   'alert-danger',
+          }.get(category, 'alert-info') %}
+        <div class="alert {{ bs_class }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button"
+                  class="btn-close"
+                  data-bs-dismiss="alert"
+                  aria-label="Fermer"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}

@@ -1,0 +1,579 @@
+{% extends "base.html" %}
+
+{% block title %}{{ machine.display_name }} — Machines — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('machines.list_machines') }}">Machines</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ machine.display_name }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <h1 class="h3 mb-0">{{ machine.display_name }}</h1>
+  {% if current_user.is_bureau %}
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('machines.fiche_pdf', machine_id=machine.id) }}"
+       class="btn btn-outline-secondary btn-sm" target="_blank">
+      <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Fiche PDF
+    </a>
+    {% if machine.current_installation %}
+    <a href="{{ url_for('machines.convention_pdf', machine_id=machine.id) }}"
+       class="btn btn-outline-secondary btn-sm" target="_blank">
+      <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>Convention
+    </a>
+    {% endif %}
+    <a href="{{ url_for('machines.qr_svg', machine_id=machine.id) }}"
+       class="btn btn-outline-secondary btn-sm" target="_blank"
+       title="QR code — page publique de la machine">
+      <i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR
+    </a>
+    <a href="{{ url_for('machines.edit', machine_id=machine.id) }}"
+       class="btn btn-outline-secondary btn-sm">Modifier</a>
+    <form method="post" action="{{ url_for('machines.delete', machine_id=machine.id) }}"
+          data-confirm="Supprimer la machine « {{ machine.display_name }} » ? Cette action est irréversible.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+{# Machine info #}
+<section aria-labelledby="info-heading" class="mb-4">
+  <h2 class="h5" id="info-heading">Informations</h2>
+  <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;">
+    {% if machine.internal_number %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">N° interne</span><span>{{ machine.internal_number }}</span>
+    </li>
+    {% endif %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Fabricant</span><span>{{ machine.manufacturer }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Modèle</span><span>{{ machine.model }}</span>
+    </li>
+    {% if machine.year %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Année</span><span>{{ machine.year }}</span>
+    </li>
+    {% endif %}
+    {% if machine.serial_number %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">N° de série</span><span>{{ machine.serial_number }}</span>
+    </li>
+    {% endif %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Statut</span>
+      <span>
+        {% if machine.status.value == "installed" %}<span class="badge bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i>Installée</span>
+        {% elif machine.status.value == "stock" %}<span class="badge bg-secondary"><i class="bi bi-box me-1" aria-hidden="true"></i>En stock</span>
+        {% elif machine.status.value == "maintenance" %}<span class="badge bg-warning text-dark"><i class="bi bi-tools me-1" aria-hidden="true"></i>Maintenance</span>
+        {% elif machine.status.value == "retired" %}<span class="badge bg-dark"><i class="bi bi-archive me-1" aria-hidden="true"></i>Retirée</span>
+        {% endif %}
+      </span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <span class="text-muted">Dernière activité</span>
+      <span class="d-flex align-items-center gap-2">
+        {% set days = machine.days_since_last_activity %}
+        {% if days is not none %}
+          {% if days > 90 %}
+          <span class="badge bg-danger">{{ days }} jour{{ 's' if days != 1 }}</span>
+          {% elif days > 30 %}
+          <span class="badge bg-warning text-dark">{{ days }} jour{{ 's' if days != 1 }}</span>
+          {% else %}
+          <span class="badge bg-success">{{ days }} jour{{ 's' if days != 1 }}</span>
+          {% endif %}
+        {% else %}
+          <span class="text-muted">Aucune</span>
+        {% endif %}
+        {% if machine.status.value != "retired" %}
+        <form method="post" action="{{ url_for('machines.check_operational', machine_id=machine.id) }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-success btn-sm" title="Machine opérationnelle — remet le compteur à zéro">
+            <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>OK
+          </button>
+        </form>
+        {% endif %}
+      </span>
+    </li>
+    {% if machine.purchase_date %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Date d'achat</span><span>{{ machine.purchase_date.strftime('%d/%m/%Y') }}</span>
+    </li>
+    {% endif %}
+    {% if machine.purchase_price %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Montant d'achat</span><span>{{ "%.2f"|format(machine.purchase_price) }} €</span>
+    </li>
+    {% endif %}
+    {% if machine.estimated_value %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Valeur estimée</span><span>{{ "%.2f"|format(machine.estimated_value) }} €</span>
+    </li>
+    {% endif %}
+  </ul>
+  {% if machine.notes %}
+  <p class="text-muted mt-2 fst-italic">{{ machine.notes }}</p>
+  {% endif %}
+</section>
+
+{# Current installation + install form #}
+{% if current_user.is_bureau %}
+<section aria-labelledby="install-heading" class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0" id="install-heading">Installation en cours</h2>
+    {% if machine.status.value not in ("retired", "maintenance") %}
+    <button class="btn btn-{{ 'outline-secondary' if machine.current_installation else 'outline-primary' }} btn-sm"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#install-form"
+            aria-expanded="false"
+            aria-controls="install-form">
+      {% if machine.current_installation %}
+      <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Déplacer
+      {% else %}
+      Installer
+      {% endif %}
+    </button>
+    {% endif %}
+  </div>
+
+  {% set inst = machine.current_installation %}
+  {% if inst %}
+  <ul class="list-group list-group-flush border rounded mb-2" style="max-width: 30rem;">
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Emplacement</span>
+      <span>
+        {% if inst.center %}
+          {% if current_user.has_permission('centers') %}
+          <a href="{{ url_for('centers.detail', center_id=inst.center.id) }}">{{ inst.center.name }}</a>
+          {% else %}
+          {{ inst.center.name }}
+          {% endif %}
+        {% elif inst.hosted_by %}
+        <i class="bi bi-person me-1" aria-hidden="true"></i>{{ inst.hosted_by.full_name }}
+        {% endif %}
+      </span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Depuis le</span>
+      <span>{{ inst.installed_at.strftime('%d/%m/%Y') }}</span>
+    </li>
+  </ul>
+  {% if machine.status.value != "maintenance" %}
+  <form method="post"
+        action="{{ url_for('machines.remove_installation', machine_id=machine.id, inst_id=inst.id) }}"
+        class="d-flex flex-wrap align-items-end gap-2">
+    {{ remove_form.hidden_tag() }}
+    <div>
+      <label for="{{ remove_form.removed_at.id }}" class="form-label form-label-sm mb-0">Retrait le</label>
+      {{ remove_form.removed_at(class="form-control form-control-sm", id=remove_form.removed_at.id, style="width: 12rem;") }}
+    </div>
+    <div>
+      <label for="detail-move-to" class="form-label form-label-sm mb-0">Déplacer chez</label>
+      {{ remove_form.move_to_member_id(class="form-select form-select-sm", id="detail-move-to", style="width: 14rem;") }}
+    </div>
+    <button type="submit" class="btn btn-outline-danger btn-sm">Récupérer</button>
+  </form>
+  {% endif %}
+  {% else %}
+  <p class="text-muted">Machine non installée actuellement.</p>
+  {% endif %}
+
+  {# Inline install form #}
+  <div class="collapse mt-3" id="install-form">
+    <div class="border rounded p-3 bg-light">
+      <h3 class="h6 mb-3">{{ 'Déplacer la machine' if machine.current_installation else 'Installer la machine' }}</h3>
+      <form method="post"
+            action="{{ url_for('machines.install', machine_id=machine.id) }}"
+            novalidate>
+        {{ install_form.hidden_tag() }}
+        <div class="row g-2">
+          <div class="col-sm-3">
+            <label for="detail-loc-type" class="form-label">Emplacement</label>
+            {{ install_form.location_type(class="form-select", id="detail-loc-type") }}
+          </div>
+          <div class="col-sm-4" id="detail-center-group">
+            <label for="{{ install_form.center_id.id }}" class="form-label">Centre</label>
+            {{ install_form.center_id(class="form-select", id=install_form.center_id.id) }}
+          </div>
+          <div class="col-sm-4 d-none" id="detail-member-group">
+            <label for="{{ install_form.hosted_by_id.id }}" class="form-label">Membre</label>
+            {{ install_form.hosted_by_id(class="form-select", id=install_form.hosted_by_id.id) }}
+          </div>
+          <div class="col-sm-3">
+            <label for="{{ install_form.installed_at.id }}" class="form-label">Date</label>
+            {{ install_form.installed_at(class="form-control", id=install_form.installed_at.id) }}
+          </div>
+          <div class="col-sm-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100">Confirmer</button>
+          </div>
+        </div>
+        <div class="mt-2">
+          <label for="{{ install_form.notes.id }}" class="form-label">Notes</label>
+          {{ install_form.notes(class="form-control", id=install_form.notes.id, rows=2) }}
+        </div>
+      </form>
+    </div>
+  </div>
+  <script data-cfasync="false" nonce="{{ csp_nonce() }}">
+  (function () {
+    const locType = document.getElementById('detail-loc-type');
+    if (!locType) return;
+    const cg = document.getElementById('detail-center-group');
+    const mg = document.getElementById('detail-member-group');
+    locType.addEventListener('change', function () {
+      if (locType.value === 'member') {
+        cg.classList.add('d-none');
+        mg.classList.remove('d-none');
+      } else {
+        cg.classList.remove('d-none');
+        mg.classList.add('d-none');
+      }
+    });
+  }());
+  </script>
+</section>
+
+{% if pending_install %}
+<div class="modal fade" id="confirmMoveModal" tabindex="-1"
+     aria-labelledby="confirmMoveLabel" aria-modal="true" role="dialog">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmMoveLabel">
+          <i class="bi bi-arrow-left-right me-2" aria-hidden="true"></i>Déménagement de la machine
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <form method="post" action="{{ url_for('machines.install', machine_id=machine.id) }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="confirmed_move" value="1">
+        <div class="modal-body">
+          <p class="mb-2">Cette machine est actuellement installée :</p>
+          <p class="fw-semibold mb-3">
+            <i class="bi bi-geo-alt me-1" aria-hidden="true"></i>{{ pending_install.current_loc }}
+            <span class="text-muted fw-normal">— depuis le {{ pending_install.current_since }}</span>
+          </p>
+          <p class="mb-0">
+            Confirmer l'installation <strong>{{ pending_install.label }}</strong> ?
+            L'installation actuelle sera clôturée à la date d'aujourd'hui.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-warning">
+            <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Confirmer le déménagement
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  var el = document.getElementById('confirmMoveModal');
+  if (el) { new bootstrap.Modal(el, {backdrop: 'static'}).show(); }
+}());
+</script>
+{% endif %}
+{% endif %}
+
+{# Installation history #}
+<section aria-labelledby="history-heading" class="mb-4">
+  <h2 class="h5" id="history-heading">Historique des installations</h2>
+  {% if machine.installations %}
+  <ul class="list-group list-group-flush border rounded" aria-label="Historique des installations">
+    {% for inst in machine.installations %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between">
+        <div>
+          {% if inst.center %}
+            {% if current_user.has_permission('centers') %}
+            <a href="{{ url_for('centers.detail', center_id=inst.center.id) }}">{{ inst.center.name }}</a>
+            {% else %}
+            {{ inst.center.name }}
+            {% endif %}
+            <small class="text-muted ms-1">{{ inst.center.city }}</small>
+          {% elif inst.hosted_by %}
+          <i class="bi bi-person me-1" aria-hidden="true"></i>{{ inst.hosted_by.full_name }}
+          {% else %}
+          <span class="text-muted">Inconnu</span>
+          {% endif %}
+        </div>
+        <div class="text-end">
+          <small>
+            {{ inst.installed_at.strftime('%d/%m/%Y') }}
+            {% if inst.removed_at %}
+            → {{ inst.removed_at.strftime('%d/%m/%Y') }}
+            {% else %}
+            <span class="badge bg-success ms-1">En cours</span>
+            {% endif %}
+          </small>
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucune installation enregistrée.</p>
+  {% endif %}
+</section>
+
+{# Pannes & Maintenance #}
+{% set open_records = machine.maintenance_records | selectattr('status.value', 'equalto', 'open') | list %}
+{% set resolved_records = machine.maintenance_records | selectattr('status.value', 'equalto', 'resolved') | list %}
+
+<section aria-labelledby="maint-heading" class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0" id="maint-heading">
+      Pannes &amp; Maintenance
+      {% if open_records %}
+      <span class="badge bg-warning text-dark ms-1">{{ open_records | length }} en cours</span>
+      {% endif %}
+    </h2>
+    {% if current_user.is_bureau and machine.status.value != "retired" %}
+    <button class="btn btn-outline-warning btn-sm"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#maint-form"
+            aria-expanded="false"
+            aria-controls="maint-form">
+      <i class="bi bi-tools me-1" aria-hidden="true"></i>Ouvrir une fiche
+    </button>
+    {% endif %}
+  </div>
+
+  {% if current_user.is_bureau %}
+  <div class="collapse mb-3" id="maint-form">
+    <div class="border rounded p-3 bg-light">
+      <h3 class="h6 mb-3">Nouvelle fiche de maintenance</h3>
+      <form method="post"
+            action="{{ url_for('machines.add_maintenance', machine_id=machine.id) }}"
+            novalidate>
+        {{ maint_form.hidden_tag() }}
+        <div class="row g-2 mb-2">
+          <div class="col-sm-3">
+            <label for="{{ maint_form.date.id }}" class="form-label">Date</label>
+            {{ maint_form.date(class="form-control", id=maint_form.date.id) }}
+          </div>
+          <div class="col-sm-5">
+            <label for="{{ maint_form.maintainer_name.id }}" class="form-label">Intervenant</label>
+            {{ maint_form.maintainer_name(class="form-control", id=maint_form.maintainer_name.id) }}
+          </div>
+          <div class="col-sm-2">
+            <label for="{{ maint_form.cost.id }}" class="form-label">Coût (€)</label>
+            {{ maint_form.cost(class="form-control", id=maint_form.cost.id, step="0.01") }}
+          </div>
+          <div class="col-sm-2">
+            <label for="{{ maint_form.source_task_id.id }}" class="form-label">Tâche #</label>
+            {{ maint_form.source_task_id(class="form-control", id=maint_form.source_task_id.id, placeholder="optionnel") }}
+          </div>
+        </div>
+        <div class="mb-2">
+          <label for="{{ maint_form.description.id }}" class="form-label">Description</label>
+          {{ maint_form.description(class="form-control", id=maint_form.description.id, rows=3) }}
+        </div>
+        <button type="submit" class="btn btn-warning">Enregistrer</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ---- Fiches en cours ---- #}
+  {% if open_records %}
+  <ul class="list-group list-group-flush border border-warning rounded mb-3" aria-label="Pannes en cours">
+    {% for mr in open_records %}
+    <li class="list-group-item list-group-item-warning">
+      {% include "machines/_maintenance_record.html" %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif machine.maintenance_records %}
+  <p class="text-success small mb-2">
+    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Aucune panne en cours.
+  </p>
+  {% else %}
+  <p class="text-muted">Aucune fiche de maintenance enregistrée.</p>
+  {% endif %}
+
+  {# ---- Historique des pannes résolues ---- #}
+  {% if resolved_records %}
+  {% set total_cost = resolved_records | selectattr('cost') | map(attribute='cost') | sum %}
+  <div>
+    <button class="btn btn-link btn-sm text-muted p-0 mb-2"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#resolved-history"
+            aria-expanded="{{ 'true' if not open_records else 'false' }}"
+            aria-controls="resolved-history">
+      <i class="bi bi-clock-history me-1" aria-hidden="true"></i>
+      Historique ({{ resolved_records | length }} fiche{{ 's' if resolved_records | length != 1 }} résolue{{ 's' if resolved_records | length != 1 }})
+    </button>
+    <div class="collapse{% if not open_records %} show{% endif %}" id="resolved-history">
+      <ul class="list-group list-group-flush border rounded" aria-label="Historique maintenance">
+        {% for mr in resolved_records %}
+        <li class="list-group-item">
+          {% include "machines/_maintenance_record.html" %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if total_cost %}
+      <p class="text-muted mt-2 text-end">
+        <small>Coût total : <strong>{{ "%.2f"|format(total_cost) }} €</strong></small>
+      </p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{# Documents #}
+<section aria-labelledby="docs-heading" class="mb-4">
+  <h2 class="h5" id="docs-heading">
+    Documents
+    {% if machine.documents %}<small class="text-muted">({{ machine.documents | length }})</small>{% endif %}
+  </h2>
+
+  {% if machine.documents %}
+  <ul class="list-group list-group-flush border rounded mb-3" aria-label="Documents de la machine">
+    {% for doc in machine.documents %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <a href="{{ doc.drive_web_link or url_for('documents.download', document_id=doc.id) }}"
+           class="text-decoration-none" target="_blank">
+          <i class="bi bi-{% if doc.type == 'photo' %}image{% else %}file-earmark-text{% endif %} me-1" aria-hidden="true"></i>{{ doc.original_filename }}
+        </a>
+        <small class="text-muted ms-2">{{ (doc.size_bytes / 1024) | round(1) }} Ko</small>
+        {% if doc.description %}
+        <small class="text-muted d-block">{{ doc.description }}</small>
+        {% endif %}
+      </div>
+      {% if current_user.is_bureau %}
+      <form method="post"
+            action="{{ url_for('machines.detach_document', machine_id=machine.id, document_id=doc.id) }}"
+            data-confirm="Détacher ce document ?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-danger btn-sm" aria-label="Détacher">
+          <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucun document attaché.</p>
+  {% endif %}
+
+  {% if current_user.is_bureau %}
+  <details>
+    <summary class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-upload me-1" aria-hidden="true"></i>Ajouter un document
+    </summary>
+    <form method="post" action="{{ url_for('machines.upload_document', machine_id=machine.id) }}"
+          enctype="multipart/form-data"
+          class="mt-3 border rounded p-3 bg-light d-flex flex-wrap align-items-end gap-3"
+          style="max-width: 42rem;" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="flex-grow-1">
+        <label for="machine-doc-file" class="form-label small">
+          Fichier <span class="text-danger">*</span>
+          <span class="text-muted">(PDF, image, DOCX, XLSX, ODT — max 20 Mo)</span>
+        </label>
+        <input type="file" id="machine-doc-file" name="file"
+               class="form-control form-control-sm"
+               accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.docx,.xlsx,.odt" multiple required>
+      </div>
+      <div style="min-width: 14rem;">
+        <label for="machine-doc-desc" class="form-label small">Description <span class="text-muted">(optionnel)</span></label>
+        <input type="text" id="machine-doc-desc" name="description"
+               class="form-control form-control-sm" maxlength="500"
+               placeholder="Ex : Facture d'achat, notice…">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm text-nowrap">
+        <i class="bi bi-upload me-1" aria-hidden="true"></i>Envoyer
+      </button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+{# Events history #}
+{% if machine.event_machines %}
+<section aria-labelledby="events-heading" class="mb-4">
+  <h2 class="h5" id="events-heading">
+    Événements <small class="text-muted">({{ machine.event_machines | length }})</small>
+  </h2>
+  <ul class="list-group list-group-flush border rounded" aria-label="Événements liés">
+    {% for em in machine.event_machines %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      {% if current_user.has_permission('events') %}
+      <a href="{{ url_for('events.detail', event_id=em.event.id) }}" class="text-decoration-none">
+        {{ em.event.title }}
+      </a>
+      {% else %}
+      <span>{{ em.event.title }}</span>
+      {% endif %}
+      <small class="text-muted">{{ em.event.event_date.strftime('%d/%m/%Y') }}</small>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{# Linked tasks #}
+{% if machine.tasks %}
+<section aria-labelledby="tasks-heading" class="mb-4">
+  <h2 class="h5" id="tasks-heading">Tâches liées</h2>
+  <ul class="list-group list-group-flush border rounded" aria-label="Tâches liées">
+    {% for task in machine.tasks %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      {% if current_user.has_permission('tasks') %}
+      <a href="{{ url_for('tasks.detail', task_id=task.id) }}" class="text-decoration-none">
+        #{{ task.id }} {{ task.title }}
+      </a>
+      {% else %}
+      <span>#{{ task.id }} {{ task.title }}</span>
+      {% endif %}
+      <span class="badge
+        {% if task.status.value == 'open' %}bg-secondary
+        {% elif task.status.value == 'in_progress' %}bg-primary
+        {% elif task.status.value == 'done' %}bg-success
+        {% else %}bg-dark{% endif %}">
+        {% if task.status.value == 'open' %}Ouverte
+        {% elif task.status.value == 'in_progress' %}En cours
+        {% elif task.status.value == 'done' %}Terminée
+        {% else %}Annulée{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block page_help %}
+<p>Fiche détaillée d'une machine du parc.</p>
+<h3>Cycle de vie</h3>
+<ul>
+  <li><strong>En stock</strong> → installer dans un centre → <strong>Installée</strong></li>
+  <li><strong>Installée</strong> → récupérer → <strong>En stock</strong></li>
+  <li>Ouvrir une fiche de maintenance → <strong>Maintenance</strong></li>
+  <li>Résoudre la fiche → retour à <em>Installée</em> ou <em>En stock</em></li>
+</ul>
+<h3>Maintenance</h3>
+<ul>
+  <li>La machine reste en statut <em>Maintenance</em> tant qu'une fiche est ouverte.</li>
+  <li>Plusieurs fiches peuvent être ouvertes simultanément.</li>
+  <li>La résolution d'une fiche restaure le statut seulement quand toutes sont résolues.</li>
+</ul>
+<h3>Tâches liées</h3>
+<ul>
+  <li>Les tâches issues d'une panne signalée ou créées manuellement pour cette machine apparaissent ici.</li>
+</ul>
+{% endblock %}

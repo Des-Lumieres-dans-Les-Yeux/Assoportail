@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Livre d'or — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Livre d'or global</h1>
+</div>
+
+{% if current_user.is_bureau %}
+{# Tab system for moderation #}
+<ul class="nav nav-tabs mb-4" id="guestbookTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="published-tab" data-bs-toggle="tab" data-bs-target="#published-pane" type="button" role="tab" aria-controls="published-pane" aria-selected="true">
+      <i class="bi bi-chat-left-heart me-1"></i>Témoignages publiés
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link position-relative" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending-pane" type="button" role="tab" aria-controls="pending-pane" aria-selected="false">
+      <i class="bi bi-shield-exclamation me-1"></i>En attente de modération
+      {% set pending_count = feedbacks | rejectattr('is_published') | list | length %}
+      {% if pending_count > 0 %}
+      <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="pending-badge">
+        {{ pending_count }}
+      </span>
+      {% endif %}
+    </button>
+  </li>
+</ul>
+{% endif %}
+
+<div class="tab-content" id="guestbookTabsContent">
+  {# Published Pane #}
+  <div class="tab-pane fade show active" id="published-pane" role="tabpanel" aria-labelledby="published-tab" tabindex="0">
+    {% set published_feedbacks = feedbacks | selectattr('is_published') | list if current_user.is_bureau else feedbacks %}
+    {% if published_feedbacks %}
+    <div class="row row-cols-1 row-cols-md-2 g-4">
+      {% for fb in published_feedbacks %}
+      <div class="col">
+        <div class="card h-100 shadow-sm border-0 border-start border-primary border-4">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <h2 class="h6 fw-bold mb-0">{{ fb.submitted_by }}</h2>
+                <small class="text-muted">
+                  dans <a href="{{ url_for('centers.detail', center_id=fb.center.id) }}" class="text-decoration-none fw-semibold">{{ fb.center.name }}</a>
+                </small>
+              </div>
+              <small class="text-muted">
+                {{ fb.published_at.strftime('%d/%m/%Y') if fb.published_at else fb.submitted_at.strftime('%d/%m/%Y') }}
+              </small>
+            </div>
+
+            {% if fb.rating %}
+            <div class="text-warning mb-2" aria-label="{{ fb.rating }} étoiles sur 5">
+              {{ '★' * fb.rating }}{{ '☆' * (5 - fb.rating) }}
+            </div>
+            {% endif %}
+
+            <p class="card-text text-secondary font-serif italic mb-0">« {{ fb.content }} »</p>
+          </div>
+          {% if current_user.is_bureau %}
+          <div class="card-footer bg-white border-0 pt-0 d-flex justify-content-end gap-2">
+            <form method="post" action="{{ url_for('centers.unpublish_feedback', center_id=fb.center_id, fb_id=fb.id) }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-eye-slash me-1"></i>Retirer
+              </button>
+            </form>
+            <form method="post" action="{{ url_for('centers.delete_feedback', fb_id=fb.id) }}" class="d-inline"
+                  onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer définitivement ce témoignage ?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-trash me-1"></i>Supprimer
+              </button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted empty-state py-4 text-center border rounded bg-light">Aucun témoignage publié pour le moment.</p>
+    {% endif %}
+  </div>
+
+  {% if current_user.is_bureau %}
+  {# Pending Moderation Pane #}
+  <div class="tab-pane fade" id="pending-pane" role="tabpanel" aria-labelledby="pending-tab" tabindex="0">
+    {% set pending_feedbacks = feedbacks | rejectattr('is_published') | list %}
+    {% if pending_feedbacks %}
+    <div class="row row-cols-1 g-3">
+      {% for fb in pending_feedbacks %}
+      <div class="col">
+        <div class="card shadow-sm">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+            <div>
+              <strong>{{ fb.submitted_by }}</strong>
+              <span class="text-muted ms-2">
+                pour <a href="{{ url_for('centers.detail', center_id=fb.center.id) }}" class="text-decoration-none">{{ fb.center.name }}</a>
+              </span>
+            </div>
+            <small class="text-muted">Reçu le {{ fb.submitted_at.strftime('%d/%m/%Y à %H:%M') }}</small>
+          </div>
+          <div class="card-body py-3">
+            {% if fb.rating %}
+            <div class="text-warning mb-2" aria-label="{{ fb.rating }} étoiles sur 5">
+              {{ '★' * fb.rating }}{{ '☆' * (5 - fb.rating) }}
+            </div>
+            {% endif %}
+            <p class="card-text mb-0">{{ fb.content }}</p>
+          </div>
+          <div class="card-footer bg-white d-flex justify-content-end gap-2 py-2">
+            <form method="post" action="{{ url_for('centers.delete_feedback', fb_id=fb.id) }}" class="d-inline"
+                  onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer définitivement ce témoignage ?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-trash me-1"></i>Supprimer
+              </button>
+            </form>
+            <form method="post" action="{{ url_for('centers.publish_feedback', center_id=fb.center_id, fb_id=fb.id) }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-success btn-sm">
+                <i class="bi bi-check-lg me-1"></i>Approuver & Publier
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted empty-state py-4 text-center border rounded bg-light">Aucun témoignage en attente de modération.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Modifier' if account else 'Ajouter' }} un compte — Comptes sociaux — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('social.list_posts') }}">Publications</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('social.list_accounts') }}">Comptes</a></li>
+    <li class="breadcrumb-item active" aria-current="page">
+      {{ 'Modifier' if account else 'Ajouter' }}
+    </li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ 'Modifier le compte' if account else 'Ajouter un compte social' }}</h1>
+
+<form method="post" action="" novalidate style="max-width: 36rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="mb-3">
+    <label for="{{ form.platform.id }}" class="form-label">{{ form.platform.label.text }}</label>
+    {{ form.platform(class="form-select", id=form.platform.id,
+                     disabled=account is not none) }}
+    {% if account %}
+    <input type="hidden" name="platform" value="{{ account.platform }}">
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.display_name.id }}" class="form-label">{{ form.display_name.label.text }} *</label>
+    {{ form.display_name(class="form-control" + (" is-invalid" if form.display_name.errors else ""),
+                         id=form.display_name.id,
+                         placeholder="Ex : Blog MonAsso, Page Facebook MonAsso…") }}
+    {% for e in form.display_name.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+  </div>
+
+  {# WordPress-specific fields #}
+  <div id="wp-fields">
+    <hr>
+    <h2 class="h6">Configuration WordPress</h2>
+    <div class="mb-3">
+      <label for="{{ form.site_url.id }}" class="form-label">URL du site</label>
+      {{ form.site_url(class="form-control", id=form.site_url.id,
+                       placeholder="https://monblog.wordpress.com") }}
+    </div>
+    <div class="mb-3">
+      <label for="{{ form.username.id }}" class="form-label">Nom d'utilisateur</label>
+      {{ form.username(class="form-control", id=form.username.id) }}
+    </div>
+    <div class="mb-3">
+      <label for="{{ form.app_password.id }}" class="form-label">Mot de passe d'application</label>
+      {{ form.app_password(class="form-control", id=form.app_password.id,
+                           placeholder="xxxx xxxx xxxx xxxx xxxx xxxx") }}
+      <div class="form-text">
+        Générez un mot de passe d'application dans WordPress :
+        Utilisateurs &rarr; Profil &rarr; Mots de passe d'application.
+      </div>
+    </div>
+  </div>
+
+  {# OAuth platforms info #}
+  <div id="oauth-info" class="d-none">
+    <hr>
+    <div class="alert alert-info small" role="alert">
+      <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+      Pour Facebook, Instagram et LinkedIn, utilisez le bouton OAuth sur la
+      <a href="{{ url_for('social.list_accounts') }}">page des comptes</a>
+      pour connecter automatiquement votre page.
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mt-3">
+    <button type="submit" class="btn btn-primary">
+      {% if account %}Enregistrer{% else %}Ajouter{% endif %}
+    </button>
+    <a href="{{ url_for('social.list_accounts') }}" class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  const sel = document.getElementById('{{ form.platform.id }}');
+  const wpFields = document.getElementById('wp-fields');
+  const oauthInfo = document.getElementById('oauth-info');
+  function toggle() {
+    const isWp = sel.value === 'wordpress';
+    wpFields.style.display = isWp ? '' : 'none';
+    oauthInfo.classList.toggle('d-none', isWp);
+  }
+  if (sel) {
+    sel.addEventListener('change', toggle);
+    toggle();
+  }
+}());
+</script>
+{% endblock %}

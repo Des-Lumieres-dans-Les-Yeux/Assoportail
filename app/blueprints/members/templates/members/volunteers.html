@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Bénévoles — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Bénévoles externes <small class="text-muted fw-normal">({{ volunteers | length }})</small></h1>
+  <a href="{{ url_for('members.list_members') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Retour aux membres
+  </a>
+</div>
+
+<p class="text-muted mb-3">
+  Personnes non-membres ayant participé à un ou plusieurs événements en tant que bénévoles,
+  regroupées par adresse email.
+</p>
+
+{# Client-side search #}
+<div class="mb-3" style="max-width: 30rem;">
+  <label for="vol-search" class="visually-hidden">Rechercher un bénévole</label>
+  <input id="vol-search"
+         type="search"
+         class="form-control form-control-sm"
+         placeholder="Filtrer par nom, email…"
+         aria-label="Filtrer la liste des bénévoles"
+         data-table-filter="volunteers-table">
+</div>
+
+{% if volunteers %}
+<div class="table-responsive">
+  <table id="volunteers-table" class="table table-sm table-hover align-middle mb-0" data-sortable>
+    <thead class="table-light">
+      <tr>
+        <th scope="col" data-sort>Nom</th>
+        <th scope="col" data-sort>Email</th>
+        <th scope="col" data-sort>Événements</th>
+        <th scope="col" data-sort>Heures</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for vol in volunteers %}
+    <tr>
+      <td class="fw-semibold">{{ vol.name }}</td>
+      <td>
+        <a href="mailto:{{ vol.email }}" class="text-decoration-none">{{ vol.email }}</a>
+      </td>
+      <td data-sort-value="{{ vol.events | length }}">
+        <span class="badge bg-primary">{{ vol.events | length }}</span>
+        <small class="text-muted d-block">
+          {% for event in vol.events[:3] %}
+          {{ event.title }}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+          {% if vol.events | length > 3 %}
+          … (+{{ vol.events | length - 3 }})
+          {% endif %}
+        </small>
+      </td>
+      <td data-sort-value="{{ vol.hours }}">
+        {% if vol.hours > 0 %}
+        <span class="badge bg-info text-dark">{{ vol.hours }} h</span>
+        {% else %}
+        <span class="text-muted">—</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{{ url_for('members.volunteer_detail', email=vol.email) }}"
+           class="btn btn-outline-primary btn-sm" title="Voir le détail">
+          <i class="bi bi-eye" aria-hidden="true"></i>
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">Aucun bénévole externe confirmé.</p>
+{% endif %}
+{% endblock %}

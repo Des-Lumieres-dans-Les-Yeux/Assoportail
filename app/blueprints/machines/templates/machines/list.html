@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+
+{% block title %}Machines — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Machines</h1>
+  {% if current_user.is_bureau %}
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <form method="post" action="{{ url_for('machines.import_csv') }}" id="machine-import-form"
+          enctype="multipart/form-data" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="file" name="csv_file" id="machine-csv-file" accept=".csv" class="d-none"
+             data-auto-submit="machine-import-form">
+      <label for="machine-csv-file" class="btn btn-outline-secondary btn-sm" role="button">
+        <i class="bi bi-upload me-1" aria-hidden="true"></i>Importer CSV
+      </label>
+    </form>
+    <a href="{{ url_for('machines.export_csv') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-download me-1" aria-hidden="true"></i>Exporter CSV
+    </a>
+    <a href="{{ url_for('machines.create') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nouvelle machine
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+{# Search & filter bar #}
+<form id="machine-filter-form" method="get" action="{{ url_for('machines.list_machines') }}"
+      class="mb-3 d-flex flex-wrap gap-2" role="search">
+  <div class="input-group" style="max-width: 22rem;">
+    <label for="machine-search" class="visually-hidden">Rechercher une machine</label>
+    <input id="machine-search" type="search" name="q" value="{{ q }}"
+           class="form-control form-control-sm"
+           placeholder="Modèle, fabricant, n° série…"
+           autofocus>
+    <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Rechercher">
+      <i class="bi bi-search" aria-hidden="true"></i>
+    </button>
+  </div>
+  <select name="status" class="form-select form-select-sm" style="max-width: 14rem;"
+          aria-label="Filtrer par statut"
+          data-auto-submit="machine-filter-form">
+    <option value="" {% if not status %}selected{% endif %}>Tous les statuts</option>
+    <option value="stock"       {% if status == 'stock' %}selected{% endif %}>En stock</option>
+    <option value="installed"   {% if status == 'installed' %}selected{% endif %}>Installée</option>
+    <option value="maintenance" {% if status == 'maintenance' %}selected{% endif %}>Maintenance</option>
+    <option value="retired"     {% if status == 'retired' %}selected{% endif %}>Retirée</option>
+  </select>
+  {% if q or status %}
+  <a href="{{ url_for('machines.list_machines') }}" class="btn btn-outline-secondary btn-sm"
+     aria-label="Réinitialiser les filtres">
+    <i class="bi bi-x-lg me-1" aria-hidden="true"></i>Réinitialiser
+  </a>
+  {% endif %}
+</form>
+
+{% macro sort_link(col, label) %}
+  {% set next_dir = 'desc' if (sort == col and dir_ == 'asc') else 'asc' %}
+  <a href="{{ url_for('machines.list_machines', q=q, status=status, sort=col, dir=next_dir) }}"
+     class="text-reset text-decoration-none d-inline-flex align-items-center gap-1">
+    {{ label }}
+    {% if sort == col %}
+      <i class="bi bi-caret-{{ 'down' if dir_ == 'desc' else 'up' }}-fill small" aria-hidden="true"></i>
+    {% else %}
+      <i class="bi bi-chevron-expand small text-muted" aria-hidden="true"></i>
+    {% endif %}
+  </a>
+{% endmacro %}
+
+{% if machines %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle mb-0">
+    <thead class="table-light">
+      <tr>
+        <th scope="col" class="text-muted fw-normal" style="width: 3.5rem;">#</th>
+        <th scope="col">{{ sort_link('name', 'Nom') }}</th>
+        <th scope="col">Lieu actuel</th>
+        <th scope="col">{{ sort_link('status', 'Statut') }}</th>
+        <th scope="col" class="text-center" style="width: 7rem;">Dernière activité</th>
+        <th scope="col" class="text-end">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for machine in machines %}
+    {% set inst = machine.current_installation %}
+    <tr {% if machine.status.value == 'maintenance' %}class="table-warning"{% endif %}>
+      <td class="text-muted small">{{ machine.id }}</td>
+      <td>
+        <a href="{{ url_for('machines.detail', machine_id=machine.id) }}"
+           class="fw-semibold text-decoration-none">{{ machine.display_name }}</a>
+        {% if machine.internal_number %}
+        <span class="badge bg-light text-dark border ms-1">{{ machine.internal_number }}</span>
+        {% endif %}
+        {% if machine.serial_number %}
+        <small class="text-muted ms-1">S/N {{ machine.serial_number }}</small>
+        {% endif %}
+        {% if machine.year %}
+        <small class="text-muted ms-1">({{ machine.year }})</small>
+        {% endif %}
+      </td>
+      <td>
+        {% if inst and inst.center %}
+          {% if current_user.has_permission('centers') %}
+          <a href="{{ url_for('centers.detail', center_id=inst.center.id) }}"
+             class="text-decoration-none">{{ inst.center.name }}</a>
+          {% else %}
+          {{ inst.center.name }}
+          {% endif %}
+        {% elif inst and inst.hosted_by %}
+        <span><i class="bi bi-person me-1" aria-hidden="true"></i>{{ inst.hosted_by.full_name }}</span>
+        {% else %}
+        <span class="text-muted">—</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if machine.status.value == "installed" %}
+        <span class="badge bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i>Installée</span>
+        {% elif machine.status.value == "stock" %}
+        <span class="badge bg-secondary"><i class="bi bi-box me-1" aria-hidden="true"></i>En stock</span>
+        {% elif machine.status.value == "maintenance" %}
+        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>Panne / Maintenance</span>
+        {% elif machine.status.value == "retired" %}
+        <span class="badge bg-dark"><i class="bi bi-archive me-1" aria-hidden="true"></i>Retirée</span>
+        {% endif %}
+      </td>
+      <td class="text-center">
+        {% set days = machine.days_since_last_activity %}
+        {% if days is not none %}
+          {% if days > 90 %}
+          <span class="badge bg-danger" title="Dernière activité il y a {{ days }} j">{{ days }} j</span>
+          {% elif days > 30 %}
+          <span class="badge bg-warning text-dark" title="Dernière activité il y a {{ days }} j">{{ days }} j</span>
+          {% else %}
+          <span class="badge bg-success" title="Dernière activité il y a {{ days }} j">{{ days }} j</span>
+          {% endif %}
+        {% else %}
+          <span class="text-muted">—</span>
+        {% endif %}
+      </td>
+      <td class="text-end">
+        <div class="d-flex gap-1 justify-content-end flex-wrap">
+          {# Operational check button #}
+          {% if machine.status.value != "retired" %}
+          <form method="post" action="{{ url_for('machines.check_operational', machine_id=machine.id) }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="_next" value="{{ url_for('machines.list_machines', q=q, status=status) }}">
+            <button type="submit" class="btn btn-outline-success btn-sm" title="Signaler opérationnelle">
+              <i class="bi bi-check2-circle" aria-hidden="true"></i>
+            </button>
+          </form>
+          {% endif %}
+          {% if current_user.is_bureau %}
+            {% if machine.status.value == "installed" and inst %}
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#modal-remove"
+                    data-machine-id="{{ machine.id }}"
+                    data-inst-id="{{ inst.id }}"
+                    data-machine-name="{{ machine.display_name }}">
+              <i class="bi bi-box-arrow-left me-1" aria-hidden="true"></i>Retirer
+            </button>
+            {% elif machine.status.value == "stock" %}
+            <button type="button" class="btn btn-outline-success btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#modal-install"
+                    data-machine-id="{{ machine.id }}"
+                    data-machine-name="{{ machine.display_name }}">
+              <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Installer
+            </button>
+            {% endif %}
+          {% endif %}
+          {% if machine.status.value != "retired" %}
+          <button type="button"
+                  class="btn btn-sm {% if machine.status.value == 'maintenance' %}btn-warning{% else %}btn-outline-warning{% endif %}"
+                  data-bs-toggle="modal" data-bs-target="#modal-maintenance"
+                  data-machine-id="{{ machine.id }}"
+                  data-machine-name="{{ machine.display_name }}">
+            <i class="bi bi-tools me-1" aria-hidden="true"></i>{% if machine.status.value == 'maintenance' %}En panne{% else %}Signaler panne{% endif %}
+          </button>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="text-muted mt-2">
+  <small>
+    {% if q or status %}
+      {{ pagination.total }} machine{{ 's' if pagination.total != 1 }} trouvée{{ 's' if pagination.total != 1 }}
+    {% else %}
+      {{ pagination.total }} machine{{ 's' if pagination.total != 1 }}
+    {% endif %}
+  </small>
+</p>
+{% set endpoint = 'machines.list_machines' %}
+{% set kwargs = {'q': q, 'status': status, 'sort': sort, 'dir': dir_} %}
+{% include "components/pagination.html" %}
+{% else %}
+<p class="text-muted empty-state">
+  {% if q or status %}Aucune machine ne correspond à ces critères.{% else %}Aucune machine enregistrée.{% endif %}
+</p>
+{% endif %}
+
+{# ── Maintenance modal — all users ──────────────────────────────────────── #}
+<div class="modal fade" id="modal-maintenance" tabindex="-1"
+     aria-labelledby="modal-maint-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="modal-maint-title">Signaler une panne / maintenance</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <form id="form-maintenance" method="post" action="">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="_next" value="{{ url_for('machines.list_machines', q=q, status=status) }}">
+        <div class="modal-body">
+          <p class="text-muted small mb-3">Machine : <strong id="maint-machine-name"></strong></p>
+          <div class="mb-3">
+            <label for="maint-date" class="form-label">
+              Date <span class="text-danger">*</span>
+            </label>
+            <input type="date" id="maint-date" name="date"
+                   class="form-control" value="{{ today }}" required>
+          </div>
+          <div class="mb-3">
+            <label for="maint-description" class="form-label">
+              Description du problème <span class="text-danger">*</span>
+            </label>
+            <textarea id="maint-description" name="description"
+                      class="form-control" rows="3" required maxlength="2000"
+                      placeholder="Décrivez la panne ou l'intervention…"></textarea>
+          </div>
+          <div class="mb-3">
+            <label for="maint-maintainer" class="form-label">
+              Signalé par <span class="text-danger">*</span>
+            </label>
+            <input type="text" id="maint-maintainer" name="maintainer_name"
+                   class="form-control" value="{{ current_user.full_name }}"
+                   required maxlength="100">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-warning">
+            <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Signaler la panne
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ── Bureau-only modals ──────────────────────────────────────────────────── #}
+{% if current_user.is_bureau %}
+
+{# -- Install modal -- #}
+<div class="modal fade" id="modal-install" tabindex="-1"
+     aria-labelledby="modal-install-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="modal-install-title">Installer la machine</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <form id="form-install" method="post" action="">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="_next" value="{{ url_for('machines.list_machines', q=q, status=status) }}">
+        <div class="modal-body">
+          <p class="text-muted small mb-3">Machine : <strong id="install-machine-name"></strong></p>
+          <div class="mb-3">
+            <label for="install-location-type" class="form-label">Emplacement</label>
+            <select id="install-location-type" name="location_type" class="form-select">
+              <option value="center" selected>Centre</option>
+              <option value="member">Membre</option>
+            </select>
+          </div>
+          <div class="mb-3" id="install-center-group">
+            <label for="install-center-id" class="form-label">
+              Centre <span class="text-danger">*</span>
+            </label>
+            <select id="install-center-id" name="center_id" class="form-select">
+              <option value="">— choisir un centre —</option>
+              {% for cid, cname in centers %}
+              <option value="{{ cid }}">{{ cname }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3 d-none" id="install-member-group">
+            <label for="install-member-id" class="form-label">
+              Membre <span class="text-danger">*</span>
+            </label>
+            <select id="install-member-id" name="hosted_by_id" class="form-select">
+              <option value="">— choisir un membre —</option>
+              {% for uid, uname in members %}
+              <option value="{{ uid }}">{{ uname }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="install-date" class="form-label">
+              Date d'installation <span class="text-danger">*</span>
+            </label>
+            <input type="date" id="install-date" name="installed_at"
+                   class="form-control" value="{{ today }}" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Confirmer l'installation
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# -- Remove modal -- #}
+<div class="modal fade" id="modal-remove" tabindex="-1"
+     aria-labelledby="modal-remove-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="modal-remove-title">Retirer la machine</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <form id="form-remove" method="post" action="">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="_next" value="{{ url_for('machines.list_machines', q=q, status=status) }}">
+        <div class="modal-body">
+          <p class="text-muted small mb-3">Machine : <strong id="remove-machine-name"></strong></p>
+          <div class="mb-3">
+            <label for="remove-date" class="form-label">
+              Date de récupération <span class="text-danger">*</span>
+            </label>
+            <input type="date" id="remove-date" name="removed_at"
+                   class="form-control" value="{{ today }}" required>
+          </div>
+          <div class="mb-3">
+            <label for="remove-move-to" class="form-label">Déplacer chez un membre (optionnel)</label>
+            <select id="remove-move-to" name="move_to_member_id" class="form-select">
+              <option value="">— remettre en stock —</option>
+              {% for uid, uname in members %}
+              <option value="{{ uid }}">{{ uname }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Le centre passera en statut inactif.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-box-arrow-left me-1" aria-hidden="true"></i>Confirmer le retrait
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  const MAINT_URL_TPL = "{{ url_for('machines.add_maintenance', machine_id=0) }}";
+
+  document.getElementById('modal-maintenance').addEventListener('show.bs.modal', function (e) {
+    const btn = e.relatedTarget;
+    document.getElementById('maint-machine-name').textContent = btn.dataset.machineName;
+    document.getElementById('form-maintenance').action = MAINT_URL_TPL.replace('/0/', '/' + btn.dataset.machineId + '/');
+  });
+
+  {% if current_user.is_bureau %}
+  const INSTALL_URL_TPL = "{{ url_for('machines.install', machine_id=0) }}";
+  const REMOVE_URL_TPL  = "{{ url_for('machines.remove_installation', machine_id=0, inst_id=0) }}";
+
+  document.getElementById('modal-install').addEventListener('show.bs.modal', function (e) {
+    const btn = e.relatedTarget;
+    document.getElementById('install-machine-name').textContent = btn.dataset.machineName;
+    document.getElementById('form-install').action = INSTALL_URL_TPL.replace('/0/', '/' + btn.dataset.machineId + '/');
+  });
+
+  document.getElementById('modal-remove').addEventListener('show.bs.modal', function (e) {
+    const btn = e.relatedTarget;
+    document.getElementById('remove-machine-name').textContent = btn.dataset.machineName;
+    document.getElementById('form-remove').action = REMOVE_URL_TPL
+      .replace('/machines/0/', '/machines/' + btn.dataset.machineId + '/')
+      .replace('/0/', '/' + btn.dataset.instId + '/');
+  });
+
+  // Toggle center/member fields in the install modal
+  const locType = document.getElementById('install-location-type');
+  const centerGroup = document.getElementById('install-center-group');
+  const memberGroup = document.getElementById('install-member-group');
+  locType.addEventListener('change', function () {
+    if (locType.value === 'member') {
+      centerGroup.classList.add('d-none');
+      memberGroup.classList.remove('d-none');
+    } else {
+      centerGroup.classList.remove('d-none');
+      memberGroup.classList.add('d-none');
+    }
+  });
+  {% endif %}
+}());
+</script>
+{% endblock %}
+
+{% block page_help %}
+<p>Liste complète du parc de machines.</p>
+<h3>Recherche et filtres</h3>
+<ul>
+  <li>Cherchez par modèle, fabricant ou numéro de série/interne.</li>
+  <li>Filtrez par statut via le menu déroulant.</li>
+</ul>
+<h3>Statuts</h3>
+<ul>
+  <li><strong>En stock</strong> — disponible, non installée.</li>
+  <li><strong>Installée</strong> — en service dans un centre.</li>
+  <li><strong>Panne / Maintenance</strong> — hors service, fiche ouverte. La ligne est surlignée en jaune.</li>
+  <li><strong>Retirée</strong> — définitivement hors parc.</li>
+</ul>
+<h3>Signaler une panne</h3>
+<ul>
+  <li>Tout membre peut cliquer sur <em>Signaler panne</em> pour déclarer un problème.</li>
+  <li>La machine passe automatiquement en statut <em>Panne / Maintenance</em>.</li>
+  <li>Le Bureau résout la fiche depuis la page détail de la machine.</li>
+</ul>
+<h3>Actions Bureau</h3>
+<ul>
+  <li><strong>Installer</strong> — choisir le centre et la date.</li>
+  <li><strong>Retirer</strong> — confirmer la date de récupération.</li>
+</ul>
+{% endblock %}

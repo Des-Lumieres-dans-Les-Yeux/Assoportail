@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration — Trésorerie — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('treasury.list_transactions') }}">Trésorerie</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Configuration de l'association</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Configuration de l'association</h1>
+</div>
+
+<p class="text-muted mb-4">
+  Ces informations sont utilisées pour générer les reçus fiscaux (CERFA n°11580*03).
+  Elles doivent correspondre exactement aux statuts déposés et à votre numéro d'agrément fiscal.
+</p>
+
+<form method="post" action="" novalidate style="max-width: 48rem;">
+  {{ form.hidden_tag() }}
+
+  <h2 class="h5 mb-3">Identité légale</h2>
+
+  <div class="mb-3">
+    <label for="{{ form.name.id }}" class="form-label">{{ form.name.label.text }} *</label>
+    {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""),
+                 id=form.name.id, placeholder="Ex : Association MonAsso") }}
+    {% for e in form.name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.address.id }}" class="form-label">{{ form.address.label.text }}</label>
+    {{ form.address(class="form-control", id=form.address.id, placeholder="Numéro et nom de rue") }}
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-4">
+      <label for="{{ form.zip_code.id }}" class="form-label">{{ form.zip_code.label.text }}</label>
+      {{ form.zip_code(class="form-control" + (" is-invalid" if form.zip_code.errors else ""),
+                       id=form.zip_code.id) }}
+      {% for e in form.zip_code.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-sm-8">
+      <label for="{{ form.city.id }}" class="form-label">{{ form.city.label.text }}</label>
+      {{ form.city(class="form-control", id=form.city.id) }}
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.siret.id }}" class="form-label">{{ form.siret.label.text }}</label>
+      {{ form.siret(class="form-control" + (" is-invalid" if form.siret.errors else ""),
+                    id=form.siret.id, placeholder="14 chiffres") }}
+      {% for e in form.siret.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.rna.id }}" class="form-label">{{ form.rna.label.text }} <span class="text-muted fw-normal">(facultatif)</span></label>
+      {{ form.rna(class="form-control" + (" is-invalid" if form.rna.errors else ""),
+                  id=form.rna.id, placeholder="W + 9 chiffres (droit local : laisser vide)") }}
+      <div class="form-text">Les associations de droit local alsacien-mosellan n'ont pas forcément de numéro RNA.</div>
+      {% for e in form.rna.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.legal_form.id }}" class="form-label">{{ form.legal_form.label.text }}</label>
+    {{ form.legal_form(class="form-control", id=form.legal_form.id,
+                       placeholder="Ex : Association loi 1901") }}
+  </div>
+
+  <div class="mb-4">
+    <label for="{{ form.purpose.id }}" class="form-label">{{ form.purpose.label.text }}</label>
+    {{ form.purpose(class="form-control", id=form.purpose.id, rows=3,
+                    placeholder="Objet statutaire tel que mentionné dans vos statuts…") }}
+  </div>
+
+  <h2 class="h5 mb-3">Paramètres financiers</h2>
+
+  <div class="mb-4" style="max-width: 20rem;">
+    <label for="{{ form.km_rate.id }}" class="form-label">{{ form.km_rate.label.text }}</label>
+    {{ form.km_rate(class="form-control" + (" is-invalid" if form.km_rate.errors else ""),
+                    id=form.km_rate.id, step="0.001", min="0.001") }}
+    <div class="form-text">Taux utilisé pour calculer les notes de frais de type « Transport » à partir des kilomètres saisis.</div>
+    {% for e in form.km_rate.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+  </div>
+
+  <h2 class="h5 mb-3">Représentant légal &amp; CERFA</h2>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-7">
+      <label for="{{ form.representative_name.id }}" class="form-label">{{ form.representative_name.label.text }}</label>
+      {{ form.representative_name(class="form-control", id=form.representative_name.id,
+                                  placeholder="Prénom Nom") }}
+    </div>
+    <div class="col-sm-5">
+      <label for="{{ form.representative_title.id }}" class="form-label">{{ form.representative_title.label.text }}</label>
+      {{ form.representative_title(class="form-control", id=form.representative_title.id,
+                                   placeholder="Ex : Président(e)") }}
+    </div>
+  </div>
+
+
+
+  {% if cfg.name %}
+  <div class="alert alert-success d-flex align-items-center gap-2 mb-4" role="alert">
+    <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+    Configuration complète — vous pouvez générer des CERFA depuis les transactions de type « Don ».
+    <a href="{{ url_for('treasury.list_transactions') }}?source=donation" class="alert-link ms-1">
+      Voir les dons →
+    </a>
+  </div>
+  {% endif %}
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Enregistrer</button>
+    <a href="{{ url_for('treasury.list_transactions') }}" class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+
+<h2 class="h5 mb-3 mt-5">Logo de l'association</h2>
+<p class="text-muted small mb-3">
+  Le logo est utilisé sur les certificats de bénévolat. Format PNG, JPG ou WebP, 2 Mo maximum.
+</p>
+<div style="max-width: 24rem;">
+  {% if cfg.logo %}
+  <div class="d-flex align-items-center gap-3 mb-2">
+    <span class="badge bg-success"><i class="bi bi-check-lg me-1" aria-hidden="true"></i>Chargé</span>
+    <form method="post" action="{{ url_for('treasury.delete_logo') }}"
+          class="d-inline" data-confirm="Supprimer le logo ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-trash me-1" aria-hidden="true"></i>Supprimer
+      </button>
+    </form>
+  </div>
+  {% else %}
+  <span class="badge bg-secondary mb-2">Non chargé</span>
+  {% endif %}
+  <form method="post" action="{{ url_for('treasury.upload_logo') }}"
+        enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="input-group input-group-sm">
+      <input type="file" name="file" class="form-control form-control-sm" accept=".png,.jpg,.jpeg,.webp" required>
+      <button type="submit" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-upload me-1" aria-hidden="true"></i>Téléverser
+      </button>
+    </div>
+  </form>
+</div>
+
+<h2 class="h5 mb-3 mt-5">
+  Modèles CERFA (DOCX)
+  <button type="button" class="btn btn-link btn-sm p-0 ms-1" data-bs-toggle="tooltip" data-bs-html="true"
+          title="<strong>Champs de fusion obligatoires :</strong><br>
+          <code>Prénom</code>, <code>Nom</code>, <code>IDRECU</code>, <code>Montant_perçu</code>, <code>Date</code><br>
+          <strong>Optionnels :</strong><br>
+          <code>Adresse_de_livraison</code>, <code>Ville_de_livraison</code>, <code>Code_postal_de_livraison</code><br>
+          <strong>Don en nature uniquement :</strong><br>
+          <code>Courriel</code>, <code>Don</code><br><br>
+          Créez un document Word (.docx) et insérez ces champs via <em>Insertion &gt; Champ &gt; MergeField</em> dans Word, ou utilisez la syntaxe <code>«NomDuChamp»</code>.">
+    <i class="bi bi-info-circle text-muted" aria-hidden="true"></i>
+  </button>
+</h2>
+<p class="text-muted small mb-3">
+  Téléversez vos modèles de reçus fiscaux au format DOCX avec champs de fusion
+  (MailMerge). Le système vérifie automatiquement que les champs obligatoires sont présents.
+</p>
+
+<div class="row g-3" style="max-width: 48rem;">
+  {% set templates = [
+    ('particulier', 'Don de particulier', cfg.cerfa_tpl_particulier),
+    ('entreprise', 'Mécénat entreprise', cfg.cerfa_tpl_entreprise),
+    ('nature', 'Don en nature', cfg.cerfa_tpl_nature),
+  ] %}
+  {% for tpl_type, label, data in templates %}
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header py-2">
+        <strong class="small">{{ label }}</strong>
+      </div>
+      <div class="card-body py-2">
+        {% if data %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge bg-success"><i class="bi bi-check-lg me-1" aria-hidden="true"></i>Chargé</span>
+          <a href="{{ url_for('treasury.download_cerfa_template', tpl_type=tpl_type) }}"
+             class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-download" aria-hidden="true"></i>
+          </a>
+          <form method="post" action="{{ url_for('treasury.delete_cerfa_template', tpl_type=tpl_type) }}"
+                class="d-inline" data-confirm="Supprimer ce modèle ?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+              <i class="bi bi-trash" aria-hidden="true"></i>
+            </button>
+          </form>
+        </div>
+        {% else %}
+        <span class="badge bg-secondary mb-2">Non chargé</span>
+        {% endif %}
+        <form method="post" action="{{ url_for('treasury.upload_cerfa_template', tpl_type=tpl_type) }}"
+              enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="input-group input-group-sm">
+            <input type="file" name="file" class="form-control form-control-sm" accept=".docx" required>
+            <button type="submit" class="btn btn-outline-primary btn-sm">
+              <i class="bi bi-upload" aria-hidden="true"></i>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

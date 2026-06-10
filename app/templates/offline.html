@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#2563EB">
+  <title>Hors ligne — Assoportail</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .card {
+      background: white;
+      border-radius: 1rem;
+      padding: 2.5rem 2rem;
+      max-width: 22rem;
+      box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+    .icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: .75rem;
+      color: #1e293b;
+    }
+    p {
+      font-size: .95rem;
+      color: #64748b;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+    a {
+      display: inline-block;
+      background: #2563EB;
+      color: white;
+      text-decoration: none;
+      padding: .6rem 1.5rem;
+      border-radius: .5rem;
+      font-weight: 600;
+      font-size: .9rem;
+    }
+    a:hover { background: #1D4ED8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">📡</div>
+    <h1>Vous êtes hors ligne</h1>
+    <p>
+      Impossible de se connecter au portail.<br>
+      Vérifiez votre connexion et réessayez.
+    </p>
+    <a href="/">Réessayer</a>
+  </div>
+</body>
+</html>

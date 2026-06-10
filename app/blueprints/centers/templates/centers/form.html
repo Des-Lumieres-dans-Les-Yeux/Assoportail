@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('centers.list_centers') }}">Centres</a></li>
+    {% if center is defined %}
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('centers.detail', center_id=center.id) }}">{{ center.name }}</a>
+    </li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ title }}</h1>
+
+<form method="post" novalidate style="max-width: 40rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="mb-3">
+    <label for="{{ form.name.id }}" class="form-label">{{ form.name.label.text }}</label>
+    {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""),
+                 id=form.name.id) }}
+    {% for e in form.name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.address.id }}" class="form-label">{{ form.address.label.text }}</label>
+    {{ form.address(class="form-control", id=form.address.id, autocomplete="street-address") }}
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-8">
+      <label for="{{ form.city.id }}" class="form-label">{{ form.city.label.text }}</label>
+      {{ form.city(class="form-control" + (" is-invalid" if form.city.errors else ""),
+                   id=form.city.id, autocomplete="address-level2") }}
+      {% for e in form.city.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-sm-4">
+      <label for="{{ form.zip_code.id }}" class="form-label">{{ form.zip_code.label.text }}</label>
+      {{ form.zip_code(class="form-control" + (" is-invalid" if form.zip_code.errors else ""),
+                       id=form.zip_code.id, autocomplete="postal-code") }}
+      {% for e in form.zip_code.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.status.id }}" class="form-label">{{ form.status.label.text }}</label>
+    {{ form.status(class="form-select", id=form.status.id, style="width: 16rem;") }}
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.pathology.id }}" class="form-label">{{ form.pathology.label.text }}</label>
+      {{ form.pathology(class="form-select", id=form.pathology.id) }}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.target_audience.id }}" class="form-label">{{ form.target_audience.label.text }}</label>
+      {{ form.target_audience(class="form-select", id=form.target_audience.id) }}
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.latitude.id }}" class="form-label">{{ form.latitude.label.text }}</label>
+      {{ form.latitude(class="form-control", id=form.latitude.id, placeholder="ex: 48.58") }}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.longitude.id }}" class="form-label">{{ form.longitude.label.text }}</label>
+      {{ form.longitude(class="form-control", id=form.longitude.id, placeholder="ex: 7.75") }}
+    </div>
+    <div class="form-text mt-1">Laissez vide pour tenter un géocodage automatique à partir de l'adresse.</div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.notes.id }}" class="form-label">{{ form.notes.label.text }}</label>
+    {{ form.notes(class="form-control", id=form.notes.id, rows=3) }}
+    <div class="form-text">Visibles uniquement par le bureau.</div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Enregistrer</button>
+    <a href="{{ url_for('centers.list_centers') }}" class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+{% endblock %}

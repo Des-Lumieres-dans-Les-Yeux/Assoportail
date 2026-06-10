@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}Boîte de réception — Assoportail{% endblock %}
+
+{% block content %}
+{% if token_ok and not q and not category and not date_from and not date_to and page == 1 %}
+{# Silent auto-sync on first page open: triggers /mailbox/sync via HTMX, then
+   refreshes the page only if new emails were imported or local state changed. #}
+<form hx-post="{{ url_for('mailbox.sync_inbox') }}"
+      hx-trigger="load delay:200ms"
+      hx-swap="none"
+      class="d-none"
+      aria-hidden="true">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="auto-sync" value="1">
+</form>
+{% endif %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Boîte de réception</h1>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('mailbox.rules') }}" class="btn btn-outline-secondary btn-sm">Règles</a>
+    {% if token_ok %}
+    <form method="post" action="{{ url_for('mailbox.sync_inbox') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-primary btn-sm">Synchroniser</button>
+    </form>
+    {% if current_user.is_bureau %}
+    <form method="post" action="{{ url_for('mailbox.purge_inbox') }}"
+          data-confirm="Purger l'historique ? Les emails traités sans tâche ni événement lié seront supprimés, puis la boîte sera resynchronisée depuis Gmail.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Purger &amp; Resync
+      </button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('mailbox.oauth_revoke') }}"
+          data-confirm="Déconnecter le compte Google ? Gmail et Drive seront inaccessibles jusqu'à reconnexion.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-google me-1" aria-hidden="true"></i>Déconnecter
+      </button>
+    </form>
+    {% else %}
+    <a href="{{ url_for('mailbox.oauth_start') }}" class="btn btn-warning btn-sm">
+      <i class="bi bi-google me-1" aria-hidden="true"></i>Connecter Gmail + Drive
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+{% if not token_ok %}
+<div class="alert alert-warning" role="alert">
+  <strong>Gmail non connecté.</strong>
+  Cliquez sur « Connecter Gmail » pour autoriser l'accès au compte de l'association.
+</div>
+<details class="mb-3">
+  <summary class="btn btn-outline-secondary btn-sm">Comment configurer la connexion Google ?</summary>
+  <div class="border rounded p-3 mt-2 bg-light" style="max-width: 52rem;">
+    <h2 class="h6 mb-3">Configuration Google OAuth2 — étapes</h2>
+    <ol class="mb-2">
+      <li class="mb-2">
+        <strong>Google Cloud Console</strong> — Rendez-vous sur
+        <code>console.cloud.google.com</code> → sélectionnez ou créez un projet.
+      </li>
+      <li class="mb-2">
+        <strong>Activer les APIs</strong> — APIs &amp; Services → Bibliothèque → activez
+        <em>Gmail API</em> et <em>Google Drive API</em>.
+      </li>
+      <li class="mb-2">
+        <strong>Créer un identifiant OAuth 2.0</strong> — APIs &amp; Services → Identifiants
+        → Créer des identifiants → ID client OAuth → type <em>Application Web</em>.
+      </li>
+      <li class="mb-2">
+        <strong>URI de redirection autorisée</strong> — ajoutez exactement :
+        <code>https://votre-domaine.com/mailbox/oauth/callback</code>
+      </li>
+      <li class="mb-2">
+        <strong>Télécharger le JSON</strong> — cliquez sur l'icône ↓ à côté de
+        l'identifiant créé. Le fichier s'appelle <code>client_secret_…json</code>.
+      </li>
+      <li class="mb-2">
+        <strong>Importer ici ↓</strong> — uploadez le fichier via le formulaire ci-dessous.
+        Un seul fichier couvre la boîte de réception, l'envoi de mailings et Google Drive.
+      </li>
+      <li class="mb-0">
+        <strong>Renseigner <code>ENCRYPTION_KEYS</code> dans le <code>.env</code></strong>
+        (si ce n'est pas déjà fait) :
+        <pre class="mb-0 mt-1 p-2 bg-white border rounded small">ENCRYPTION_KEYS=&lt;clé Fernet&gt;  # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</pre>
+      </li>
+    </ol>
+
+    {# Upload form #}
+    <form method="post" action="{{ url_for('mailbox.upload_credentials') }}"
+          enctype="multipart/form-data" class="mt-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="d-flex gap-2 align-items-center flex-wrap">
+        <label class="form-label mb-0 fw-semibold" style="white-space: nowrap;">
+          Importer credentials.json :
+        </label>
+        <input type="file" name="credentials_file" accept=".json"
+               class="form-control form-control-sm" style="max-width: 20rem;" required>
+        <button type="submit" class="btn btn-primary btn-sm">Enregistrer</button>
+      </div>
+      {% if credentials_ok %}
+      <p class="text-success small mt-1 mb-0">✓ Credentials déjà enregistrés en base.</p>
+      {% endif %}
+    </form>
+  </div>
+</details>
+{% endif %}
+
+{# Search & filter #}
+<form id="inbox-filter-form" method="get" action="{{ url_for('mailbox.inbox') }}" class="mb-3" role="search">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-4">
+      <label for="inbox-q" class="form-label form-label-sm mb-0">Recherche</label>
+      <input type="search" id="inbox-q" name="q" value="{{ q }}"
+             class="form-control form-control-sm"
+             placeholder="Objet, expéditeur ou contenu…">
+    </div>
+    <div class="col-md-2">
+      <label for="inbox-category" class="form-label form-label-sm mb-0">Catégorie</label>
+      <select id="inbox-category" name="category" class="form-select form-select-sm" aria-label="Catégorie">
+        <option value="">Toutes</option>
+        {% for cat in categories %}
+        <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label for="inbox-date-from" class="form-label form-label-sm mb-0">Du</label>
+      <input type="date" id="inbox-date-from" name="date_from" value="{{ date_from }}"
+             class="form-control form-control-sm">
+    </div>
+    <div class="col-md-2">
+      <label for="inbox-date-to" class="form-label form-label-sm mb-0">Au</label>
+      <input type="date" id="inbox-date-to" name="date_to" value="{{ date_to }}"
+             class="form-control form-control-sm">
+    </div>
+    <div class="col-md-2 d-flex gap-1 align-items-end">
+      <button type="submit" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-search" aria-hidden="true"></i> Filtrer
+      </button>
+      {% if q or category or date_from or date_to %}
+      <a href="{{ url_for('mailbox.inbox') }}" class="btn btn-outline-secondary btn-sm">Effacer</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="mt-2">
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" id="show-read"
+             name="show_read" value="1"
+             {% if show_read %}checked{% endif %}
+             data-auto-submit="inbox-filter-form">
+      <label class="form-check-label small" for="show-read">Afficher les emails traités / lus</label>
+    </div>
+  </div>
+</form>
+
+{% if emails %}
+<ul class="list-group list-group-flush border rounded" aria-label="Emails reçus">
+  {% for email in emails %}
+  <li class="list-group-item py-1" id="email-row-{{ email.id }}">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      {# Subject + sender #}
+      <div class="flex-fill text-truncate" style="min-width:0">
+        <a href="{{ url_for('mailbox.email_detail', email_id=email.id) }}"
+           class="fw-semibold text-decoration-none text-truncate d-block mb-0">
+          {{ email.subject or '(sans sujet)' }}
+        </a>
+        <small class="text-muted text-truncate d-block mb-0">{{ email.sender }}</small>
+      </div>
+      {# Right column: date, badges, actions — inline #}
+      <div class="d-flex gap-2 align-items-center flex-wrap justify-content-end flex-shrink-0">
+        <small class="text-muted text-nowrap">
+          {{ email.received_at.strftime('%d/%m/%Y %H:%M') }}
+        </small>
+        {% if email.category %}
+        <span class="badge bg-info text-dark">{{ email.category }}</span>
+        {% endif %}
+        {% if email.processed %}
+        <span class="badge bg-success">Traité</span>
+        {% else %}
+        <span class="badge bg-secondary">Non traité</span>
+        {% endif %}
+        {% if email.generated_task_id %}
+        <span class="badge bg-primary">Tâche</span>
+        {% endif %}
+        {% if email.event_id %}
+        <span class="badge bg-warning text-dark">Événement</span>
+        {% endif %}
+        {# Quick actions #}
+        <div class="d-flex gap-1">
+          {% if not email.processed %}
+          <button hx-post="{{ url_for('mailbox.mark_email_read', email_id=email.id) }}"
+                  hx-target="#email-row-{{ email.id }}"
+                  hx-swap="outerHTML"
+                  class="btn btn-outline-success btn-sm"
+                  title="Marquer comme lu"
+                  aria-label="Marquer comme lu">
+            <i class="bi bi-check-lg" aria-hidden="true"></i>
+          </button>
+          {% endif %}
+          {% if not email.generated_task_id %}
+          <button hx-post="{{ url_for('mailbox.create_task_from_email', email_id=email.id) }}"
+                  hx-target="#email-row-{{ email.id }}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Créer une tâche à partir de cet email ?"
+                  class="btn btn-outline-primary btn-sm"
+                  title="Créer une tâche"
+                  aria-label="Créer une tâche">
+            <i class="bi bi-check2-square" aria-hidden="true"></i>
+          </button>
+          {% endif %}
+          {% if not email.event_id and active_events %}
+          <button class="btn btn-outline-secondary btn-sm"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#link-event-panel-{{ email.id }}"
+                  title="Lier à un événement"
+                  aria-label="Lier à un événement"
+                  aria-expanded="false"
+                  aria-controls="link-event-panel-{{ email.id }}">
+            <i class="bi bi-calendar-event" aria-hidden="true"></i>
+          </button>
+          {% endif %}
+          <button hx-post="{{ url_for('mailbox.delete_email', email_id=email.id) }}"
+                  hx-target="#email-row-{{ email.id }}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Supprimer définitivement cet email ?"
+                  class="btn btn-outline-danger btn-sm"
+                  title="{% if email.generated_task_id or email.event_id %}Email lié, suppression impossible{% else %}Supprimer{% endif %}"
+                  aria-label="Supprimer"
+                  {% if email.generated_task_id or email.event_id %}disabled{% endif %}>
+            <i class="bi bi-trash3" aria-hidden="true"></i>
+          </button>
+          <a href="{{ url_for('mailbox.email_detail', email_id=email.id) }}"
+             class="btn btn-outline-secondary btn-sm"
+             title="Voir le détail"
+             aria-label="Voir le détail">
+            <i class="bi bi-arrow-right" aria-hidden="true"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+    {# Event linking panel #}
+    {% if not email.event_id and active_events %}
+    <div class="collapse mt-1" id="link-event-panel-{{ email.id }}">
+      <form hx-post="{{ url_for('mailbox.link_email_to_event', email_id=email.id) }}"
+            hx-target="#email-row-{{ email.id }}"
+            hx-swap="outerHTML"
+            class="d-flex gap-2 align-items-center">
+        <select name="event_id" class="form-select form-select-sm" style="max-width:20rem" required>
+          <option value="">— Choisir un événement —</option>
+          {% for ev in active_events %}
+          <option value="{{ ev.id }}">{{ ev.title }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-primary">Lier</button>
+      </form>
+    </div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+<p class="text-muted mt-2">
+  <small>{{ total }} email{{ 's' if total != 1 }}</small>
+</p>
+
+{# Pagination #}
+{% if total_pages > 1 %}
+{% set filter_args = {'category': category, 'q': q, 'date_from': date_from, 'date_to': date_to, 'show_read': show_read} %}
+<nav aria-label="Pagination">
+  <ul class="pagination pagination-sm">
+    <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+      <a class="page-link"
+         href="{{ url_for('mailbox.inbox', page=page-1, **filter_args) }}"
+         aria-label="Précédente">‹</a>
+    </li>
+    {% for p in range(1, total_pages + 1) %}
+    <li class="page-item {% if p == page %}active{% endif %}">
+      <a class="page-link"
+         href="{{ url_for('mailbox.inbox', page=p, **filter_args) }}">{{ p }}</a>
+    </li>
+    {% endfor %}
+    <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+      <a class="page-link"
+         href="{{ url_for('mailbox.inbox', page=page+1, **filter_args) }}"
+         aria-label="Suivante">›</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<p class="text-muted">Aucun email trouvé{% if q or category or date_from or date_to %} pour ces critères{% endif %}.</p>
+{% endif %}
+{% endblock %}

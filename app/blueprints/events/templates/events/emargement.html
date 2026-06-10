@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>&#201;margement &#8212; {{ event.title }}</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    body { font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #222; }
+    table { border-collapse: collapse; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<table width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td style="background-color:#1e3a5f; color:#fff; padding:12px 16px;">
+      <div style="font-size:20px; font-weight:bold; margin-bottom:2px;">Feuille d'&#233;margement</div>
+      <div style="font-size:12px; opacity:0.85;">{{ event.title }}</div>
+    </td>
+  </tr>
+</table>
+
+<!-- Meta -->
+<table width="100%" cellpadding="0" cellspacing="0" border="1" style="border-color:#bbb; margin-bottom:12px;">
+  <tr>
+    <td width="35%" style="padding:6px 10px; border:1px solid #bbb;">
+      <div style="font-size:7px; text-transform:uppercase; letter-spacing:0.7px; color:#777; font-weight:bold;">Date</div>
+      <div style="font-size:10px; font-weight:bold;">
+        {{ event.event_date.strftime('%d/%m/%Y') }} &#183; {{ event.event_date.strftime('%H:%M') }}{% if event.end_date %} &#8211; {{ event.end_date.strftime('%H:%M') }}{% endif %}
+      </div>
+    </td>
+    {% if event.location %}
+    <td width="22%" style="padding:6px 10px; border:1px solid #bbb;">
+      <div style="font-size:7px; text-transform:uppercase; letter-spacing:0.7px; color:#777; font-weight:bold;">Lieu</div>
+      <div style="font-size:10px; font-weight:bold;">{{ event.location }}</div>
+    </td>
+    {% endif %}
+    <td style="padding:6px 10px; border:1px solid #bbb;">
+      <div style="font-size:7px; text-transform:uppercase; letter-spacing:0.7px; color:#777; font-weight:bold;">Organisateur</div>
+      <div style="font-size:10px; font-weight:bold;">{{ event.created_by.full_name }}</div>
+    </td>
+    <td width="10%" style="padding:6px 10px; border:1px solid #bbb;">
+      <div style="font-size:7px; text-transform:uppercase; letter-spacing:0.7px; color:#777; font-weight:bold;">Inscrits</div>
+      <div style="font-size:10px; font-weight:bold;">{{ event.attendees | length }}</div>
+    </td>
+  </tr>
+</table>
+
+{% set sorted_slots = event.slots | sort(attribute='slot_date,start_time') %}
+
+{% if sorted_slots %}
+{# ── Build per-day person list with earliest arrival / latest departure ── #}
+{% set ns = namespace(days={}) %}
+{% for slot in sorted_slots %}
+  {% set day_key = slot.slot_date.isoformat() %}
+
+  {# Members #}
+  {% for a in slot.availabilities %}
+    {% if a.status.value in ('present', 'maybe') %}
+      {% set person_key = 'member_' ~ a.user.id %}
+      {% if day_key not in ns.days %}{% set ns.days = ns.days | combine({day_key: {'date': slot.slot_date, 'people': {}}}) %}{% endif %}
+      {% set day = ns.days[day_key] %}
+      {% if person_key not in day.people %}
+        {% set _ = day.people.update({person_key: {'name': a.user.full_name, 'type': 'membre', 'maybe': a.status.value == 'maybe', 'arrival': slot.start_time, 'departure': slot.end_time}}) %}
+      {% else %}
+        {% set p = day.people[person_key] %}
+        {% if slot.start_time and (not p.arrival or slot.start_time < p.arrival) %}{% set _ = p.update({'arrival': slot.start_time}) %}{% endif %}
+        {% if slot.end_time and (not p.departure or slot.end_time > p.departure) %}{% set _ = p.update({'departure': slot.end_time}) %}{% endif %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+
+  {# Volunteers #}
+  {% for va in slot.volunteer_availabilities %}
+    {% if va.status.value in ('present', 'maybe') and va.volunteer.confirmed %}
+      {% set person_key = 'vol_' ~ va.volunteer.id %}
+      {% if day_key not in ns.days %}{% set ns.days = ns.days | combine({day_key: {'date': slot.slot_date, 'people': {}}}) %}{% endif %}
+      {% set day = ns.days[day_key] %}
+      {% if person_key not in day.people %}
+        {% set _ = day.people.update({person_key: {'name': va.volunteer.name, 'type': 'benevole', 'maybe': va.status.value == 'maybe', 'arrival': slot.start_time, 'departure': slot.end_time}}) %}
+      {% else %}
+        {% set p = day.people[person_key] %}
+        {% if slot.start_time and (not p.arrival or slot.start_time < p.arrival) %}{% set _ = p.update({'arrival': slot.start_time}) %}{% endif %}
+        {% if slot.end_time and (not p.departure or slot.end_time > p.departure) %}{% set _ = p.update({'departure': slot.end_time}) %}{% endif %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+
+{# ── Render one table per day ──────────────────────────────────── #}
+{% for day_key in ns.days | sort %}
+{% set day = ns.days[day_key] %}
+{% set people_list = day.people.values() | list %}
+
+<!-- Day banner -->
+<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:2px; margin-top:8px;">
+  <tr>
+    <td style="background-color:#1e3a5f; color:#fff; padding:5px 12px; font-size:11px; font-weight:bold;">
+      {{ day.date.strftime('%A %d/%m/%Y') | capitalize }}
+      <span style="font-weight:normal; opacity:0.8; margin-left:10px;">({{ people_list | length }} personne{{ 's' if people_list | length != 1 }})</span>
+    </td>
+  </tr>
+</table>
+
+<!-- Day table -->
+<table width="100%" cellpadding="0" cellspacing="0" border="1" style="border-color:#bbb; margin-bottom:6px;">
+  <thead>
+    <tr>
+      <th width="20" style="background-color:#e0e2e6; border:1px solid #bbb; padding:5px 3px; font-size:8px; text-transform:uppercase; text-align:center;">#</th>
+      <th style="background-color:#e0e2e6; border:1px solid #bbb; padding:5px 8px; font-size:8px; text-transform:uppercase; text-align:left;">Nom</th>
+      <th width="55" style="background-color:#e0e2e6; border:1px solid #bbb; padding:5px 3px; font-size:8px; text-transform:uppercase; text-align:center;">Pr&#233;vu arr.</th>
+      <th width="55" style="background-color:#e0e2e6; border:1px solid #bbb; padding:5px 3px; font-size:8px; text-transform:uppercase; text-align:center;">Pr&#233;vu d&#233;p.</th>
+      <th width="55" style="background-color:#e0e2e6; border:1px solid #bbb; padding:5px 3px; font-size:8px; text-transform:uppercase; text-align:center;">Arriv&#233;e</th>
+      <th width="55" style="background-color:#e0e2e6; border:1px solid #bbb; padding:5px 3px; font-size:8px; text-transform:uppercase; text-align:center;">D&#233;part</th>
+      <th width="140" style="background-color:#e0e2e6; border:1px solid #bbb; padding:5px 6px; font-size:8px; text-transform:uppercase; text-align:center;">Signature</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in people_list | sort(attribute='name') %}
+    {% set bg = " background-color:#f4f5f7;" if loop.index is even else "" %}
+    <tr>
+      <td style="border:1px solid #bbb; height:26px; text-align:center; color:#888; font-size:9px;{{ bg }}">{{ loop.index }}</td>
+      <td style="border:1px solid #bbb; height:26px; padding-left:8px; font-size:10px; font-weight:500;{{ bg }}">{{ p.name }}{% if p.type == 'benevole' %} <span style="color:#888; font-size:7px;">(b&#233;n.)</span>{% endif %}{% if p.maybe %} <span style="color:#b08000; font-size:7px;">(?)</span>{% endif %}</td>
+      <td style="border:1px solid #bbb; height:26px; text-align:center; font-size:9px; color:#555;{{ bg }}">{% if p.arrival %}{{ p.arrival.strftime('%Hh%M') }}{% endif %}</td>
+      <td style="border:1px solid #bbb; height:26px; text-align:center; font-size:9px; color:#555;{{ bg }}">{% if p.departure %}{{ p.departure.strftime('%Hh%M') }}{% endif %}</td>
+      <td style="border:1px solid #bbb; height:26px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:26px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:26px;{{ bg }}"></td>
+    </tr>
+    {% endfor %}
+    {# 3 blank rows #}
+    {% for j in range(people_list | length + 1, people_list | length + 4) %}
+    {% set bg = " background-color:#f4f5f7;" if j is even else "" %}
+    <tr>
+      <td style="border:1px solid #bbb; height:26px; text-align:center; color:#888; font-size:9px;{{ bg }}">{{ j }}</td>
+      <td style="border:1px solid #bbb; height:26px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:26px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:26px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:26px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:26px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:26px;{{ bg }}"></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+
+{% else %}
+{# ── No slots: simple attendee list ───────────────────────────── #}
+<table width="100%" cellpadding="0" cellspacing="0" border="1" style="border-color:#bbb;">
+  <thead>
+    <tr>
+      <th width="22" style="background-color:#e0e2e6; border:1px solid #bbb; padding:6px 3px; font-size:8px; text-transform:uppercase; text-align:center;">#</th>
+      <th style="background-color:#e0e2e6; border:1px solid #bbb; padding:6px 10px; font-size:8px; text-transform:uppercase; text-align:left;">Nom complet</th>
+      <th width="60" style="background-color:#e0e2e6; border:1px solid #bbb; padding:6px 3px; font-size:8px; text-transform:uppercase; text-align:center;">Arriv&#233;e</th>
+      <th width="60" style="background-color:#e0e2e6; border:1px solid #bbb; padding:6px 3px; font-size:8px; text-transform:uppercase; text-align:center;">D&#233;part</th>
+      <th width="170" style="background-color:#e0e2e6; border:1px solid #bbb; padding:6px 8px; font-size:8px; text-transform:uppercase; text-align:center;">Signature</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for user in event.attendees %}
+    {% set bg = " background-color:#f4f5f7;" if loop.index is even else "" %}
+    <tr>
+      <td style="border:1px solid #bbb; height:30px; text-align:center; color:#888; font-size:9px;{{ bg }}">{{ loop.index }}</td>
+      <td style="border:1px solid #bbb; height:30px; padding-left:10px; font-size:10px; font-weight:500;{{ bg }}">{{ user.full_name }}</td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+    </tr>
+    {% endfor %}
+    {% for vol in event.volunteers %}
+    {% set row = event.attendees | length + loop.index %}
+    {% set bg = " background-color:#f4f5f7;" if row is even else "" %}
+    <tr>
+      <td style="border:1px solid #bbb; height:30px; text-align:center; color:#888; font-size:9px;{{ bg }}">{{ row }}</td>
+      <td style="border:1px solid #bbb; height:30px; padding-left:10px; font-size:10px; font-weight:500; font-style:italic;{{ bg }}">{{ vol.name }} <span style="color:#888; font-size:7px;">(b&#233;n.)</span></td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+    </tr>
+    {% endfor %}
+    {% set filled = event.attendees | length + event.volunteers | length %}
+    {% for i in range(filled + 1, [filled + 4, 8] | max + 1) %}
+    {% set bg = " background-color:#f4f5f7;" if i is even else "" %}
+    <tr>
+      <td style="border:1px solid #bbb; height:30px; text-align:center; color:#888; font-size:9px;{{ bg }}">{{ i }}</td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+      <td style="border:1px solid #bbb; height:30px;{{ bg }}"></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<!-- Footer -->
+<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
+  <tr>
+    <td style="padding-top:5px; border-top:1px solid #ccc; font-size:7px; color:#999;">
+      Document g&#233;n&#233;r&#233; le {{ today.strftime('%d/%m/%Y') }} &#8212; Assoportail
+    </td>
+    <td style="padding-top:5px; border-top:1px solid #ccc; font-size:7px; color:#999; text-align:right;">
+      Page 1/1
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

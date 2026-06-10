@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}{{ meeting.title }} — Réunions — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('meetings.list_meetings') }}">Réunions</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ meeting.title }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <h1 class="h3 mb-0">{{ meeting.title }}</h1>
+  {% if current_user.is_bureau %}
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('meetings.edit', meeting_id=meeting.id) }}"
+       class="btn btn-outline-secondary btn-sm">Modifier</a>
+    <form method="post" action="{{ url_for('meetings.delete', meeting_id=meeting.id) }}"
+          data-confirm="Supprimer cette réunion ?">
+      {{ attendance_form.hidden_tag() }}
+      <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+{# Meta info #}
+<section aria-labelledby="meta-heading" class="mb-4">
+  <h2 class="h5" id="meta-heading">Informations</h2>
+  <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;">
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Date</span>
+      <span>{{ meeting.date.strftime('%d/%m/%Y à %H:%M') }}</span>
+    </li>
+    {% if meeting.location %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Lieu</span>
+      <span>{{ meeting.location }}</span>
+    </li>
+    {% endif %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Organisateur</span>
+      <span>{{ meeting.created_by.full_name }}</span>
+    </li>
+  </ul>
+</section>
+
+{# Attendees #}
+<section aria-labelledby="attendees-heading" class="mb-4">
+  <h2 class="h5" id="attendees-heading">
+    Participants
+    {% if meeting.attendees %}
+    <small class="text-muted">({{ meeting.attendees | length }})</small>
+    {% endif %}
+  </h2>
+
+  {% if current_user.is_bureau %}
+  {% set attendee_ids = meeting.attendees | map(attribute='id') | list %}
+  <form method="post" action="{{ url_for('meetings.attendance', meeting_id=meeting.id) }}"
+        style="max-width: 30rem;" novalidate>
+    {{ attendance_form.hidden_tag() }}
+    {% if all_users %}
+    <ul class="list-group list-group-flush border rounded mb-2" aria-label="Liste des participants">
+      {% for user in all_users %}
+      <li class="list-group-item py-1">
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" name="user_ids"
+                 value="{{ user.id }}" id="att_{{ user.id }}"
+                 {% if user.id in attendee_ids %}checked{% endif %}>
+          <label class="form-check-label" for="att_{{ user.id }}">{{ user.full_name }}</label>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    <button type="submit" class="btn btn-primary btn-sm">Enregistrer les présents</button>
+    {% else %}
+    <p class="text-muted">Aucun membre actif.</p>
+    {% endif %}
+  </form>
+  {% else %}
+  {% if meeting.attendees %}
+  <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;"
+      aria-label="Liste des participants">
+    {% for user in meeting.attendees %}
+    <li class="list-group-item">{{ user.full_name }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucun participant enregistré.</p>
+  {% endif %}
+  {% endif %}
+</section>
+
+{# Tasks #}
+<section aria-labelledby="tasks-heading" class="mb-4">
+  <h2 class="h5" id="tasks-heading">
+    Tâches liées
+    {% if meeting.tasks %}
+    <small class="text-muted">({{ meeting.tasks | length }})</small>
+    {% endif %}
+  </h2>
+
+  {% if meeting.tasks %}
+  <ul class="list-group list-group-flush border rounded mb-3" aria-label="Tâches de la réunion">
+    {% for task in meeting.tasks %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        {% if current_user.has_permission('tasks') %}
+        <a href="{{ url_for('tasks.detail', task_id=task.id) }}"
+           class="text-decoration-none
+                  {% if task.status.value in ['done', 'cancelled'] %}text-muted{% endif %}">
+          {{ task.title }}
+        </a>
+        {% else %}
+        <span {% if task.status.value in ['done', 'cancelled'] %}class="text-muted"{% endif %}>
+          {{ task.title }}
+        </span>
+        {% endif %}
+        {% if task.assigned_to %}
+        <small class="text-muted ms-2">{{ task.assigned_to.full_name }}</small>
+        {% endif %}
+      </div>
+      {% if current_user.is_bureau %}
+      <form method="post"
+            action="{{ url_for('meetings.unlink_task', meeting_id=meeting.id, task_id=task.id) }}">
+        {{ task_form.hidden_tag() }}
+        <button type="submit" class="btn btn-outline-secondary btn-sm"
+                aria-label="Détacher {{ task.title }}">
+          Détacher
+        </button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucune tâche liée.</p>
+  {% endif %}
+
+  {% if current_user.is_bureau and task_form.task_id.choices %}
+  <form method="post" action="{{ url_for('meetings.link_task', meeting_id=meeting.id) }}"
+        class="d-flex gap-2 align-items-center mb-2" style="max-width: 36rem;" novalidate>
+    {{ task_form.hidden_tag() }}
+    <label for="{{ task_form.task_id.id }}" class="visually-hidden">
+      {{ task_form.task_id.label.text }}
+    </label>
+    {{ task_form.task_id(class="form-select form-select-sm", id=task_form.task_id.id) }}
+    <button type="submit" class="btn btn-outline-primary btn-sm text-nowrap">Lier</button>
+  </form>
+  {% endif %}
+
+  {% if current_user.is_bureau %}
+  <form method="post" action="{{ url_for('meetings.create_task', meeting_id=meeting.id) }}"
+        class="d-flex gap-2 align-items-center" style="max-width: 36rem;" novalidate>
+    {{ create_task_form.hidden_tag() }}
+    <label for="{{ create_task_form.title.id }}" class="visually-hidden">
+      {{ create_task_form.title.label.text }}
+    </label>
+    {{ create_task_form.title(class="form-control form-control-sm",
+                              id=create_task_form.title.id,
+                              placeholder="Titre de la nouvelle tâche…") }}
+    {% for e in create_task_form.title.errors %}
+    <div class="text-danger small">{{ e }}</div>
+    {% endfor %}
+    <button type="submit" class="btn btn-outline-success btn-sm text-nowrap">Créer une tâche</button>
+  </form>
+  {% endif %}
+</section>
+
+{# Minutes #}
+<section aria-labelledby="minutes-heading" class="mb-4">
+  <h2 class="h5" id="minutes-heading">Compte-rendu</h2>
+  {% if meeting.minutes %}
+  <div class="border rounded p-3 bg-light" style="max-width: 52rem; white-space: pre-wrap;">{{ meeting.minutes }}</div>
+  {% else %}
+  <p class="text-muted">
+    Aucun compte-rendu.
+    {% if current_user.is_bureau %}
+    <a href="{{ url_for('meetings.edit', meeting_id=meeting.id) }}">Ajouter un compte-rendu</a>
+    {% endif %}
+  </p>
+  {% endif %}
+</section>
+{% endblock %}

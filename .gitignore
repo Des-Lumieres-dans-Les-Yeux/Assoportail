@@ -1,0 +1,36 @@
+.venv/
+*/__pycache__/
+*.pyc
+.env
+.env.local
+.env.production
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Docker
+celerybeat-schedule*
+app/doc_CERFA/
+
+# Backups (created by scripts/portal.py)
+portal_backup_*.tar.gz
+*.xlsx
+export-gagner-un-flipper-neuf-et-offrez-en-un-pour-soutenir-les-malades-2026-des-lumieres-dans-les-yeux-05_03_2026-09_06_2026.csv
+instance/tombola_lookup.json

@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Modifier' if post else 'Nouveau' }} post — Publications sociales — Assoportail{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@2.0.0/dist/cropper.min.css"
+      integrity="sha384-MnfNMuhCEQvKpEyGIkq+BODqfNsaIxMBOL6vdHV3R7InyKyRfPWD7UPkDyLK4nP"
+      crossorigin="anonymous">
+{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('social.list_posts') }}">Publications</a></li>
+    {% if post %}
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('social.detail', post_id=post.id) }}">{{ post.title }}</a>
+    </li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">
+      {% if post %}Modifier{% else %}Nouveau post{% endif %}
+    </li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ 'Modifier le post' if post else 'Nouveau post' }}</h1>
+
+<form method="post" action="" novalidate style="max-width: 52rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="mb-3">
+    <label for="{{ form.title.id }}" class="form-label">{{ form.title.label.text }} *</label>
+    {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""),
+                  id=form.title.id, placeholder="Titre du post") }}
+    {% for e in form.title.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.body_html.id }}" class="form-label">{{ form.body_html.label.text }} *</label>
+    {{ form.body_html(class="form-control" + (" is-invalid" if form.body_html.errors else ""),
+                      id=form.body_html.id, rows=10,
+                      placeholder="Contenu du post (HTML ou texte brut)…") }}
+    {% for e in form.body_html.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+    <div class="form-text">
+      Le contenu HTML sera converti en texte brut pour Facebook / Instagram / LinkedIn.
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label d-block">{{ form.platforms.label.text }}</label>
+    {% if form.platforms.choices %}
+    <div class="d-flex flex-wrap gap-3">
+      {% for value, label in form.platforms.choices %}
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input"
+               id="platform-{{ value }}" name="platforms" value="{{ value }}"
+               {% if value in (form.platforms.data or []) %}checked{% endif %}>
+        <label class="form-check-label" for="platform-{{ value }}">{{ label }}</label>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">
+      Aucun compte connecté.
+      <a href="{{ url_for('social.list_accounts') }}">Configurer les comptes</a>
+    </p>
+    {% endif %}
+  </div>
+
+  <div class="mb-3" id="ig-format-group">
+    <label for="{{ form.instagram_format.id }}" class="form-label">
+      {{ form.instagram_format.label.text }}
+    </label>
+    {{ form.instagram_format(class="form-select", id=form.instagram_format.id,
+                             style="max-width: 16rem;") }}
+  </div>
+
+  <div class="mb-4">
+    <label for="{{ form.scheduled_at.id }}" class="form-label">{{ form.scheduled_at.label.text }}</label>
+    {{ form.scheduled_at(class="form-control" + (" is-invalid" if form.scheduled_at.errors else ""),
+                         id=form.scheduled_at.id, style="max-width: 20rem;") }}
+    <div class="form-text">Laissez vide pour enregistrer comme brouillon.</div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+      {% if post %}Enregistrer{% else %}Créer le brouillon{% endif %}
+    </button>
+    <a href="{% if post %}{{ url_for('social.detail', post_id=post.id) }}{% else %}{{ url_for('social.list_posts') }}{% endif %}"
+       class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  const igGroup = document.getElementById('ig-format-group');
+  const checkboxes = document.querySelectorAll('input[name="platforms"]');
+  function toggleIg() {
+    const igChecked = document.getElementById('platform-instagram');
+    if (igGroup && igChecked) {
+      igGroup.style.display = igChecked.checked ? '' : 'none';
+    }
+  }
+  checkboxes.forEach(function (cb) { cb.addEventListener('change', toggleIg); });
+  toggleIg();
+}());
+</script>
+{% endblock %}

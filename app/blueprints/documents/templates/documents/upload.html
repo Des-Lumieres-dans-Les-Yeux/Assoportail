@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Téléverser — Documents — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('documents.gallery') }}">Documents</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Téléverser</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">Téléverser un fichier</h1>
+
+<form method="post" action="{{ url_for('documents.upload') }}"
+      enctype="multipart/form-data" novalidate style="max-width: 42rem;">
+  {{ form.hidden_tag() }}
+  {{ form.entity_type() }}
+  {{ form.entity_id() }}
+
+  <div class="mb-3">
+    <label for="{{ form.file.id }}" class="form-label">{{ form.file.label.text }} *</label>
+    {{ form.file(class="form-control" + (" is-invalid" if form.file.errors else ""),
+                 id=form.file.id) }}
+    {% for e in form.file.errors %}
+    <div class="invalid-feedback">{{ e }}</div>
+    {% endfor %}
+    <div class="form-text">
+      Formats acceptés : JPEG, PNG, GIF, WebP, PDF, DOCX, XLSX, ODT, MP4, WebM.
+      Limite : 10 Mo (photo), 50 Mo (vidéo), 20 Mo (document).
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.type.id }}" class="form-label">{{ form.type.label.text }}</label>
+    {{ form.type(class="form-select", id=form.type.id) }}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.category.id }}" class="form-label">{{ form.category.label.text }}</label>
+    {{ form.category(class="form-control", id=form.category.id, placeholder="Ex : contrats 2026") }}
+  </div>
+
+  <div class="mb-4">
+    <label for="{{ form.description.id }}" class="form-label">{{ form.description.label.text }}</label>
+    {{ form.description(class="form-control", id=form.description.id, rows=3) }}
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Téléverser</button>
+    <a href="{{ url_for('documents.gallery') }}" class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+{% endblock %}

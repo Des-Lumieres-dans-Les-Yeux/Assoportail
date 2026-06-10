@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Mon profil — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <h1 class="h3 mb-0">Mon profil</h1>
+  <a href="{{ url_for('members.edit_profile') }}" class="btn btn-outline-primary btn-sm">
+    <i class="bi bi-pencil me-1" aria-hidden="true"></i>Modifier mes informations
+  </a>
+</div>
+
+<section aria-labelledby="info-heading" class="mb-4">
+  <h2 class="h5" id="info-heading">Informations personnelles</h2>
+  <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;">
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Nom</span>
+      <span>{{ member.full_name }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Email</span>
+      <span>{{ member.email }}</span>
+    </li>
+    {% if member.phone %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Téléphone</span>
+      <span>{{ member.phone }}</span>
+    </li>
+    {% endif %}
+    {% if member.address %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Adresse</span>
+      <span>{{ member.address }}</span>
+    </li>
+    {% endif %}
+  </ul>
+</section>
+
+<section aria-labelledby="security-heading" class="mb-4">
+  <h2 class="h5" id="security-heading">Sécurité</h2>
+  <div class="border rounded p-3 bg-light d-flex align-items-center justify-content-between flex-wrap gap-2"
+       style="max-width: 30rem;">
+    <div>
+      <strong class="d-block">Authentification à deux facteurs (2FA)</strong>
+      {% if member.totp_secret %}
+      <span class="text-success small"><i class="bi bi-shield-check me-1" aria-hidden="true"></i>Activée</span>
+      {% else %}
+      <span class="text-muted small"><i class="bi bi-shield me-1" aria-hidden="true"></i>Désactivée</span>
+      {% endif %}
+    </div>
+    {% if member.totp_secret %}
+    <form method="post" action="{{ url_for('auth.disable_totp') }}"
+          data-confirm="Désactiver la 2FA ? Votre compte sera moins sécurisé.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">Désactiver</button>
+    </form>
+    {% else %}
+    <a href="{{ url_for('auth.setup_totp') }}" class="btn btn-outline-primary btn-sm">
+      Activer la 2FA
+    </a>
+    {% endif %}
+  </div>
+  <div class="mt-2" style="max-width: 30rem;">
+    <a href="{{ url_for('auth.change_password') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-key me-1" aria-hidden="true"></i>Changer le mot de passe
+    </a>
+  </div>
+</section>
+
+<section aria-labelledby="participations-heading" class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0" id="participations-heading">
+      Bénévolat
+      {% if total_hours > 0 %}
+      <span class="badge bg-info text-dark ms-2">{{ total_hours }} h</span>
+      {% endif %}
+    </h2>
+  </div>
+
+  {% if participations %}
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Événement</th>
+          <th>Date</th>
+          <th>Lieu</th>
+          <th>Créneaux</th>
+          <th>Heures</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in participations %}
+        <tr>
+          <td>
+            <a href="{{ url_for('events.detail', event_id=p.id) }}" class="text-decoration-none">
+              {{ p.title }}
+            </a>
+          </td>
+          <td class="text-nowrap">{{ p.event_date.strftime('%d/%m/%Y') }}</td>
+          <td>{{ p.location or '—' }}</td>
+          <td>{{ p.slots }}</td>
+          <td><span class="badge bg-info text-dark">{{ p.hours }} h</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Aucune participation enregistrée.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="memberships-heading">
+  <h2 class="h5" id="memberships-heading">Mes cotisations</h2>
+  {% if memberships %}
+  <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;"
+      aria-label="Historique de mes cotisations">
+    {% for m in memberships %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between">
+        <div>
+          {% if m.status.value == "active" %}
+          <span class="badge bg-success me-2">Actif</span>
+          {% elif m.status.value == "pending" %}
+          <span class="badge bg-warning text-dark me-2">En attente</span>
+          {% else %}
+          <span class="badge bg-secondary me-2">Expiré</span>
+          {% endif %}
+          {{ m.started_at.strftime('%d/%m/%Y') }} → {{ m.expires_at.strftime('%d/%m/%Y') }}
+        </div>
+        <span>{{ "%.2f"|format(m.amount) }} €</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucune cotisation enregistrée.</p>
+  {% endif %}
+</section>
+{% endblock %}

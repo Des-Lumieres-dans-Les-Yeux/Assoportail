@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}Email #{{ email.id }} — Boîte de réception — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('mailbox.inbox') }}">Boîte de réception</a></li>
+    <li class="breadcrumb-item active" aria-current="page">#{{ email.id }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-1 gap-2 flex-wrap">
+  <h1 class="h3 mb-0">{{ email.subject or '(sans sujet)' }}</h1>
+  <form method="post" action="{{ url_for('mailbox.mark_email_read', email_id=email.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-outline-secondary btn-sm">Marquer comme lu</button>
+  </form>
+</div>
+
+<dl class="row mb-3 text-muted small">
+  <dt class="col-sm-2">De</dt>
+  <dd class="col-sm-10">{{ email.sender }}</dd>
+
+  <dt class="col-sm-2">À</dt>
+  <dd class="col-sm-10">{{ email.recipients }}</dd>
+
+  <dt class="col-sm-2">Reçu le</dt>
+  <dd class="col-sm-10">{{ email.received_at.strftime('%d/%m/%Y à %H:%M') }}</dd>
+
+  {% if email.category %}
+  <dt class="col-sm-2">Catégorie</dt>
+  <dd class="col-sm-10"><span class="badge bg-info text-dark">{{ email.category }}</span></dd>
+  {% endif %}
+
+  {% if email.generated_task %}
+  <dt class="col-sm-2">Tâche liée</dt>
+  <dd class="col-sm-10">
+    {% if current_user.has_permission('tasks') %}
+    <a href="{{ url_for('tasks.detail', task_id=email.generated_task_id) }}">
+      {{ email.generated_task.title }}
+    </a>
+    {% else %}
+    {{ email.generated_task.title }}
+    {% endif %}
+  </dd>
+  {% endif %}
+
+  {% if email.event %}
+  <dt class="col-sm-2">Événement lié</dt>
+  <dd class="col-sm-10">
+    {% if current_user.has_permission('events') %}
+    <a href="{{ url_for('events.detail', event_id=email.event_id) }}">
+      {{ email.event.title }}
+    </a>
+    {% else %}
+    {{ email.event.title }}
+    {% endif %}
+  </dd>
+  {% endif %}
+</dl>
+
+{# ------------------------------------------------------------------ #}
+{# Actions manuelles                                                    #}
+{# ------------------------------------------------------------------ #}
+<section class="mb-4" aria-labelledby="actions-heading">
+  <h2 class="h5 mb-3" id="actions-heading">Actions</h2>
+  <div class="d-flex flex-wrap gap-2">
+
+    {# Créer une tâche #}
+    {% if not email.generated_task %}
+    <details class="border rounded p-0" style="min-width: 22rem;">
+      <summary class="btn btn-outline-primary btn-sm px-3 py-2" style="list-style: none; cursor: pointer;">
+        + Créer une tâche
+      </summary>
+      <form method="post"
+            action="{{ url_for('mailbox.create_task_from_email', email_id=email.id) }}"
+            class="p-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-2">
+          <label class="form-label form-label-sm mb-1">Titre</label>
+          <input type="text" name="title" class="form-control form-control-sm"
+                 value="{{ ('Email : ' ~ email.subject)|truncate(160) if email.subject else 'Email sans sujet' }}"
+                 required maxlength="200">
+        </div>
+        <div class="mb-2">
+          <label class="form-label form-label-sm mb-1">Priorité</label>
+          <select name="priority" class="form-select form-select-sm">
+            <option value="low">Basse</option>
+            <option value="normal" selected>Normale</option>
+            <option value="high">Haute</option>
+            <option value="urgent">Urgente</option>
+          </select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label form-label-sm mb-1">Description (optionnel)</label>
+          <textarea name="description" class="form-control form-control-sm" rows="5"
+                    placeholder="Détails supplémentaires…">{{ email_body_preview }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Créer la tâche</button>
+      </form>
+    </details>
+    {% else %}
+    <span class="btn btn-outline-secondary btn-sm disabled">
+      Tâche déjà créée
+    </span>
+    {% endif %}
+
+    {# Créer un événement #}
+    {% if not email.event %}
+    <details class="border rounded p-0" style="min-width: 22rem;">
+      <summary class="btn btn-outline-success btn-sm px-3 py-2" style="list-style: none; cursor: pointer;">
+        + Créer un événement
+      </summary>
+      <form method="post"
+            action="{{ url_for('mailbox.create_event_from_email', email_id=email.id) }}"
+            class="p-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-2">
+          <label class="form-label form-label-sm mb-1">Titre</label>
+          <input type="text" name="title" class="form-control form-control-sm"
+                 value="{{ ('Événement : ' ~ email.subject)|truncate(160) if email.subject else 'Événement sans sujet' }}"
+                 required maxlength="200">
+        </div>
+        <div class="mb-2">
+          <label class="form-label form-label-sm mb-1">Date</label>
+          <input type="datetime-local" name="event_date" class="form-control form-control-sm"
+                 value="{{ email.received_at.strftime('%Y-%m-%dT%H:%M') }}" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label form-label-sm mb-1">Lieu (optionnel)</label>
+          <input type="text" name="location" class="form-control form-control-sm" maxlength="200">
+        </div>
+        <button type="submit" class="btn btn-success btn-sm">Créer l'événement</button>
+      </form>
+    </details>
+    {% endif %}
+
+    {# Lier à un événement existant #}
+    <details class="border rounded p-0" style="min-width: 22rem;">
+      <summary class="btn btn-outline-info btn-sm px-3 py-2" style="list-style: none; cursor: pointer;">
+        Lier à un événement
+      </summary>
+      <form method="post"
+            action="{{ url_for('mailbox.link_email_to_event', email_id=email.id) }}"
+            class="p-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-2">
+          <label class="form-label form-label-sm mb-1">Événement</label>
+          <select name="event_id" class="form-select form-select-sm">
+            <option value="">(Détacher l'événement)</option>
+            {% for evt in active_events %}
+            <option value="{{ evt.id }}" {% if email.event_id == evt.id %}selected{% endif %}>
+              {{ evt.event_date.strftime('%d/%m') }} — {{ evt.title | truncate(40) }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-info btn-sm">Mettre à jour le lien</button>
+      </form>
+    </details>
+
+    {# Catégoriser #}
+    <details class="border rounded p-0" style="min-width: 18rem;">
+      <summary class="btn btn-outline-secondary btn-sm px-3 py-2" style="list-style: none; cursor: pointer;">
+        Catégoriser
+      </summary>
+      <form method="post"
+            action="{{ url_for('mailbox.categorize_email', email_id=email.id) }}"
+            class="p-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-2">
+          <label class="form-label form-label-sm mb-1">Catégorie</label>
+          <input type="text" name="category" class="form-control form-control-sm"
+                 value="{{ email.category or '' }}"
+                 placeholder="ex. maintenance, adhésion, don…"
+                 maxlength="100">
+          <div class="form-text">Laisser vide pour retirer la catégorie.</div>
+        </div>
+        <button type="submit" class="btn btn-secondary btn-sm">Enregistrer</button>
+      </form>
+    </details>
+
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ #}
+{# Corps du message                                                     #}
+{# ------------------------------------------------------------------ #}
+<section aria-labelledby="body-heading" class="mb-4">
+  <h2 class="h5" id="body-heading">Corps du message</h2>
+  {% if email.body_html %}
+  <iframe src="{{ url_for('mailbox.email_html_body', email_id=email.id) }}"
+          sandbox="allow-same-origin"
+          class="email-html-iframe border rounded"
+          title="Corps HTML du message"
+          data-autoresize="true"></iframe>
+  {% if email.body_text %}
+  <div class="mt-2">
+    <a class="small text-muted" data-bs-toggle="collapse" href="#plain-text-body" role="button"
+       aria-expanded="false" aria-controls="plain-text-body">
+      Voir le texte brut
+    </a>
+    <div class="collapse mt-2" id="plain-text-body">
+      <pre class="border rounded p-3 bg-light" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.875rem;">{{ email.body_text }}</pre>
+    </div>
+  </div>
+  {% endif %}
+  {% elif email.body_text %}
+  <pre class="border rounded p-3 bg-light" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.875rem;">{{ email.body_text }}</pre>
+  {% else %}
+  <p class="text-muted">Aucun corps de message.</p>
+  {% endif %}
+</section>
+
+{# ------------------------------------------------------------------ #}
+{# Règles appliquées                                                    #}
+{# ------------------------------------------------------------------ #}
+{% if logs %}
+<section aria-labelledby="logs-heading">
+  <h2 class="h5" id="logs-heading">Règles appliquées</h2>
+  <ul class="list-group list-group-flush border rounded">
+    {% for log in logs %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start">
+        <strong>{{ log.rule.name }}</strong>
+        <small class="text-muted">{{ log.applied_at.strftime('%d/%m/%Y %H:%M') }}</small>
+      </div>
+      {% if log.actions_triggered %}
+      <ul class="mb-0 mt-1 small text-muted">
+        {% for action in log.actions_triggered %}
+        <li>
+          {% if action.get('type') == 'create_task' %}
+            Tâche créée — #{{ action.get('task_id', '?') }}
+          {% elif action.get('type') == 'categorize' %}
+            Catégorie assignée : <span class="badge bg-info text-dark">{{ action.get('category', '') }}</span>
+          {% elif action.get('type') == 'forward_to' %}
+            Transféré à {{ action.get('forwarded_to', '?') }}
+          {% elif action.get('type') == 'mark_as_read' %}
+            Marqué comme lu
+          {% else %}
+            {{ action | tojson }}
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

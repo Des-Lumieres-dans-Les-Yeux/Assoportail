@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}500 — Erreur serveur{% endblock %}
+
+{% block content %}
+<section class="py-5 text-center" aria-labelledby="error-heading">
+  <h1 id="error-heading" class="display-5">500 — Erreur serveur</h1>
+  <p class="lead text-muted">
+    Une erreur inattendue s'est produite. L'équipe a été notifiée.
+  </p>
+  <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">
+    Retour au tableau de bord
+  </a>
+</section>
+{% endblock %}

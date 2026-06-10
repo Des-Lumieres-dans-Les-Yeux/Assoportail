@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Configurer la 2FA — Assoportail{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-sm-10 col-md-7 col-lg-5">
+
+    <h1 class="h3 mb-2">
+      <i class="bi bi-shield-lock me-2" aria-hidden="true"></i>Activer la 2FA (TOTP)
+    </h1>
+    <p class="text-muted mb-4">
+      L'authentification à deux facteurs ajoute une couche de sécurité supplémentaire à votre compte.
+      Vous aurez besoin d'une application comme <strong>Google Authenticator</strong>,
+      <strong>Authy</strong> ou <strong>1Password</strong>.
+    </p>
+
+    <div class="card mb-4">
+      <div class="card-body text-center">
+        <h2 class="h6 mb-3">Étape 1 — Scannez ce QR code</h2>
+        <img src="{{ qr_data_uri }}" alt="QR code 2FA" width="200" height="200" class="mb-3">
+        <p class="text-muted small mb-0">
+          Ou entrez manuellement la clé :
+          <code class="user-select-all">{{ secret }}</code>
+        </p>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Étape 2 — Confirmez avec un code</h2>
+        <form method="post" action="{{ url_for('auth.setup_totp') }}" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.code.label(class="form-label") }}
+            {{ form.code(
+                  class="form-control" ~ (" is-invalid" if form.code.errors else ""),
+                  autocomplete="one-time-code",
+                  inputmode="numeric",
+                  pattern="[0-9]{6}",
+                  maxlength="6",
+                  placeholder="000000"
+               ) }}
+            {% for error in form.code.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Activer la 2FA</button>
+        </form>
+      </div>
+    </div>
+
+    <p class="text-center">
+      <a href="{{ url_for('dashboard.index') }}" class="small text-muted">Annuler</a>
+    </p>
+
+  </div>
+</div>
+{% endblock %}
+

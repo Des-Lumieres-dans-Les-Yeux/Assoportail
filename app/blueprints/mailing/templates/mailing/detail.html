@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campaign.name }} — Emailing — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('mailing.list_campaigns') }}">Emailing</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ campaign.name }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">{{ campaign.name }}</h1>
+    <p class="text-muted mb-0">{{ campaign.subject }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    {% if campaign.is_editable %}
+    <a href="{{ url_for('mailing.preview', campaign_id=campaign.id) }}"
+       class="btn btn-outline-info btn-sm">Aperçu</a>
+    <a href="{{ url_for('mailing.edit', campaign_id=campaign.id) }}"
+       class="btn btn-outline-secondary btn-sm">Modifier</a>
+    <form method="post" action="{{ url_for('mailing.send', campaign_id=campaign.id) }}"
+          data-confirm="Envoyer la campagne à tous les destinataires ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary btn-sm">Envoyer</button>
+    </form>
+    <form method="post" action="{{ url_for('mailing.delete', campaign_id=campaign.id) }}"
+          data-confirm="Supprimer cette campagne ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<dl class="row mb-4 small text-muted">
+  <dt class="col-sm-3">Statut</dt>
+  <dd class="col-sm-9">
+    {% if campaign.status == CampaignStatus.DRAFT.value %}<span class="badge bg-secondary">Brouillon</span>
+    {% elif campaign.status == CampaignStatus.SCHEDULED.value %}<span class="badge bg-info text-dark">Planifiée</span>
+    {% elif campaign.status == CampaignStatus.SENDING.value %}<span class="badge bg-warning text-dark">En cours d'envoi</span>
+    {% elif campaign.status == CampaignStatus.SENT.value %}<span class="badge bg-success">Envoyée</span>
+    {% elif campaign.status == CampaignStatus.FAILED.value %}<span class="badge bg-danger">Échouée</span>
+    {% endif %}
+  </dd>
+
+  <dt class="col-sm-3">Créée par</dt>
+  <dd class="col-sm-9">{{ campaign.created_by.full_name }}</dd>
+
+  <dt class="col-sm-3">Créée le</dt>
+  <dd class="col-sm-9">{{ campaign.created_at.strftime('%d/%m/%Y à %H:%M') }}</dd>
+
+  {% if campaign.scheduled_at %}
+  <dt class="col-sm-3">Planifiée le</dt>
+  <dd class="col-sm-9">{{ campaign.scheduled_at.strftime('%d/%m/%Y à %H:%M') }}</dd>
+  {% endif %}
+
+  {% if campaign.sent_at %}
+  <dt class="col-sm-3">Envoyée le</dt>
+  <dd class="col-sm-9">{{ campaign.sent_at.strftime('%d/%m/%Y à %H:%M') }}</dd>
+  {% endif %}
+
+  {% if campaign.status == CampaignStatus.SENT.value %}
+  <dt class="col-sm-3">Statistiques</dt>
+  <dd class="col-sm-9">
+    {{ campaign.stats_sent }} envoyé{{ 's' if campaign.stats_sent != 1 }} ·
+    {{ campaign.stats_bounced }} rebond{{ 's' if campaign.stats_bounced != 1 }}
+  </dd>
+  {% endif %}
+
+  <dt class="col-sm-3">Audience</dt>
+  <dd class="col-sm-9">
+    {% set f = campaign.recipients_filter or {} %}
+    {% set aud = f.get('audience', 'members') %}
+    {% if aud == 'center_contacts' %}Contacts des centres actifs (avec machine)
+    {% elif aud == 'both' %}Membres + contacts des centres actifs
+    {% else %}Membres de l'association{% endif %}
+    {% if aud != 'center_contacts' %}
+    <br><small class="text-muted">
+      {% if f.get('membership_status') == 'active' %}Adhérents actifs{% else %}Tous les membres actifs{% endif %}
+      · {% if f.get('role') == 'bureau' %}Bureau{% elif f.get('role') == 'member' %}Membres{% else %}Tous rôles{% endif %}
+    </small>
+    {% endif %}
+  </dd>
+</dl>
+
+{# Body preview #}
+<section aria-labelledby="body-heading" class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0" id="body-heading">Aperçu du code source</h2>
+    <a href="{{ url_for('mailing.preview', campaign_id=campaign.id) }}" class="btn btn-sm btn-link p-0">Voir le rendu final</a>
+  </div>
+  <div class="border rounded p-3 bg-light small" style="max-height: 20rem; overflow-y: auto;">
+    <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0;">{{ campaign.body_html }}</pre>
+  </div>
+</section>
+
+{# Recipients #}
+{% if campaign.recipients %}
+<section aria-labelledby="recipients-heading">
+  <h2 class="h5" id="recipients-heading">Destinataires ({{ campaign.recipients | length }})</h2>
+  <ul class="list-group list-group-flush border rounded">
+    {% for r in campaign.recipients %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <span>{{ r.display_name }}</span>
+        <small class="text-muted ms-2">{{ r.email }}</small>
+        {% if not r.user %}
+        <span class="badge bg-light text-dark border ms-1">Contact centre</span>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-1 align-items-center">
+        {% if r.sent_at %}
+        <small class="text-muted">{{ r.sent_at.strftime('%H:%M') }}</small>
+        {% endif %}
+        {% if r.status == RecipientStatus.PENDING.value %}
+        <span class="badge bg-secondary">En attente</span>
+        {% elif r.status == RecipientStatus.SENT.value %}
+        <span class="badge bg-success">Envoyé</span>
+        {% elif r.status == RecipientStatus.BOUNCED.value %}
+        <span class="badge bg-danger">Rebond</span>
+        {% elif r.status == RecipientStatus.OPENED.value %}
+        <span class="badge bg-info text-dark">Ouvert</span>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% elif campaign.status != CampaignStatus.DRAFT.value %}
+<p class="text-muted">Aucun destinataire résolu.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  lint:
+    name: Lint & format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff — lint
+        run: ruff check .
+
+      - name: Ruff — format check
+        run: ruff format --check .
+
+  security:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Bandit — static security analysis
+        run: bandit -r app/ -ll
+
+      - name: pip-audit — dependency vulnerability scan
+        run: pip-audit -r requirements.txt
+
+  test:
+    name: Tests (PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: assoportail
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: assoportail_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U assoportail -d assoportail_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    env:
+      TEST_DATABASE_URL: postgresql://assoportail:testpassword@localhost:5432/assoportail_test
+      REDIS_URL: redis://localhost:6379/0
+      APP_CONFIG: test
+      SECRET_KEY: ci-secret-key
+      WTF_CSRF_SECRET_KEY: ci-csrf-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage (skip accessibility)
+        run: pytest --cov --cov-report=term-missing -v -m "not accessibility"
+
+  docker-build:
+    name: Docker build smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app image
+        run: docker build -f docker/app.dockerfile -t assoportail:ci .
+
+      - name: Build celery image
+        run: docker build -f docker/celery.dockerfile -t assoportail-celery:ci .

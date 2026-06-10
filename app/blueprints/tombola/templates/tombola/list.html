@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Tombolas — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Tombolas</h1>
+  {% if current_user.is_bureau %}
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-new-tombola">
+    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nouvelle tombola
+  </button>
+  {% endif %}
+</div>
+
+{% if tombolas %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>Nom</th>
+        <th>Date du tirage</th>
+        <th class="text-end">Billets</th>
+        <th>Statut</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tombolas %}
+      <tr>
+        <td class="fw-semibold">{{ t.name }}</td>
+        <td class="text-muted small">
+          {% if t.draw_date %}{{ t.draw_date.strftime('%d/%m/%Y') }}{% else %}—{% endif %}
+        </td>
+        <td class="text-end">
+          {% set count, numbered = stats.get(t.id, (0, 0)) %}
+          {{ count }}
+          {% if count > 0 %}
+            {% if numbered == count %}
+              <span class="badge bg-success ms-1">numérotés</span>
+            {% elif numbered > 0 %}
+              <span class="badge bg-warning text-dark ms-1">partiel</span>
+            {% else %}
+              <span class="badge bg-secondary ms-1">sans n°</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>
+          {% if t.slug %}
+            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+              <i class="bi bi-link-45deg" aria-hidden="true"></i> lien actif
+            </span>
+          {% else %}
+            <span class="badge bg-light text-muted border">pas de lien</span>
+          {% endif %}
+        </td>
+        <td class="text-end">
+          <a href="{{ url_for('tombola.detail', tombola_id=t.id) }}"
+             class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-gear" aria-hidden="true"></i>
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">Aucune tombola pour l'instant.</p>
+{% endif %}
+
+
+{# Modal création #}
+{% if current_user.is_bureau %}
+<div class="modal fade" id="modal-new-tombola" tabindex="-1" aria-labelledby="modal-new-tombola-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('tombola.create') }}" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="modal-new-tombola-label">Nouvelle tombola</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="{{ form.name.id }}" class="form-label">{{ form.name.label.text }} *</label>
+            {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""),
+                         id=form.name.id, placeholder="Ex : Tombola flipper 2026") }}
+            {% for e in form.name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            <label for="{{ form.draw_date.id }}" class="form-label">{{ form.draw_date.label.text }}</label>
+            {{ form.draw_date(class="form-control", id=form.draw_date.id) }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Créer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

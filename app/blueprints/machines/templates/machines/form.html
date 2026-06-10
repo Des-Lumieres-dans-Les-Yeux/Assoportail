@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('machines.list_machines') }}">Machines</a></li>
+    {% if machine is defined %}
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('machines.detail', machine_id=machine.id) }}">{{ machine.display_name }}</a>
+    </li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ title }}</h1>
+
+<form method="post" novalidate style="max-width: 36rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.model.id }}" class="form-label">{{ form.model.label.text }}</label>
+      {{ form.model(class="form-control" + (" is-invalid" if form.model.errors else ""),
+                    id=form.model.id) }}
+      {% for e in form.model.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-sm-3">
+      <label for="{{ form.year.id }}" class="form-label">{{ form.year.label.text }}</label>
+      {{ form.year(class="form-control" + (" is-invalid" if form.year.errors else ""),
+                   id=form.year.id) }}
+      {% for e in form.year.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-sm-3">
+      <label for="{{ form.internal_number.id }}" class="form-label">{{ form.internal_number.label.text }}</label>
+      {{ form.internal_number(class="form-control" + (" is-invalid" if form.internal_number.errors else ""),
+                              id=form.internal_number.id) }}
+      {% for e in form.internal_number.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.manufacturer.id }}" class="form-label">{{ form.manufacturer.label.text }}</label>
+      {{ form.manufacturer(class="form-control" + (" is-invalid" if form.manufacturer.errors else ""),
+                           id=form.manufacturer.id) }}
+      {% for e in form.manufacturer.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.serial_number.id }}" class="form-label">{{ form.serial_number.label.text }}</label>
+      {{ form.serial_number(class="form-control" + (" is-invalid" if form.serial_number.errors else ""),
+                            id=form.serial_number.id) }}
+      {% for e in form.serial_number.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.status.id }}" class="form-label">{{ form.status.label.text }}</label>
+    {{ form.status(class="form-select", id=form.status.id) }}
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-4">
+      <label for="{{ form.purchase_date.id }}" class="form-label">{{ form.purchase_date.label.text }}</label>
+      {{ form.purchase_date(class="form-control", id=form.purchase_date.id) }}
+    </div>
+    <div class="col-sm-4">
+      <label for="{{ form.purchase_price.id }}" class="form-label">{{ form.purchase_price.label.text }}</label>
+      {{ form.purchase_price(class="form-control" + (" is-invalid" if form.purchase_price.errors else ""),
+                             id=form.purchase_price.id, step="0.01", min="0") }}
+      {% for e in form.purchase_price.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-sm-4">
+      <label for="{{ form.estimated_value.id }}" class="form-label">{{ form.estimated_value.label.text }}</label>
+      {{ form.estimated_value(class="form-control" + (" is-invalid" if form.estimated_value.errors else ""),
+                              id=form.estimated_value.id, step="0.01", min="0") }}
+      {% for e in form.estimated_value.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.notes.id }}" class="form-label">{{ form.notes.label.text }}</label>
+    {{ form.notes(class="form-control", id=form.notes.id, rows=3) }}
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Enregistrer</button>
+    <a href="{{ url_for('machines.list_machines') }}" class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+{% endblock %}

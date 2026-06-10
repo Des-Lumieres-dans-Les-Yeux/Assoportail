@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+{% block title %}{{ tombola.name }} — Tombolas — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('tombola.list_tombolas') }}">Tombolas</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ tombola.name }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-0">
+      {{ tombola.name }}
+      {% if tombola.is_anonymized %}
+      <span class="badge bg-secondary align-middle">
+        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>Archivée
+      </span>
+      {% endif %}
+    </h1>
+    {% if tombola.draw_date %}
+    <p class="text-muted small mb-0">Tirage : {{ tombola.draw_date.strftime('%d/%m/%Y') }}</p>
+    {% else %}
+    <p class="text-muted small mb-0">Pas de date de tirage définie.</p>
+    {% endif %}
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if not tombola.is_anonymized %}
+    <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-edit-tombola">
+      <i class="bi bi-pencil me-1" aria-hidden="true"></i>Modifier
+    </button>
+    <a href="{{ url_for('mailing.create', tombola_id=tombola.id) }}"
+       class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-envelope me-1" aria-hidden="true"></i>Mailing
+    </a>
+    {% endif %}
+    <form method="post" action="{{ url_for('tombola.delete', tombola_id=tombola.id) }}"
+          data-confirm="Supprimer cette tombola et tous ses billets ? Cette action est irréversible.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-trash me-1" aria-hidden="true"></i>Supprimer
+      </button>
+    </form>
+  </div>
+</div>
+
+{# ── Modal édition ── #}
+{% if not tombola.is_anonymized %}
+<div class="modal fade" id="modal-edit-tombola" tabindex="-1"
+     aria-labelledby="modal-edit-tombola-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('tombola.edit', tombola_id=tombola.id) }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="modal-edit-tombola-label">Modifier la tombola</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="edit-name" class="form-label">Nom *</label>
+            <input type="text" id="edit-name" name="name" class="form-control"
+                   value="{{ tombola.name }}" required maxlength="200">
+          </div>
+          <div class="mb-3">
+            <label for="edit-draw-date" class="form-label">Date du tirage</label>
+            <input type="date" id="edit-draw-date" name="draw_date" class="form-control"
+                   value="{{ tombola.draw_date.strftime('%Y-%m-%d') if tombola.draw_date else '' }}">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if tombola.is_anonymized %}
+<div class="alert alert-secondary">
+  <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+  Tombola archivée le {{ tombola.anonymized_at.strftime('%d/%m/%Y') }} : les données personnelles
+  (nom, prénom, email, téléphone) ont été anonymisées. Seuls les numéros de billets sont conservés.
+</div>
+{% endif %}
+
+
+{# ── Lien public (généré à la demande) ── #}
+{% if not tombola.is_anonymized %}
+<div class="card mb-4">
+  <div class="card-body">
+    {% if tombola.slug %}
+    {% set public_url = url_for('tombola.public', slug=tombola.slug, _external=True) %}
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <i class="bi bi-link-45deg fs-4 text-primary" aria-hidden="true"></i>
+      <div class="flex-grow-1">
+        <div class="fw-semibold mb-1">Lien public de consultation</div>
+        <code class="small text-break" id="public-url">{{ public_url }}</code>
+      </div>
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              data-copy="{{ public_url }}" aria-label="Copier le lien">
+        <i class="bi bi-clipboard" aria-hidden="true"></i> Copier
+      </button>
+      <form method="post" action="{{ url_for('tombola.generate_link', tombola_id=tombola.id) }}"
+            data-confirm="Régénérer le lien ? L'ancien lien cessera immédiatement de fonctionner.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-warning btn-sm">
+          <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Régénérer
+        </button>
+      </form>
+    </div>
+    {% else %}
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <i class="bi bi-link-45deg fs-4 text-muted" aria-hidden="true"></i>
+      <div class="flex-grow-1">
+        <div class="fw-semibold mb-1">Lien public de consultation</div>
+        <p class="text-muted small mb-0">
+          Aucun lien public n'a encore été généré pour cette tombola.
+        </p>
+      </div>
+      <form method="post" action="{{ url_for('tombola.generate_link', tombola_id=tombola.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="bi bi-link-45deg me-1" aria-hidden="true"></i>Générer le lien public
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+
+{# ── Import fichier ── #}
+{% if not tombola.is_anonymized %}
+<div class="card mb-4">
+  <div class="card-header fw-semibold">
+    <i class="bi bi-upload me-1" aria-hidden="true"></i>Importer les billets
+  </div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('tombola.upload', tombola_id=tombola.id) }}"
+          enctype="multipart/form-data" novalidate>
+      {{ upload_form.hidden_tag() }}
+      <div class="row g-2 align-items-end">
+        <div class="col-auto flex-grow-1">
+          <label for="{{ upload_form.file.id }}" class="form-label small">
+            {{ upload_form.file.label.text }}
+          </label>
+          {{ upload_form.file(class="form-control form-control-sm" + (" is-invalid" if upload_form.file.errors else ""),
+                               id=upload_form.file.id, accept=".csv,.xlsx") }}
+          {% for e in upload_form.file.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          <div class="form-text">
+            Colonnes détectées automatiquement : email (requis), nom, prénom, téléphone,
+            numéro de billet, référence commande.
+            Un ré-import remplace tous les billets existants.
+          </div>
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-primary btn-sm">Importer</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+
+{# ── Tirage aléatoire ── #}
+{% if not tombola.is_anonymized and ticket_count > 0 and numbered_count == 0 %}
+<div class="card mb-4 border-warning">
+  <div class="card-header fw-semibold text-warning-emphasis bg-warning-subtle">
+    <i class="bi bi-shuffle me-1" aria-hidden="true"></i>Tirage aléatoire des numéros
+  </div>
+  <div class="card-body">
+    <p class="small text-muted mb-3">
+      Aucun numéro de billet détecté dans le fichier importé.
+      Définissez la plage et lancez l'attribution aléatoire.
+    </p>
+    <form method="post" action="{{ url_for('tombola.assign_numbers', tombola_id=tombola.id) }}"
+          novalidate data-confirm="Lancer le tirage aléatoire ? Cette action est irréversible.">
+      {{ assign_form.hidden_tag() }}
+      <div class="row g-2 align-items-end">
+        <div class="col-auto">
+          <label for="{{ assign_form.range_min.id }}" class="form-label small">De</label>
+          {{ assign_form.range_min(class="form-control form-control-sm", id=assign_form.range_min.id,
+                                   style="width: 5rem;") }}
+        </div>
+        <div class="col-auto">
+          <label for="{{ assign_form.range_max.id }}" class="form-label small">À</label>
+          {{ assign_form.range_max(class="form-control form-control-sm", id=assign_form.range_max.id,
+                                   style="width: 5rem;") }}
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-warning btn-sm">
+            <i class="bi bi-shuffle me-1" aria-hidden="true"></i>Lancer le tirage
+          </button>
+        </div>
+      </div>
+      <div class="form-text mt-1">
+        La plage doit contenir au moins {{ ticket_count }} numéros pour {{ ticket_count }} billet{{ 's' if ticket_count > 1 }}.
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+
+{# ── Billets (filtre live + tri + pagination, côté client) ── #}
+{% if ticket_count > 0 %}
+<div class="card" data-live-table data-page-size="50">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span class="fw-semibold">
+      <i class="bi bi-ticket me-1" aria-hidden="true"></i>
+      Billets — {{ ticket_count }} au total
+      {% if numbered_count > 0 %}
+      <span class="badge bg-success ms-1">{{ numbered_count }} numérotés</span>
+      {% endif %}
+    </span>
+    <div style="max-width: 22rem; width: 100%;">
+      <label for="ticket-search" class="visually-hidden">Rechercher un billet</label>
+      <input type="search" id="ticket-search" data-live-search
+             class="form-control form-control-sm"
+             placeholder="Recherche live : n°, nom, prénom, email, téléphone…"
+             aria-label="Rechercher un billet">
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th data-sort scope="col" role="button" tabindex="0">N° billet</th>
+            <th data-sort scope="col" role="button" tabindex="0">Prénom</th>
+            <th data-sort scope="col" role="button" tabindex="0">Nom</th>
+            <th data-sort scope="col" role="button" tabindex="0">Email</th>
+            <th data-sort data-no-search scope="col" role="button" tabindex="0">Téléphone</th>
+            <th data-sort data-no-search scope="col" role="button" tabindex="0">Référence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ticket in tickets %}
+          <tr>
+            <td data-sort-value="{{ ticket.ticket_number if ticket.ticket_number is not none else -1 }}">
+              {% if ticket.ticket_number is not none %}
+              <span class="badge bg-primary font-monospace">{{ '%03d' % ticket.ticket_number }}</span>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>{{ ticket.first_name or '—' }}</td>
+            <td>{{ ticket.last_name or '—' }}</td>
+            <td class="text-muted small">{{ ticket.email }}</td>
+            <td class="text-muted small">{{ ticket.phone or '—' }}</td>
+            <td class="text-muted small">{{ ticket.order_ref or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 p-2 border-top">
+      <span class="text-muted small" data-live-info aria-live="polite"></span>
+      <nav aria-label="Pagination des billets">
+        <ul class="pagination pagination-sm mb-0" data-live-pagination></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+{# ── Gagnant ── #}
+{% if numbered_count > 0 and not tombola.is_anonymized %}
+<div class="card mt-4">
+  <div class="card-header fw-semibold">
+    <i class="bi bi-trophy me-1 text-warning" aria-hidden="true"></i>Gagnant
+  </div>
+  <div class="card-body">
+    {% if tombola.winner %}
+    {% set w = tombola.winner %}
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+      <div>
+        <span class="badge bg-warning text-dark font-monospace fs-5 me-2">
+          {{ '%03d' % w.ticket_number }}
+        </span>
+        <span class="fw-semibold">{{ w.first_name or '' }} {{ w.last_name or '' }}</span>
+        {% if w.email %}
+        <span class="text-muted small ms-2">{{ w.email }}</span>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-2">
+        <form method="post" action="{{ url_for('tombola.set_winner', tombola_id=tombola.id) }}"
+              data-confirm="Relancer un tirage aléatoire ? Le gagnant actuel sera remplacé.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="draw">
+          <button type="submit" class="btn btn-outline-warning btn-sm">
+            <i class="bi bi-shuffle me-1" aria-hidden="true"></i>Retirer au sort
+          </button>
+        </form>
+        <form method="post" action="{{ url_for('tombola.set_winner', tombola_id=tombola.id) }}"
+              data-confirm="Retirer le gagnant ?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="clear">
+          <button type="submit" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-3">Aucun gagnant désigné.</p>
+    {% endif %}
+
+    <div class="d-flex gap-2 flex-wrap align-items-end">
+      {# Tirage aléatoire #}
+      <form method="post" action="{{ url_for('tombola.set_winner', tombola_id=tombola.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="draw">
+        <button type="submit" class="btn btn-warning btn-sm">
+          <i class="bi bi-shuffle me-1" aria-hidden="true"></i>Tirer au sort
+        </button>
+      </form>
+      {# Désignation manuelle #}
+      <form method="post" action="{{ url_for('tombola.set_winner', tombola_id=tombola.id) }}"
+            class="d-flex gap-1">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="manual">
+        <input type="number" name="winner_number" class="form-control form-control-sm"
+               style="width: 7rem;" placeholder="N° billet" min="0" aria-label="Numéro du gagnant">
+        <button type="submit" class="btn btn-outline-secondary btn-sm">Désigner</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Médias ── #}
+<div class="card mt-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">
+      <i class="bi bi-images me-1" aria-hidden="true"></i>Médias
+    </span>
+    {% if not tombola.is_anonymized %}
+    <label class="btn btn-outline-primary btn-sm mb-0" role="button">
+      <i class="bi bi-upload me-1" aria-hidden="true"></i>Ajouter
+      <form method="post" action="{{ url_for('tombola.upload_media', tombola_id=tombola.id) }}"
+            enctype="multipart/form-data" id="media-upload-form" class="d-none">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="file" name="file" accept="image/*,video/mp4,video/webm"
+               multiple data-auto-submit="media-upload-form">
+      </form>
+    </label>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    {% if tombola.documents %}
+    <div class="row g-2">
+      {% for doc in tombola.documents %}
+      <div class="col-6 col-sm-4 col-md-3 position-relative">
+        {% if doc.mime_type.startswith('image/') %}
+        <a href="{{ url_for('documents.download', document_id=doc.id) }}" target="_blank">
+          <img src="{{ url_for('documents.download', document_id=doc.id) }}"
+               class="img-fluid rounded" style="height: 120px; width: 100%; object-fit: cover;"
+               alt="{{ doc.original_filename }}">
+        </a>
+        {% else %}
+        <a href="{{ url_for('documents.download', document_id=doc.id) }}" target="_blank"
+           class="d-flex align-items-center justify-content-center bg-light rounded text-muted"
+           style="height: 120px;">
+          <i class="bi bi-film fs-2" aria-hidden="true"></i>
+        </a>
+        {% endif %}
+        {% if not tombola.is_anonymized %}
+        <form method="post"
+              action="{{ url_for('tombola.delete_media', tombola_id=tombola.id, doc_id=doc.id) }}"
+              class="position-absolute top-0 end-0 m-1"
+              data-confirm="Supprimer ce média ?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit"
+                  class="btn btn-danger btn-sm py-0 px-1 opacity-75"
+                  aria-label="Supprimer">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">Aucun média pour l'instant.</p>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Zone RGPD : anonymisation ── #}
+{% if not tombola.is_anonymized %}
+<div class="card mt-4 border-danger-subtle">
+  <div class="card-header fw-semibold text-danger-emphasis bg-danger-subtle">
+    <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>Archivage RGPD
+  </div>
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <p class="small text-muted mb-0">
+      Une fois la tombola terminée, anonymisez les données personnelles (nom, prénom, email,
+      téléphone). Les numéros de billets sont conservés. <strong>Action irréversible.</strong>
+    </p>
+    <form method="post" action="{{ url_for('tombola.anonymize', tombola_id=tombola.id) }}"
+          data-confirm="Anonymiser définitivement toutes les données personnelles de cette tombola ? Cette action est IRRÉVERSIBLE et révoque le lien public.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-danger btn-sm">
+        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>Anonymiser (RGPD)
+      </button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">
+  <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+  Aucun billet importé. Utilisez le formulaire ci-dessus pour charger un fichier CSV ou XLSX.
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,55 @@
+[project]
+name = "assoportail"
+version = "0.1.0"
+description = "Association management portal for a pinball machine installation charity"
+requires-python = ">=3.13"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit (security)
+    "N",   # pep8-naming
+    "T20", # flake8-print
+]
+ignore = [
+    "S101",  # assert allowed in tests
+    "B008",  # function call in default argument (Flask route decorators)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "T20", "E402"]
+"tests/conftest.py" = ["E402"]
+"app/audit.py" = ["E402"]
+"app/blueprints/treasury/routes.py" = ["E402"]
+"app/blueprints/events/routes.py" = ["S110"]
+"migrations/**" = ["E501", "I001"]
+"scripts/**" = ["T20", "S202", "S603", "S607"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "accessibility: marks tests requiring Playwright (deselect with '-m not accessibility')",
+    "postgres: marks tests requiring a live PostgreSQL instance",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["tests/*", "migrations/*", "wsgi.py"]
+
+[tool.coverage.report]
+fail_under = 45
+show_missing = true
+skip_empty = true

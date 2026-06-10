@@ -1,0 +1,35 @@
+<div class="modal fade" tabindex="-1" aria-labelledby="gallery-modal-title" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="gallery-modal-title">Choisir une image de la galerie</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        {% if photos %}
+        <div class="row g-2">
+          {% for photo in photos %}
+          <div class="col-4 col-md-3">
+            <form method="post" action="{{ url_for('social.pick_gallery_image', post_id=post_id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="document_id" value="{{ photo.id }}">
+              <button type="submit" class="btn p-0 border-0 w-100">
+                <img src="{{ url_for('documents.download', document_id=photo.id) }}"
+                     alt="{{ photo.original_filename }}"
+                     class="img-fluid rounded" style="aspect-ratio: 1; object-fit: cover; width: 100%;"
+                     loading="lazy">
+              </button>
+              <small class="text-truncate d-block text-muted" style="max-width: 100%;">
+                {{ photo.original_filename }}
+              </small>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted">Aucune photo dans la galerie.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>

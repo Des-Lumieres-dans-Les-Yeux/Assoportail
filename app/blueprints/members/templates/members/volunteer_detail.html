@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}{{ name }} — Bénévole — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('members.list_members') }}">Membres</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('members.list_volunteers') }}">Bénévoles</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ name }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-1">{{ name }}</h1>
+    <p class="text-muted mb-0">
+      <a href="mailto:{{ email }}" class="text-decoration-none">{{ email }}</a>
+    </p>
+  </div>
+  {% if total_hours > 0 %}
+  <a href="{{ url_for('members.volunteer_certificate', email=email) }}"
+     class="btn btn-outline-success btn-sm" target="_blank">
+    <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Certificat de bénévolat
+  </a>
+  {% endif %}
+</div>
+
+{# Summary #}
+<div class="row g-3 mb-4">
+  <div class="col-sm-4">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h4 mb-0 text-primary">{{ events | length }}</div>
+        <small class="text-muted">Événement{{ 's' if events | length != 1 }}</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="h4 mb-0 text-info">{{ total_hours }} h</div>
+        <small class="text-muted">Heures de bénévolat</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Events #}
+<section aria-labelledby="events-heading">
+  <h2 class="h5 mb-2" id="events-heading">Participations aux événements</h2>
+
+  {% if events %}
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Événement</th>
+          <th>Date</th>
+          <th>Lieu</th>
+          <th>Heures</th>
+          <th>Inscrit le</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in events %}
+        <tr>
+          <td>
+            <a href="{{ url_for('events.detail', event_id=e.event.id) }}" class="text-decoration-none">
+              {{ e.event.title }}
+            </a>
+          </td>
+          <td class="text-nowrap">{{ e.event.event_date.strftime('%d/%m/%Y') }}</td>
+          <td>{{ e.event.location or '—' }}</td>
+          <td>
+            {% if e.hours > 0 %}
+            <span class="badge bg-info text-dark">{{ e.hours }} h</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-nowrap small">{{ e.registered_at.strftime('%d/%m/%Y') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Aucune participation enregistrée.</p>
+  {% endif %}
+</section>
+{% endblock %}

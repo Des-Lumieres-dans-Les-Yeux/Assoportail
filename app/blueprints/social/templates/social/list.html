@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Publications sociales — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Publications sociales</h1>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('social.list_accounts') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-gear me-1" aria-hidden="true"></i>Comptes
+    </a>
+    <a href="{{ url_for('social.create') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nouveau post
+    </a>
+  </div>
+</div>
+
+{# Status filter #}
+<form method="get" action="{{ url_for('social.list_posts') }}" class="mb-3 d-flex gap-2">
+  <select name="status" class="form-select form-select-sm" style="width: auto;"
+          aria-label="Filtrer par statut" data-auto-submit="social-filter-form" id="social-filter-form-select">
+    <option value="" {% if not status %}selected{% endif %}>Tous</option>
+    <option value="draft" {% if status == 'draft' %}selected{% endif %}>Brouillon</option>
+    <option value="scheduled" {% if status == 'scheduled' %}selected{% endif %}>Planifié</option>
+    <option value="published" {% if status == 'published' %}selected{% endif %}>Publié</option>
+    <option value="partial" {% if status == 'partial' %}selected{% endif %}>Partiel</option>
+    <option value="failed" {% if status == 'failed' %}selected{% endif %}>Échoué</option>
+  </select>
+  <noscript><button type="submit" class="btn btn-outline-primary btn-sm">Filtrer</button></noscript>
+</form>
+
+{% if posts %}
+<ul class="list-group list-group-flush border rounded" aria-label="Posts sociaux">
+  {% for post in posts %}
+  <li class="list-group-item">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <div class="flex-grow-1">
+        <a href="{{ url_for('social.detail', post_id=post.id) }}"
+           class="fw-semibold text-decoration-none">{{ post.title }}</a>
+        <div class="d-flex gap-1 mt-1">
+          {% for p in post.platforms %}
+          <span class="badge bg-light text-dark border">{{ p }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="d-flex flex-column align-items-end gap-1 text-nowrap">
+        <small class="text-muted">{{ post.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+        {% if post.status == 'draft' %}
+        <span class="badge bg-secondary">Brouillon</span>
+        {% elif post.status == 'scheduled' %}
+        <span class="badge bg-info text-dark">Planifié</span>
+        {% elif post.status == 'publishing' %}
+        <span class="badge bg-warning text-dark">En cours</span>
+        {% elif post.status == 'published' %}
+        <span class="badge bg-success">Publié</span>
+        {% elif post.status == 'partial' %}
+        <span class="badge bg-warning text-dark">Partiel</span>
+        {% elif post.status == 'failed' %}
+        <span class="badge bg-danger">Échoué</span>
+        {% endif %}
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+
+<p class="text-muted mt-2"><small>{{ pagination.total }} post{{ 's' if pagination.total != 1 }}</small></p>
+{% set endpoint = 'social.list_posts' %}
+{% set kwargs = {'status': status} %}
+{% include "components/pagination.html" %}
+{% else %}
+<p class="text-muted">Aucun post{% if status %} pour ce statut{% endif %}.</p>
+{% endif %}
+{% endblock %}

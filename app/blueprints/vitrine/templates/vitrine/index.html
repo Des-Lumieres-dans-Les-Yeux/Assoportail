@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#2563EB">
+  <title>Assoportail — Portail associatif</title>
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+        crossorigin="anonymous">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    .hero { background: linear-gradient(135deg, #1d4ed8 0%, #2563EB 60%, #3b82f6 100%);
+            color: #fff; padding: 4rem 0; }
+    .hero h1 { font-size: clamp(1.8rem, 5vw, 3rem); font-weight: 700; }
+    .event-card { transition: all .2s; }
+    .event-card:hover, .event-card:active {
+      box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-2px); }
+    .center-badge { width: 38px; height: 38px; background: #dbeafe; border-radius: 50%;
+                    display: inline-flex; align-items: center; justify-content: center; }
+  </style>
+</head>
+<body class="bg-light">
+
+{# Hero #}
+<section class="hero text-center">
+  <div class="container">
+    <h1 class="mb-3">Bienvenue sur notre portail associatif</h1>
+    <p class="lead opacity-75 mb-4">
+      Découvrez nos centres partenaires, nos prochains événements et rejoignez notre association.
+    </p>
+    <div class="d-flex gap-3 justify-content-center flex-wrap">
+      <a href="{{ url_for('auth.login') }}" class="btn btn-light btn-lg">
+        <i class="bi bi-person me-1"></i>Espace membres
+      </a>
+    </div>
+  </div>
+</section>
+
+{# Upcoming events #}
+{% if upcoming_events %}
+<section class="py-5">
+  <div class="container">
+    <h2 class="h3 mb-4">
+      <i class="bi bi-calendar-event me-2 text-primary"></i>Prochains événements
+    </h2>
+    <div class="row g-3">
+      {% for event in upcoming_events %}
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100 event-card border-0 shadow-sm">
+          <div class="card-body">
+            <h3 class="h6 card-title mb-1">{{ event.title }}</h3>
+            <p class="text-muted small mb-2">
+              <i class="bi bi-clock me-1"></i>{{ event.event_date.strftime('%d/%m/%Y à %H:%M') }}
+            </p>
+            {% if event.location %}
+            <p class="text-muted small mb-0">
+              <i class="bi bi-geo-alt me-1"></i>{{ event.location }}
+            </p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# Active centers #}
+{% if active_centers %}
+<section class="py-5 bg-white">
+  <div class="container">
+    <h2 class="h3 mb-4">
+      <i class="bi bi-building me-2 text-primary"></i>Centres partenaires
+      <small class="text-muted fs-6 ms-2">({{ active_centers | length }} actif{{ 's' if active_centers | length > 1 }})</small>
+    </h2>
+    <div class="row g-3">
+      {% for center in active_centers %}
+      <div class="col-sm-6 col-md-4 col-lg-3">
+        <div class="d-flex align-items-center gap-3 border rounded p-3 bg-light h-100">
+          <div class="center-badge flex-shrink-0">
+            <i class="bi bi-building text-primary" aria-hidden="true"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="fw-semibold text-truncate">{{ center.name }}</div>
+            <small class="text-muted">{{ center.city }}</small>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# Footer #}
+<footer class="py-4 bg-dark text-white text-center">
+  <div class="container">
+    <p class="mb-0 small opacity-75">
+      &copy; {{ now.year if now is defined else 2026 }} Assoportail
+      &mdash;
+      <a href="{{ url_for('auth.login') }}" class="text-white-50 small">Connexion membres</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

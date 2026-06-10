@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Modifier' if rule else 'Nouvelle' }} règle — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('mailbox.inbox') }}">Boîte de réception</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('mailbox.rules') }}">Règles</a></li>
+    <li class="breadcrumb-item active" aria-current="page">
+      {% if rule %}Modifier « {{ rule.name }} »{% else %}Nouvelle règle{% endif %}
+    </li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ 'Modifier la règle' if rule else 'Nouvelle règle' }}</h1>
+
+<form method="post" action="" novalidate id="rule-form" style="max-width: 54rem;">
+  {{ form.hidden_tag() }}
+
+  {# Hidden JSON fields filled by JS before submit #}
+  {{ form.conditions(id="conditions-json", class="d-none") }}
+  {{ form.actions(id="actions-json", class="d-none") }}
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-7">
+      <label for="{{ form.name.id }}" class="form-label">{{ form.name.label.text }} *</label>
+      {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""), id=form.name.id) }}
+      {% for e in form.name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-sm-2">
+      <label for="{{ form.priority.id }}" class="form-label">{{ form.priority.label.text }}</label>
+      {{ form.priority(class="form-control" + (" is-invalid" if form.priority.errors else ""), id=form.priority.id) }}
+      {% for e in form.priority.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-sm-3 d-flex align-items-end pb-1">
+      <div class="form-check">
+        {{ form.is_active(class="form-check-input", id=form.is_active.id) }}
+        <label for="{{ form.is_active.id }}" class="form-check-label">{{ form.is_active.label.text }}</label>
+      </div>
+    </div>
+  </div>
+
+  {# ---- Conditions ---- #}
+  <fieldset class="border rounded p-3 mb-3">
+    <legend class="float-none w-auto fw-semibold px-2 fs-6">Conditions</legend>
+
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <span class="text-muted small">Correspondance :</span>
+      {{ form.match_mode(class="form-select form-select-sm", id=form.match_mode.id, style="width: auto;") }}
+    </div>
+
+    <div id="conditions-list" class="d-flex flex-column gap-2 mb-2"></div>
+
+    {% for e in form.conditions.errors %}
+    <div class="text-danger small mt-1">{{ e }}</div>
+    {% endfor %}
+
+    <button type="button" id="add-condition" class="btn btn-outline-secondary btn-sm mt-1">
+      + Ajouter une condition
+    </button>
+  </fieldset>
+
+  {# ---- Actions ---- #}
+  <fieldset class="border rounded p-3 mb-4">
+    <legend class="float-none w-auto fw-semibold px-2 fs-6">Actions</legend>
+
+    <div id="actions-list" class="d-flex flex-column gap-2 mb-2"></div>
+
+    {% for e in form.actions.errors %}
+    <div class="text-danger small mt-1">{{ e }}</div>
+    {% endfor %}
+
+    <button type="button" id="add-action" class="btn btn-outline-secondary btn-sm mt-1">
+      + Ajouter une action
+    </button>
+  </fieldset>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+      {% if rule %}Enregistrer{% else %}Créer{% endif %}
+    </button>
+    <a href="{{ url_for('mailbox.rules') }}" class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+
+<hr class="my-4">
+<section style="max-width: 54rem;">
+  <h2 class="h5 mb-2">Tester les conditions</h2>
+  <p class="text-muted small mb-3">Sélectionnez un email réel pour vérifier si les conditions actuelles correspondent, sans sauvegarder la règle.</p>
+  <form id="test-form"
+        hx-post="{{ url_for('mailbox.test_rule_preview') }}"
+        hx-target="#test-result"
+        hx-swap="innerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="conditions" id="test-conditions-input">
+    <input type="hidden" name="match_mode" id="test-match-mode-input">
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      {% if recent_emails %}
+      <select name="email_id" class="form-select form-select-sm" style="max-width: 34rem;" aria-label="Email à tester">
+        <option value="">— Choisir un email —</option>
+        {% for e in recent_emails %}
+        <option value="{{ e.id }}">
+          {{ e.received_at.strftime('%d/%m/%Y') }} · {{ e.sender | truncate(25, True) }} · {{ (e.subject or '(sans sujet)') | truncate(45, True) }}
+        </option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <span class="text-muted small">Aucun email en boîte de réception.</span>
+      {% endif %}
+      <button type="button" id="btn-test-rule" class="btn btn-outline-secondary btn-sm">
+        Tester
+      </button>
+    </div>
+  </form>
+  <div id="test-result" class="mt-2 small"></div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  const FIELDS = [
+    { value: 'sender',     label: 'Expéditeur' },
+    { value: 'recipients', label: 'Destinataire' },
+    { value: 'subject',    label: 'Objet' },
+    { value: 'body',       label: 'Corps' },
+  ];
+  const OPERATORS = [
+    { value: 'contains', label: 'contient' },
+    { value: 'equals',   label: 'est égal à' },
+    { value: 'regex',    label: 'correspond à (regex)' },
+  ];
+  const PRIORITIES = [
+    { value: 'low',    label: 'Basse' },
+    { value: 'normal', label: 'Normale' },
+    { value: 'urgent', label: 'Urgente' },
+  ];
+  const ACTION_TYPES = [
+    { value: 'categorize',   label: 'Catégoriser' },
+    { value: 'create_task',  label: 'Créer une tâche' },
+    { value: 'forward_to',   label: 'Transférer à' },
+    { value: 'mark_as_read', label: 'Marquer comme lu' },
+  ];
+
+  function makeSelect(options, selected) {
+    const sel = document.createElement('select');
+    sel.className = 'form-select form-select-sm';
+    options.forEach(function (o) {
+      const opt = document.createElement('option');
+      opt.value = o.value;
+      opt.textContent = o.label;
+      if (o.value === selected) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    return sel;
+  }
+
+  function makeInput(value, placeholder) {
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'form-control form-control-sm flex-grow-1';
+    inp.value = value || '';
+    if (placeholder) inp.placeholder = placeholder;
+    return inp;
+  }
+
+  function makeRemoveBtn() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-outline-danger btn-sm flex-shrink-0';
+    btn.textContent = '×';
+    btn.setAttribute('aria-label', 'Supprimer');
+    btn.addEventListener('click', function () {
+      btn.closest('.rule-row').remove();
+    });
+    return btn;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Condition row                                                        */
+  /* ------------------------------------------------------------------ */
+  function addConditionRow(field, operator, value) {
+    const row = document.createElement('div');
+    row.className = 'd-flex gap-2 align-items-center rule-row flex-wrap';
+
+    const fieldSel = makeSelect(FIELDS, field || 'subject');
+    fieldSel.style.width = '10rem';
+    fieldSel.setAttribute('aria-label', 'Champ');
+
+    const opSel = makeSelect(OPERATORS, operator || 'contains');
+    opSel.style.width = '13rem';
+    opSel.setAttribute('aria-label', 'Opérateur');
+
+    const val = makeInput(value, 'valeur…');
+    val.setAttribute('aria-label', 'Valeur');
+
+    row.appendChild(fieldSel);
+    row.appendChild(opSel);
+    row.appendChild(val);
+    row.appendChild(makeRemoveBtn());
+    document.getElementById('conditions-list').appendChild(row);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Action row                                                          */
+  /* ------------------------------------------------------------------ */
+  function addActionRow(type, params) {
+    const row = document.createElement('div');
+    row.className = 'd-flex gap-2 align-items-center flex-wrap rule-row';
+
+    const typeSel = makeSelect(ACTION_TYPES, type || 'categorize');
+    typeSel.style.width = '13rem';
+    typeSel.setAttribute('aria-label', 'Type d\'action');
+
+    const extra = document.createElement('div');
+    extra.className = 'd-flex gap-2 align-items-center flex-grow-1 action-extra';
+
+    function renderExtra(t) {
+      extra.innerHTML = '';
+      if (t === 'create_task') {
+        const lbl = document.createElement('span');
+        lbl.className = 'text-muted small text-nowrap';
+        lbl.textContent = 'Priorité :';
+        const pri = makeSelect(PRIORITIES, (params && params.priority) || 'normal');
+        pri.style.width = '9rem';
+        pri.setAttribute('aria-label', 'Priorité');
+        extra.appendChild(lbl);
+        extra.appendChild(pri);
+
+      } else if (t === 'categorize') {
+        const lbl = document.createElement('span');
+        lbl.className = 'text-muted small text-nowrap';
+        lbl.textContent = 'Catégorie :';
+        const inp = makeInput((params && params.category) || '', 'ex. maintenance');
+        inp.setAttribute('aria-label', 'Nom de la catégorie');
+        extra.appendChild(lbl);
+        extra.appendChild(inp);
+
+      } else if (t === 'forward_to') {
+        const lbl = document.createElement('span');
+        lbl.className = 'text-muted small text-nowrap';
+        lbl.textContent = 'Adresse :';
+        const inp = makeInput((params && params.email) || '', 'destinataire@exemple.fr');
+        inp.type = 'email';
+        inp.setAttribute('aria-label', 'Adresse de transfert');
+        extra.appendChild(lbl);
+        extra.appendChild(inp);
+
+      }
+      // mark_as_read: no extra fields needed
+    }
+
+    renderExtra(typeSel.value);
+    typeSel.addEventListener('change', function () {
+      params = {};
+      renderExtra(typeSel.value);
+    });
+
+    row.appendChild(typeSel);
+    row.appendChild(extra);
+    row.appendChild(makeRemoveBtn());
+    document.getElementById('actions-list').appendChild(row);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Serialization                                                        */
+  /* ------------------------------------------------------------------ */
+  function serializeConditions() {
+    return Array.from(document.querySelectorAll('#conditions-list .rule-row')).map(function (row) {
+      const selects = row.querySelectorAll('select');
+      const input = row.querySelector('input[type=text]');
+      return {
+        field: selects[0].value,
+        operator: selects[1].value,
+        value: input ? input.value.trim() : '',
+      };
+    });
+  }
+
+  function serializeActions() {
+    return Array.from(document.querySelectorAll('#actions-list .rule-row')).map(function (row) {
+      const typeSel = row.querySelector('select');
+      const type = typeSel.value;
+      if (type === 'create_task') {
+        const priSel = row.querySelector('.action-extra select');
+        return { type: type, priority: priSel ? priSel.value : 'normal' };
+      } else if (type === 'categorize') {
+        const inp = row.querySelector('.action-extra input');
+        return { type: type, category: inp ? inp.value.trim() : '' };
+      } else if (type === 'forward_to') {
+        const inp = row.querySelector('.action-extra input');
+        return { type: type, email: inp ? inp.value.trim() : '' };
+      }
+      return { type: type };
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Event wiring                                                         */
+  /* ------------------------------------------------------------------ */
+  document.getElementById('add-condition').addEventListener('click', function () {
+    addConditionRow();
+  });
+  document.getElementById('add-action').addEventListener('click', function () {
+    addActionRow();
+  });
+
+  document.getElementById('btn-test-rule').addEventListener('click', function () {
+    var condInput = document.getElementById('test-conditions-input');
+    var modeInput = document.getElementById('test-match-mode-input');
+    condInput.value = JSON.stringify(serializeConditions());
+    modeInput.value = document.getElementById('{{ form.match_mode.id }}').value;
+    htmx.trigger(document.getElementById('test-form'), 'submit');
+  });
+
+  document.getElementById('rule-form').addEventListener('submit', function (e) {
+    const conds = serializeConditions();
+    const acts = serializeActions();
+    if (!conds.length) {
+      e.preventDefault();
+      alert('Ajoutez au moins une condition.');
+      return;
+    }
+    if (!acts.length) {
+      e.preventDefault();
+      alert('Ajoutez au moins une action.');
+      return;
+    }
+    document.getElementById('conditions-json').value = JSON.stringify(conds);
+    document.getElementById('actions-json').value = JSON.stringify(acts);
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Pre-populate from existing data (edit mode)                         */
+  /* ------------------------------------------------------------------ */
+  (function init() {
+    try {
+      var conds = JSON.parse(document.getElementById('conditions-json').value || '[]');
+      conds.forEach(function (c) { addConditionRow(c.field, c.operator, c.value); });
+    } catch (e) {}
+
+    try {
+      var acts = JSON.parse(document.getElementById('actions-json').value || '[]');
+      acts.forEach(function (a) { addActionRow(a.type, a); });
+    } catch (e) {}
+
+    // Default empty rows for new rule
+    if (!document.querySelectorAll('#conditions-list .rule-row').length) addConditionRow();
+    if (!document.querySelectorAll('#actions-list .rule-row').length) addActionRow();
+  })();
+})();
+</script>
+{% endblock %}

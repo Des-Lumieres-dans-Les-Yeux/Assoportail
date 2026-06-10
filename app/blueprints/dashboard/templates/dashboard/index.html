@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord — Assoportail{% endblock %}
+
+{% macro due_badge(task) %}
+{% if task.due_date %}
+{% set days_left = (task.due_date - today).days %}
+{% if days_left < 0 %}
+<span class="badge bg-danger" title="En retard de {{ -days_left }}j">{{ task.due_date.strftime('%d/%m') }}</span>
+{% elif days_left <= 1 %}
+<span class="badge bg-danger" title="Demain ou aujourd'hui">{{ task.due_date.strftime('%d/%m') }}</span>
+{% elif days_left <= 7 %}
+<span class="badge bg-warning text-dark" title="Dans {{ days_left }}j">{{ task.due_date.strftime('%d/%m') }}</span>
+{% else %}
+<span class="badge bg-success-subtle text-success-emphasis border border-success-subtle" title="Dans {{ days_left }}j">{{ task.due_date.strftime('%d/%m') }}</span>
+{% endif %}
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Tableau de bord</h1>
+  <span class="text-muted small">Bienvenue, {{ current_user.full_name }}</span>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Alerts — bureau only                                                #}
+{# ------------------------------------------------------------------ #}
+{% if current_user.is_bureau %}
+
+{% if not gmail_status.connected %}
+<div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+  <strong>Gmail non connecté.</strong>
+  <a href="{{ url_for('mailbox.oauth_start') }}" class="alert-link">Connecter le compte Gmail →</a>
+</div>
+{% endif %}
+
+{% if expiring_memberships %}
+<div class="alert alert-info" role="alert">
+  <strong>{{ expiring_memberships | length }} adhésion{{ 's' if expiring_memberships | length != 1 }}
+  expirant{{ 'es' if expiring_memberships | length != 1 }} dans les 30 jours.</strong>
+  <ul class="mb-0 mt-1">
+    {% for m in expiring_memberships %}
+    <li>
+      <a href="{{ url_for('members.detail', member_id=m.user_id) }}" class="alert-link">
+        {{ m.user.full_name }}
+      </a>
+      — expire le {{ m.expires_at.strftime('%d/%m/%Y') }}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% endif %}{# /bureau #}
+
+{# ------------------------------------------------------------------ #}
+{# Photo slideshow                                                     #}
+{# ------------------------------------------------------------------ #}
+{% if slideshow_photos %}
+<div id="dashboardCarousel" class="carousel slide mb-4" data-bs-ride="carousel" data-bs-interval="4000"
+     aria-label="Galerie photos">
+  <div class="carousel-inner rounded" style="height:280px;overflow:hidden;">
+    {% for photo in slideshow_photos %}
+    <div class="carousel-item{% if loop.first %} active{% endif %}">
+      <img src="{{ url_for('documents.download', document_id=photo.id) }}"
+           class="d-block w-100" style="object-fit:cover;height:280px;"
+           alt="{{ photo.description or photo.original_filename }}"
+           {% if not loop.first %}loading="lazy"{% endif %}>
+      {% if photo.description %}
+      <div class="carousel-caption d-none d-md-block" style="bottom:.75rem;">
+        <p class="mb-0 small bg-dark bg-opacity-50 rounded px-2 py-1 d-inline-block">
+          {{ photo.description }}
+        </p>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <button class="carousel-control-prev" type="button"
+          data-bs-target="#dashboardCarousel" data-bs-slide="prev">
+    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+    <span class="visually-hidden">Précédent</span>
+  </button>
+  <button class="carousel-control-next" type="button"
+          data-bs-target="#dashboardCarousel" data-bs-slide="next">
+    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+    <span class="visually-hidden">Suivant</span>
+  </button>
+</div>
+
+<script nonce="{{ csp_nonce() }}" data-cfasync="false">
+  // Preload the next and following carousel images before they're displayed
+  // to avoid blank transitions during slow image loads.
+  const carousel = document.getElementById('dashboardCarousel');
+  const preloadImages = (carouselElement) => {
+    const items = carouselElement.querySelectorAll('.carousel-item');
+    const activeItem = carouselElement.querySelector('.carousel-item.active');
+    const activeIndex = Array.from(items).indexOf(activeItem);
+
+    // Preload the next 2 images (current+1 and current+2)
+    for (let offset = 1; offset <= 2; offset++) {
+      const nextIndex = (activeIndex + offset) % items.length;
+      const nextImg = items[nextIndex].querySelector('img');
+      if (nextImg && nextImg.loading === 'lazy') {
+        nextImg.loading = 'eager';
+      }
+    }
+  };
+
+  // Preload on carousel slide event
+  carousel.addEventListener('slide.bs.carousel', () => {
+    setTimeout(() => preloadImages(carousel), 50);
+  });
+
+  // Initial preload
+  preloadImages(carousel);
+</script>
+{% endif %}
+
+{# ------------------------------------------------------------------ #}
+{# KPI counters — smaller, clickable                                   #}
+{# ------------------------------------------------------------------ #}
+<section aria-labelledby="kpi-heading" class="mb-4">
+  <h2 class="visually-hidden" id="kpi-heading">Indicateurs clés</h2>
+  <div class="row g-2">
+    <div class="col-6 col-xl-3">
+      {% if current_user.is_bureau %}
+      <a href="{{ url_for('members.list_members') }}" class="text-decoration-none d-block border rounded p-2 text-center kpi-card">
+      {% else %}
+      <div class="border rounded p-2 text-center kpi-card">
+      {% endif %}
+        <div class="text-muted small text-uppercase fw-semibold">Adhérents actifs</div>
+        <div class="fs-4 fw-bold text-body">{{ active_members }}</div>
+      {% if current_user.is_bureau %}</a>{% else %}</div>{% endif %}
+    </div>
+    <div class="col-6 col-xl-3">
+      {% if current_user.has_permission('machines') %}
+      <a href="{{ url_for('machines.list_machines') }}" class="text-decoration-none d-block border rounded p-2 text-center kpi-card">
+      {% else %}
+      <div class="border rounded p-2 text-center kpi-card">
+      {% endif %}
+        <div class="text-muted small text-uppercase fw-semibold">Machines installées</div>
+        <div class="fs-4 fw-bold text-body">{{ machines_installed }}</div>
+      {% if current_user.has_permission('machines') %}</a>{% else %}</div>{% endif %}
+    </div>
+    <div class="col-6 col-xl-3">
+      {% if current_user.has_permission('events') %}
+      <a href="{{ url_for('events.list_events') }}" class="text-decoration-none d-block border rounded p-2 text-center kpi-card">
+      {% else %}
+      <div class="border rounded p-2 text-center kpi-card">
+      {% endif %}
+        <div class="text-muted small text-uppercase fw-semibold">Événements à venir</div>
+        <div class="fs-4 fw-bold text-body">{{ upcoming_events }}</div>
+      {% if current_user.has_permission('events') %}</a>{% else %}</div>{% endif %}
+    </div>
+    <div class="col-6 col-xl-3">
+      {% if current_user.has_permission('tasks') %}
+      <a href="{{ url_for('tasks.list_tasks') }}" class="text-decoration-none d-block border rounded p-2 text-center kpi-card">
+      {% else %}
+      <div class="border rounded p-2 text-center kpi-card">
+      {% endif %}
+        <div class="text-muted small text-uppercase fw-semibold">Tâches ouvertes</div>
+        <div class="fs-4 fw-bold text-body">{{ open_tasks }}</div>
+      {% if current_user.has_permission('tasks') %}</a>{% else %}</div>{% endif %}
+    </div>
+  </div>
+</section>
+
+<div class="row g-4">
+
+  {# ---------------------------------------------------------------- #}
+  {# Short-term / Urgent events (+/- 3 days)                           #}
+  {# ---------------------------------------------------------------- #}
+  {% if current_user.has_permission('events') and urgent_events %}
+  <div class="col-12 mb-2">
+    <section aria-labelledby="urgent-events-heading">
+      <h2 class="h5 mb-3 text-primary" id="urgent-events-heading">
+        <i class="bi bi-calendar-event me-2"></i>Événements à court terme (+/- 3 jours)
+      </h2>
+      <div class="row g-3">
+        {% for event in urgent_events %}
+        <div class="col-md-6 col-xl-4">
+          <div class="card h-100 border-primary shadow-sm position-relative">
+            <div class="card-body d-flex flex-column">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h3 class="h6 card-title mb-0">
+                  <a href="{{ url_for('events.detail', event_id=event.id) }}" class="stretched-link text-decoration-none text-dark">{{ event.title }}</a>
+                </h3>
+                <span class="badge {% if event.status == 'in_progress' %}bg-success{% elif event.status == 'planned' %}bg-info{% elif event.status == 'completed' %}bg-secondary{% else %}bg-dark{% endif %}">
+                  {% if event.status == 'in_progress' %}En cours{% elif event.status == 'planned' %}Planifié{% elif event.status == 'completed' %}Terminé{% else %}{{ event.status }}{% endif %}
+                </span>
+              </div>
+
+              <div class="small text-muted mb-3">
+                <i class="bi bi-clock me-1"></i>
+                {{ event.event_date.strftime('%d/%m/%Y %H:%M') }}
+                {% if event.end_date %}
+                  <span class="mx-1">→</span> {{ event.end_date.strftime('%H:%M') if event.end_date.date() == event.event_date.date() else event.end_date.strftime('%d/%m/%Y %H:%M') }}
+                {% endif %}
+              </div>
+
+              <div class="small mb-3">
+                {% if event.location %}
+                <div class="mb-1">
+                  <i class="bi bi-geo-alt me-1 text-muted"></i>
+                  <a href="https://maps.google.com/?q={{ event.location | urlencode }}" target="_blank" rel="noopener" class="text-decoration-none position-relative z-3">
+                    {{ event.location }}
+                  </a>
+                </div>
+                {% endif %}
+
+                {% if event.website %}
+                <div class="mb-1">
+                  <i class="bi bi-link-45deg me-1 text-muted"></i>
+                  <a href="{{ event.website }}" target="_blank" rel="noopener" class="text-decoration-none position-relative z-3 text-truncate d-inline-block" style="max-width: 90%;">
+                    {{ event.website | replace('https://', '') | replace('http://', '') | truncate(30) }}
+                  </a>
+                </div>
+                {% endif %}
+              </div>
+
+              <div class="mt-auto">
+                <div class="d-flex align-items-center gap-2 small">
+                  <i class="bi bi-people text-muted"></i>
+                  {% set confirmed_count = event.unique_confirmed_count %}
+                  {% set total_count = event.unique_participants_count %}
+                  <span>{{ confirmed_count }} présent{{ 's' if confirmed_count != 1 }} / {{ total_count }} inscrit{{ 's' if total_count != 1 }}</span>
+                </div>
+                {% set vh = event.volunteer_hours %}
+                {% if vh > 0 %}
+                <div class="small mt-1">
+                  <i class="bi bi-stopwatch text-muted me-1"></i>
+                  <span class="text-info fw-semibold">{{ vh }}h de bénévolat</span>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+  {% endif %}
+
+  {# ---------------------------------------------------------------- #}
+  {# Upcoming events                                                   #}
+  {# ---------------------------------------------------------------- #}
+  {% if current_user.has_permission('events') %}
+  <div class="col-lg-6">
+    <section aria-labelledby="events-heading">
+      <h2 class="h5 mb-3" id="events-heading">Prochains événements</h2>
+      {% if next_events %}
+      <ul class="list-group list-group-flush border rounded">
+        {% for event in next_events %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <a href="{{ url_for('events.detail', event_id=event.id) }}"
+             class="text-decoration-none fw-semibold">{{ event.title }}</a>
+          <small class="text-muted text-nowrap">{{ event.event_date.strftime('%d/%m/%Y') }}</small>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="mt-2">
+        <a href="{{ url_for('events.list_events') }}" class="small">Voir tous les événements →</a>
+      </div>
+      {% else %}
+      <p class="text-muted">Aucun événement à venir.</p>
+      {% endif %}
+    </section>
+  </div>
+  {% endif %}
+
+  {# ---------------------------------------------------------------- #}
+  {# My open tasks                                                     #}
+  {# ---------------------------------------------------------------- #}
+  <div class="col-lg-6">
+    <section aria-labelledby="mytasks-heading">
+      <h2 class="h5 mb-3" id="mytasks-heading">Mes tâches en cours</h2>
+      {% if my_tasks %}
+      <ul class="list-group list-group-flush border rounded">
+        {% for task in my_tasks %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <a href="{{ url_for('tasks.detail', task_id=task.id) }}"
+             class="text-decoration-none fw-semibold">{{ task.title }}</a>
+          <div class="d-flex gap-1">
+            {{ due_badge(task) }}
+            <span class="badge {% if task.priority.value == 'urgent' %}bg-danger{% elif task.priority.value == 'high' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+              {{ task.priority.value }}
+            </span>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if current_user.has_permission('tasks') %}
+      <div class="mt-2">
+        <a href="{{ url_for('tasks.list_tasks') }}" class="small">Voir toutes les tâches →</a>
+      </div>
+      {% endif %}
+      {% else %}
+      <p class="text-muted">Aucune tâche en cours assignée.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  {# ---------------------------------------------------------------- #}
+  {# Machines permission: open maintenance records                     #}
+  {# ---------------------------------------------------------------- #}
+  {% if current_user.has_permission('machines') and open_maintenance %}
+  <div class="col-lg-6">
+    <section aria-labelledby="maint-heading">
+      <h2 class="h5 mb-3" id="maint-heading">
+        <i class="bi bi-tools me-1 text-warning" aria-hidden="true"></i>Maintenances ouvertes
+      </h2>
+      <ul class="list-group list-group-flush border rounded">
+        {% for mr in open_maintenance %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <a href="{{ url_for('machines.detail', machine_id=mr.machine.id) }}"
+               class="text-decoration-none fw-semibold">{{ mr.machine.display_name }}</a>
+            <small class="text-muted d-block">{{ mr.description | truncate(60) }}</small>
+          </div>
+          <small class="text-muted text-nowrap">{{ mr.date.strftime('%d/%m/%Y') }}</small>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+  {% endif %}
+
+  {# ---------------------------------------------------------------- #}
+  {# Machines permission: open breakdown reports                       #}
+  {# ---------------------------------------------------------------- #}
+  {% if current_user.has_permission('machines') and open_breakdowns %}
+  <div class="col-lg-6">
+    <section aria-labelledby="breakdowns-heading">
+      <h2 class="h5 mb-3" id="breakdowns-heading">
+        <i class="bi bi-exclamation-triangle me-1 text-danger" aria-hidden="true"></i>Pannes signalées
+      </h2>
+      <ul class="list-group list-group-flush border rounded">
+        {% for task in open_breakdowns %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            {% if current_user.has_permission('tasks') %}
+            <a href="{{ url_for('tasks.detail', task_id=task.id) }}"
+               class="text-decoration-none fw-semibold">{{ task.title }}</a>
+            {% else %}
+            <span class="fw-semibold">{{ task.title }}</span>
+            {% endif %}
+          </div>
+          <span class="badge {% if task.priority.value == 'urgent' %}bg-danger{% elif task.priority.value == 'high' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+            {{ task.priority.value }}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+  {% endif %}
+
+  {# ---------------------------------------------------------------- #}
+  {# Bureau only: tasks with no assignee                              #}
+  {# ---------------------------------------------------------------- #}
+  {% if current_user.is_bureau and unassigned_tasks %}
+  <div class="col-lg-6">
+    <section aria-labelledby="unassigned-heading">
+      <h2 class="h5 mb-3" id="unassigned-heading">Tâches sans assignation</h2>
+      <ul class="list-group list-group-flush border rounded">
+        {% for task in unassigned_tasks %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <a href="{{ url_for('tasks.detail', task_id=task.id) }}"
+             class="text-decoration-none fw-semibold">{{ task.title }}</a>
+          <div class="d-flex gap-1">
+            {{ due_badge(task) }}
+            <span class="badge {% if task.priority.value == 'urgent' %}bg-danger{% elif task.priority.value == 'high' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+              {{ task.priority.value }}
+            </span>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="mt-2">
+        <a href="{{ url_for('tasks.list_tasks') }}" class="small">Voir toutes les tâches →</a>
+      </div>
+    </section>
+  </div>
+  {% endif %}
+
+  {# ---------------------------------------------------------------- #}
+  {# Bureau only: recent unprocessed emails                            #}
+  {# ---------------------------------------------------------------- #}
+  {% if current_user.has_permission('mailbox') and recent_emails %}
+  <div class="col-lg-6">
+    <section aria-labelledby="emails-heading">
+      <h2 class="h5 mb-3" id="emails-heading">Emails non traités</h2>
+      <ul class="list-group list-group-flush border rounded">
+        {% for email in recent_emails %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div class="text-truncate" style="min-width: 0; flex: 1;">
+            <a href="{{ url_for('mailbox.email_detail', email_id=email.id) }}"
+               class="text-decoration-none fw-semibold text-truncate d-block">
+              {{ email.subject or '(sans sujet)' }}
+            </a>
+            <small class="text-muted">{{ email.sender }}</small>
+          </div>
+          <small class="text-muted text-nowrap">{{ email.received_at.strftime('%d/%m %H:%M') }}</small>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="mt-2">
+        <a href="{{ url_for('mailbox.inbox') }}" class="small">Voir la boîte de réception →</a>
+      </div>
+    </section>
+  </div>
+  {% endif %}
+
+  {# ---------------------------------------------------------------- #}
+  {# Bureau only: audit log feed                                       #}
+  {# ---------------------------------------------------------------- #}
+  {% if current_user.is_bureau and audit_feed %}
+  <div class="col-lg-6">
+    <section aria-labelledby="audit-heading">
+      <h2 class="h5 mb-3" id="audit-heading">Activité récente</h2>
+      <ul class="list-group list-group-flush border rounded">
+        {% for entry in audit_feed %}
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="small">
+              <span class="badge {% if entry.action.value == 'create' %}bg-success{% elif entry.action.value == 'delete' %}bg-danger{% else %}bg-secondary{% endif %} me-1">
+                {{ entry.action.value }}
+              </span>
+              <span class="text-muted">{{ entry.entity_type }} #{{ entry.entity_id }}</span>
+            </div>
+            <small class="text-muted text-nowrap">{{ entry.timestamp.strftime('%d/%m %H:%M') }}</small>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

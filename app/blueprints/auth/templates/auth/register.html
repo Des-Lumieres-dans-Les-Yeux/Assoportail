@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Créer un compte utilisateur — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Tableau de bord</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Créer un compte utilisateur</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-sm-10 col-md-7 col-lg-6">
+
+    <h1 class="h3 mb-1">Créer un compte utilisateur</h1>
+    <p class="text-muted mb-4">
+      Un mot de passe temporaire sera généré automatiquement et envoyé par email à l'utilisateur.
+      Il devra le changer lors de sa première connexion.
+    </p>
+
+    <form method="post" action="{{ url_for('auth.create_user') }}" novalidate>
+      {{ form.hidden_tag() }}
+
+      <div class="row mb-3">
+        <div class="col-12 col-sm-6">
+          {{ form.first_name.label(class="form-label") }}
+          {{ form.first_name(
+                class="form-control" ~ (" is-invalid" if form.first_name.errors else ""),
+                autocomplete="given-name",
+                autofocus=true
+             ) }}
+          {% for error in form.first_name.errors %}
+            <div class="invalid-feedback">{{ error }}</div>
+          {% endfor %}
+        </div>
+        <div class="col-12 col-sm-6">
+          {{ form.last_name.label(class="form-label") }}
+          {{ form.last_name(
+                class="form-control" ~ (" is-invalid" if form.last_name.errors else ""),
+                autocomplete="family-name"
+             ) }}
+          {% for error in form.last_name.errors %}
+            <div class="invalid-feedback">{{ error }}</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        {{ form.email.label(class="form-label") }}
+        {{ form.email(
+              class="form-control" ~ (" is-invalid" if form.email.errors else ""),
+              autocomplete="email"
+           ) }}
+        {% for error in form.email.errors %}
+          <div class="invalid-feedback">{{ error }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="mb-4">
+        {{ form.role.label(class="form-label") }}
+        {{ form.role(class="form-select" ~ (" is-invalid" if form.role.errors else "")) }}
+        {% for error in form.role.errors %}
+          <div class="invalid-feedback">{{ error }}</div>
+        {% endfor %}
+      </div>
+
+      <button type="submit" class="btn btn-primary w-100">Créer le compte</button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

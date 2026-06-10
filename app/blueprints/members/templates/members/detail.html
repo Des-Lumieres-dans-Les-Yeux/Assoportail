@@ -1,0 +1,365 @@
+{% extends "base.html" %}
+
+{% block title %}{{ member.full_name }} — Membres — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('members.list_members') }}">Membres</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ member.full_name }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <h1 class="h3 mb-0">{{ member.full_name }}</h1>
+  <div class="d-flex gap-2">
+    <form action="{{ url_for('auth.admin_reset_password', user_id=member.id) }}" method="post"
+          onsubmit="return confirm('Réinitialiser le mot de passe de {{ member.full_name }} ? Un nouveau mot de passe temporaire lui sera envoyé par email.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-warning btn-sm">
+        Réinitialiser le MDP
+      </button>
+    </form>
+    <a href="{{ url_for('members.edit', user_id=member.id) }}" class="btn btn-outline-secondary btn-sm">
+      Modifier
+    </a>
+    {% if member.id != current_user.id %}
+    <button type="button" class="btn btn-outline-danger btn-sm"
+            data-bs-toggle="modal" data-bs-target="#deleteModal">
+      Supprimer
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{# Member info #}
+<section aria-labelledby="info-heading" class="mb-4">
+  <h2 class="h5" id="info-heading">Informations</h2>
+  <ul class="list-group list-group-flush border rounded">
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Email</span>
+      <a href="mailto:{{ member.email }}">{{ member.email }}</a>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Rôle</span>
+      <span>
+        {% if member.is_bureau %}
+        <span class="badge bg-warning text-dark">Bureau</span>
+        {% else %}
+        Membre
+        {% endif %}
+      </span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Statut du compte</span>
+      <span>
+        {% if member.is_active %}
+        <span class="badge bg-success">Actif</span>
+        {% else %}
+        <span class="badge bg-danger">Désactivé</span>
+        {% endif %}
+      </span>
+    </li>
+    {% if member.phone %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Téléphone</span>
+      <a href="tel:{{ member.phone | replace(' ', '') }}">{{ member.phone }}</a>
+    </li>
+    {% endif %}
+    {% if member.address %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Adresse</span>
+      <a href="https://maps.google.com/?q={{ member.address | urlencode }}" target="_blank" rel="noopener">{{ member.address }}</a>
+    </li>
+    {% endif %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Inscrit le</span>
+      <span>{{ member.created_at.strftime('%d/%m/%Y') }}</span>
+    </li>
+  </ul>
+</section>
+
+{# Volunteer hours & event participations #}
+<section aria-labelledby="participations-heading" class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0" id="participations-heading">
+      Bénévolat
+      {% if total_hours > 0 %}
+      <span class="badge bg-info text-dark ms-2">{{ total_hours }} h</span>
+      {% endif %}
+    </h2>
+    {% if total_hours > 0 %}
+    <a href="{{ url_for('members.member_certificate', user_id=member.id) }}"
+       class="btn btn-outline-success btn-sm" target="_blank">
+      <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Certificat de bénévolat
+    </a>
+    {% endif %}
+  </div>
+
+  {% if participations %}
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Événement</th>
+          <th>Date</th>
+          <th>Lieu</th>
+          <th>Créneaux</th>
+          <th>Heures</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in participations %}
+        <tr>
+          <td>
+            <a href="{{ url_for('events.detail', event_id=p.id) }}" class="text-decoration-none">
+              {{ p.title }}
+            </a>
+          </td>
+          <td class="text-nowrap">{{ p.event_date.strftime('%d/%m/%Y') }}</td>
+          <td>{{ p.location or '—' }}</td>
+          <td>{{ p.slots }}</td>
+          <td><span class="badge bg-info text-dark">{{ p.hours }} h</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Aucune participation enregistrée.</p>
+  {% endif %}
+</section>
+
+{# Expenses #}
+<section aria-labelledby="expenses-heading" class="mb-4">
+  <h2 class="h5 mb-2" id="expenses-heading">Notes de frais</h2>
+
+  {% if expenses %}
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Événement</th>
+          <th>Type</th>
+          <th>Montant</th>
+          <th>Description</th>
+          <th>Soumis le</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in expenses %}
+        <tr>
+          <td>
+            <a href="{{ url_for('events.detail', event_id=e.event_id) }}" class="text-decoration-none">
+              {{ e.event.title }}
+            </a>
+          </td>
+          <td>
+            {% if e.type == 'travel' %}Transport
+            {% elif e.type == 'supply' %}Fourniture
+            {% else %}Autre{% endif %}
+          </td>
+          <td class="fw-semibold text-nowrap">{{ "%.2f"|format(e.amount) }} €</td>
+          <td class="small">{{ e.description | truncate(60) }}</td>
+          <td class="text-nowrap small">{{ e.submitted_at.strftime('%d/%m/%Y') }}</td>
+          <td>
+            {% if e.is_validated %}
+            <span class="badge bg-success">Validé</span>
+            {% else %}
+            <span class="badge bg-warning text-dark">En attente</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Aucune note de frais.</p>
+  {% endif %}
+</section>
+
+{# Membership history #}
+<section aria-labelledby="memberships-heading" class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0" id="memberships-heading">Cotisations</h2>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-primary btn-sm"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#add-membership-form"
+              aria-expanded="false"
+              aria-controls="add-membership-form">
+        Cotisation (espèces)
+      </button>
+      <button class="btn btn-outline-success btn-sm"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#add-helloasso-form"
+              aria-expanded="false"
+              aria-controls="add-helloasso-form">
+        Cotisation (HelloAsso)
+      </button>
+    </div>
+  </div>
+
+  {# Inline cash membership form #}
+  <div class="collapse mb-3" id="add-membership-form">
+    <div class="border rounded p-3 bg-light">
+      <h3 class="h6 mb-3">Nouvelle cotisation en espèces</h3>
+      <form method="post"
+            action="{{ url_for('members.add_membership', user_id=member.id) }}"
+            novalidate>
+        {{ membership_form.hidden_tag() }}
+        <div class="row g-2">
+          <div class="col-sm-3">
+            <label for="{{ membership_form.amount.id }}" class="form-label">
+              {{ membership_form.amount.label.text }}
+            </label>
+            {{ membership_form.amount(class="form-control", id=membership_form.amount.id, step="0.01") }}
+          </div>
+          <div class="col-sm-3">
+            <label for="{{ membership_form.started_at.id }}" class="form-label">
+              {{ membership_form.started_at.label.text }}
+            </label>
+            {{ membership_form.started_at(class="form-control", id=membership_form.started_at.id) }}
+          </div>
+          <div class="col-sm-3">
+            <label for="{{ membership_form.expires_at.id }}" class="form-label">
+              {{ membership_form.expires_at.label.text }}
+            </label>
+            {{ membership_form.expires_at(class="form-control", id=membership_form.expires_at.id) }}
+          </div>
+          <div class="col-sm-3 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100">Enregistrer</button>
+          </div>
+        </div>
+        <div class="mt-2">
+          <label for="{{ membership_form.notes.id }}" class="form-label">
+            {{ membership_form.notes.label.text }}
+          </label>
+          {{ membership_form.notes(class="form-control", id=membership_form.notes.id, rows=2) }}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# Inline HelloAsso membership form #}
+  <div class="collapse mb-3" id="add-helloasso-form">
+    <div class="border rounded p-3 bg-light">
+      <h3 class="h6 mb-3">Déclarer une adhésion HelloAsso</h3>
+      <form method="post"
+            action="{{ url_for('members.add_helloasso_membership', user_id=member.id) }}"
+            novalidate>
+        {{ helloasso_form.hidden_tag() }}
+        <div class="row g-2">
+          <div class="col-sm-3">
+            <label for="{{ helloasso_form.started_at.id }}" class="form-label">
+              {{ helloasso_form.started_at.label.text }}
+            </label>
+            {{ helloasso_form.started_at(class="form-control", id=helloasso_form.started_at.id) }}
+          </div>
+          <div class="col-sm-3">
+            <label for="{{ helloasso_form.expires_at.id }}" class="form-label">
+              {{ helloasso_form.expires_at.label.text }}
+            </label>
+            {{ helloasso_form.expires_at(class="form-control", id=helloasso_form.expires_at.id) }}
+          </div>
+          <div class="col-sm-3 d-flex align-items-end">
+            <button type="submit" class="btn btn-success w-100">Enregistrer</button>
+          </div>
+        </div>
+        <div class="mt-2">
+          <label for="{{ helloasso_form.notes.id }}" class="form-label">
+            {{ helloasso_form.notes.label.text }}
+          </label>
+          {{ helloasso_form.notes(class="form-control", id=helloasso_form.notes.id, rows=2) }}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if memberships %}
+  <ul class="list-group list-group-flush border rounded" aria-label="Historique des cotisations">
+    {% for m in memberships %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          {% if m.status.value == "active" %}
+          <span class="badge bg-success me-2">Actif</span>
+          {% elif m.status.value == "pending" %}
+          <span class="badge bg-warning text-dark me-2">En attente</span>
+          {% else %}
+          <span class="badge bg-secondary me-2">Expiré</span>
+          {% endif %}
+          {{ m.started_at.strftime('%d/%m/%Y') }} → {{ m.expires_at.strftime('%d/%m/%Y') }}
+        </div>
+        <div class="text-end">
+          <span class="fw-semibold">{{ "%.2f"|format(m.amount) }} €</span>
+          <small class="text-muted ms-2">
+            {% if m.source.value == "helloasso" %}HelloAsso{% else %}Espèces{% endif %}
+          </small>
+        </div>
+      </div>
+      {% if m.notes %}
+      <small class="text-muted d-block mt-1">{{ m.notes }}</small>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucune cotisation enregistrée.</p>
+  {% endif %}
+</section>
+
+{% if member.id != current_user.id %}
+<div class="modal fade" id="deleteModal" tabindex="-1"
+     aria-labelledby="deleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteModalLabel">
+          Supprimer {{ member.full_name }}
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <form method="post" action="{{ url_for('members.delete', user_id=member.id) }}">
+        {{ delete_form.hidden_tag() }}
+        <div class="modal-body">
+          <div class="alert alert-danger mb-3">
+            <strong>Action irréversible.</strong> Le compte et toutes les données associées
+            (cotisations, commentaires, tâches créées) seront supprimés définitivement.
+          </div>
+
+          {% if open_assigned_tasks %}
+          <div class="mb-3">
+            <p class="mb-2">
+              <strong>{{ open_assigned_tasks | length }} tâche(s) ouverte(s)</strong>
+              sont actuellement assignées à ce membre :
+            </p>
+            <ul class="small mb-3">
+              {% for task in open_assigned_tasks %}
+              <li>{{ task.title }}</li>
+              {% endfor %}
+            </ul>
+            <label for="transfer_to_id" class="form-label">Transférer ces tâches à :</label>
+            <select name="transfer_to_id" id="transfer_to_id" class="form-select">
+              <option value="">— Laisser non assignées —</option>
+              {% for m in other_members %}
+              <option value="{{ m.id }}">{{ m.full_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-danger">Supprimer définitivement</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

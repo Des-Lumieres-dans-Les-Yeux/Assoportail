@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Événements — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Événements</h1>
+  {% if current_user.is_bureau %}
+  <a href="{{ url_for('events.create') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nouvel événement
+  </a>
+  {% endif %}
+</div>
+
+{# Status filter + upcoming toggle #}
+<form id="events-filter-form" method="get" action="{{ url_for('events.list_events') }}"
+      class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+  <select name="status" class="form-select form-select-sm" style="max-width: 14rem;"
+          aria-label="Filtrer par statut"
+          data-auto-submit="events-filter-form">
+    <option value="" {% if not status %}selected{% endif %}>Tous les statuts</option>
+    <option value="planned"     {% if status == 'planned' %}selected{% endif %}>Planifié</option>
+    <option value="in_progress" {% if status == 'in_progress' %}selected{% endif %}>En cours</option>
+    <option value="completed"   {% if status == 'completed' %}selected{% endif %}>Terminé</option>
+    <option value="cancelled"   {% if status == 'cancelled' %}selected{% endif %}>Annulé</option>
+  </select>
+  <div class="form-check form-switch mb-0">
+    <input type="hidden" name="upcoming" value="0">
+    <input class="form-check-input" type="checkbox" id="upcoming-toggle" name="upcoming"
+           value="1" {% if upcoming == '1' %}checked{% endif %}
+           data-auto-submit="events-filter-form">
+    <label class="form-check-label small" for="upcoming-toggle">À venir uniquement</label>
+  </div>
+  {% if status or upcoming %}
+  <a href="{{ url_for('events.list_events') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-x-lg me-1" aria-hidden="true"></i>Réinitialiser
+  </a>
+  {% endif %}
+</form>
+
+{% if events %}
+<ul class="list-group list-group-flush border rounded" aria-label="Liste des événements">
+  {% for event in events %}
+  <li class="list-group-item">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        {% if event.status == EventStatus.CANCELLED.value %}
+        <span class="badge bg-dark me-1">Annulé</span>
+        {% elif event.status == EventStatus.COMPLETED.value %}
+        <span class="badge bg-success me-1">Terminé</span>
+        {% elif event.status == EventStatus.IN_PROGRESS.value %}
+        <span class="badge bg-primary me-1">En cours</span>
+        {% else %}
+        <span class="badge bg-secondary me-1">Planifié</span>
+        {% endif %}
+
+        <a href="{{ url_for('events.detail', event_id=event.id) }}"
+           class="fw-semibold text-decoration-none
+                  {% if event.status == EventStatus.CANCELLED.value %}text-muted{% endif %}">
+          {{ event.title }}
+        </a>
+
+        {% if event.location %}
+        <small class="text-muted ms-2">{{ event.location }}</small>
+        {% endif %}
+      </div>
+      <div class="d-flex flex-column align-items-end gap-1 text-nowrap">
+        <small class="text-muted">{{ event.event_date.strftime('%d/%m/%Y') }}</small>
+        <div class="d-flex gap-2">
+          {% set upc = event.unique_participants_count %}
+          {% if upc > 0 %}
+          <small class="text-muted" title="Total inscrits (membres + bénévoles)">
+            <i class="bi bi-person me-1" aria-hidden="true"></i>{{ upc }}
+          </small>
+          {% endif %}
+          
+          {% if event.slots %}
+          <small class="text-muted" title="{{ event.slots | length }} créneau{{ 'x' if event.slots | length > 1 }}">
+            <i class="bi bi-calendar2-week me-1" aria-hidden="true"></i>{{ event.slots | length }}
+          </small>
+          {% endif %}
+
+          {% set ucc = event.unique_confirmed_count %}
+          {% if ucc > 0 %}
+          <small class="text-success fw-semibold" title="{{ ucc }} personne{{ 's' if ucc > 1 }} confirmée{{ 's' if ucc > 1 }}">
+            <i class="bi bi-check-lg" aria-hidden="true"></i>{{ ucc }}
+          </small>
+          {% endif %}
+
+          {% set vh = event.volunteer_hours %}
+          {% if vh > 0 %}
+          <small class="text-info fw-semibold" title="{{ vh }} heures bénévoles cumulées">
+            <i class="bi bi-clock-history me-1" aria-hidden="true"></i>{{ vh }}h
+          </small>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+<p class="text-muted mt-2">
+  <small>
+    {% if status or upcoming %}
+      {{ pagination.total }} événement{{ 's' if pagination.total != 1 }} trouvé{{ 's' if pagination.total != 1 }}
+    {% else %}
+      {{ pagination.total }} événement{{ 's' if pagination.total != 1 }}
+    {% endif %}
+  </small>
+</p>
+{% set endpoint = 'events.list_events' %}
+{% set kwargs = {'status': status, 'upcoming': upcoming} %}
+{% include "components/pagination.html" %}
+{% else %}
+<p class="text-muted empty-state">
+  {% if status or upcoming %}Aucun événement ne correspond à ces critères.{% else %}Aucun événement.{% endif %}
+</p>
+{% endif %}
+{% endblock %}

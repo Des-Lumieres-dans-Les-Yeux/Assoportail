@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}{{ task.title }} — Tâches — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('tasks.list_tasks') }}">Tâches</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ task.title }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-1">{{ task.title }}</h1>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      {# Status badge #}
+      {% if task.status.value == 'open' %}<span class="badge bg-secondary">Ouverte</span>
+      {% elif task.status.value == 'in_progress' %}<span class="badge bg-primary">En cours</span>
+      {% elif task.status.value == 'done' %}<span class="badge bg-success">Terminée</span>
+      {% elif task.status.value == 'cancelled' %}<span class="badge bg-dark">Annulée</span>
+      {% endif %}
+      {# Priority badge #}
+      {% if task.priority.value == 'urgent' %}<span class="badge bg-danger">Urgente</span>
+      {% elif task.priority.value == 'high' %}<span class="badge bg-warning text-dark">Haute</span>
+      {% elif task.priority.value == 'low' %}<span class="badge bg-light text-muted border">Basse</span>
+      {% endif %}
+      {# Source #}
+      {% if task.source.value == 'center_breakdown' %}
+      <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">Panne</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if task.source_email_id and current_user.has_permission('mailbox') %}
+    <a href="{{ url_for('mailbox.email_detail', email_id=task.source_email_id) }}"
+       class="btn btn-outline-secondary btn-sm">Voir l'email</a>
+    {% endif %}
+    {% if current_user.is_bureau %}
+    <a href="{{ url_for('tasks.edit', task_id=task.id) }}"
+       class="btn btn-outline-secondary btn-sm">Modifier</a>
+    {% endif %}
+  </div>
+</div>
+
+{# Meta info #}
+<section aria-labelledby="meta-heading" class="mb-4">
+  <h2 class="h5" id="meta-heading">Informations</h2>
+  <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;">
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Créée par</span>
+      <span>{{ task.created_by.full_name }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Assignée à</span>
+      <span>
+        {% if task.assigned_to %}
+        {{ task.assigned_to.full_name }}
+        {% else %}
+        <span class="text-muted fst-italic">Non assignée</span>
+        {% endif %}
+      </span>
+    </li>
+    {% if task.due_date %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Échéance</span>
+      <span>{{ task.due_date.strftime('%d/%m/%Y') }}</span>
+    </li>
+    {% endif %}
+    {% if task.source_center %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Centre</span>
+      {% if current_user.has_permission('centers') %}
+      <a href="{{ url_for('centers.detail', center_id=task.source_center.id) }}">
+        {{ task.source_center.name }}
+      </a>
+      {% else %}
+      <span>{{ task.source_center.name }}</span>
+      {% endif %}
+    </li>
+    {% endif %}
+    {% if task.source_event %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Événement</span>
+      {% if current_user.has_permission('events') %}
+      <a href="{{ url_for('events.detail', event_id=task.source_event.id) }}">
+        {{ task.source_event.title }}
+      </a>
+      {% else %}
+      <span>{{ task.source_event.title }}</span>
+      {% endif %}
+    </li>
+    {% endif %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Créée le</span>
+      <span>{{ task.created_at.strftime('%d/%m/%Y à %H:%M') }}</span>
+    </li>
+    {% if task.completed_at %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Terminée le</span>
+      <span>{{ task.completed_at.strftime('%d/%m/%Y') }}</span>
+    </li>
+    {% endif %}
+  </ul>
+</section>
+
+{# Description #}
+{% if task.description %}
+<section aria-labelledby="desc-heading" class="mb-4">
+  <h2 class="h5" id="desc-heading">Description</h2>
+  <div class="border rounded p-3 bg-light" style="max-width: 42rem; white-space: pre-wrap;">{{ task.description }}</div>
+</section>
+{% endif %}
+
+{# Source email context #}
+{% if task.source_email %}
+{% set email = task.source_email %}
+<section aria-labelledby="email-heading" class="mb-4">
+  <h2 class="h5" id="email-heading">Email source</h2>
+  <div class="border rounded" style="max-width: 42rem;">
+    <ul class="list-group list-group-flush">
+      <li class="list-group-item d-flex justify-content-between gap-3">
+        <span class="text-muted text-nowrap">Objet</span>
+        <span class="text-end fw-semibold">{{ email.subject or '(sans objet)' }}</span>
+      </li>
+      <li class="list-group-item d-flex justify-content-between gap-3">
+        <span class="text-muted text-nowrap">Expéditeur</span>
+        <span class="text-end">{{ email.sender }}</span>
+      </li>
+      <li class="list-group-item d-flex justify-content-between gap-3">
+        <span class="text-muted text-nowrap">Reçu le</span>
+        <span class="text-end">{{ email.received_at.strftime('%d/%m/%Y à %H:%M') }}</span>
+      </li>
+    </ul>
+    {% if email.body_text %}
+    <div class="p-3 border-top">
+      <p class="small text-muted mb-1">Contenu</p>
+      <div class="small" style="white-space: pre-wrap; max-height: 12rem; overflow-y: auto;">{{ email.body_text | truncate(1200) }}</div>
+    </div>
+    {% endif %}
+    {% if email.documents %}
+    <div class="p-3 border-top">
+      <p class="small text-muted mb-1">Pièces jointes</p>
+      <ul class="list-unstyled mb-0 d-flex flex-wrap gap-2">
+        {% for doc in email.documents %}
+        <li>
+          <a href="{{ url_for('documents.download', document_id=doc.id) }}"
+             class="btn btn-outline-secondary btn-sm"
+             title="{{ doc.original_filename }}">
+            <i class="bi bi-paperclip" aria-hidden="true"></i>
+            {{ doc.original_filename | truncate(30) }}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{# Actions #}
+{% set is_active = task.status.value in ['open', 'in_progress'] %}
+{% if is_active %}
+<section aria-label="Actions" class="mb-4 d-flex flex-wrap gap-2">
+  {# Self-assign if unassigned #}
+  {% if task.assigned_to_id is none %}
+  <form method="post" action="{{ url_for('tasks.claim', task_id=task.id) }}">
+    {{ claim_form.hidden_tag() }}
+    <button type="submit" class="btn btn-outline-primary btn-sm">
+      M'assigner cette tâche
+    </button>
+  </form>
+  {% endif %}
+
+  {# Bureau: quick status change #}
+  {% if current_user.is_bureau %}
+  <form method="post" action="{{ url_for('tasks.set_status', task_id=task.id) }}"
+        class="d-flex gap-1 align-items-center">
+    {{ status_form.hidden_tag() }}
+    <label for="{{ status_form.status.id }}" class="visually-hidden">Changer le statut</label>
+    {{ status_form.status(class="form-select form-select-sm", id=status_form.status.id,
+                           style="width: auto;") }}
+    <button type="submit" class="btn btn-outline-secondary btn-sm">Mettre à jour</button>
+  </form>
+
+  {# Lier à un événement #}
+  <details class="border rounded p-0" style="min-width: 18rem;">
+    <summary class="btn btn-outline-info btn-sm px-3 py-2" style="list-style: none; cursor: pointer;">
+      Lier à un événement
+    </summary>
+    <form method="post"
+          action="{{ url_for('tasks.link_task_to_event', task_id=task.id) }}"
+          class="p-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-2">
+        <label class="form-label form-label-sm mb-1 small">Événement</label>
+        <select name="event_id" class="form-select form-select-sm">
+          <option value="">(Détacher l'événement)</option>
+          {% for evt in active_events %}
+          <option value="{{ evt.id }}" {% if task.source_event_id == evt.id %}selected{% endif %}>
+            {{ evt.event_date.strftime('%d/%m') }} — {{ evt.title | truncate(40) }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-info btn-sm">Enregistrer</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+
+{# Convert to maintenance — bureau only, center_breakdown source, not done #}
+{% if current_user.is_bureau and task.source == TaskSource.CENTER_BREAKDOWN and task.status != TaskStatus.DONE %}
+<section aria-labelledby="convert-heading" class="mb-4">
+  <h2 class="h5" id="convert-heading">Convertir en fiche de maintenance</h2>
+  <form method="post"
+        action="{{ url_for('tasks.convert_to_maintenance', task_id=task.id) }}"
+        style="max-width: 30rem;" novalidate>
+    {{ convert_form.hidden_tag() }}
+    <div class="mb-2">
+      <label for="{{ convert_form.machine_id.id }}" class="form-label small">
+        {{ convert_form.machine_id.label.text }} *
+      </label>
+      {{ convert_form.machine_id(class="form-select form-select-sm", id=convert_form.machine_id.id) }}
+      {% for e in convert_form.machine_id.errors %}
+      <div class="text-danger small">{{ e }}</div>
+      {% endfor %}
+    </div>
+    <div class="mb-2">
+      <label for="{{ convert_form.description.id }}" class="form-label small">
+        {{ convert_form.description.label.text }}
+        <span class="text-muted">(laissez vide pour utiliser le titre de la tâche)</span>
+      </label>
+      {{ convert_form.description(class="form-control form-control-sm",
+                                  id=convert_form.description.id, rows=3) }}
+    </div>
+    <div class="mb-3">
+      <label for="{{ convert_form.cost.id }}" class="form-label small">
+        {{ convert_form.cost.label.text }}
+      </label>
+      {{ convert_form.cost(class="form-control form-control-sm",
+                           id=convert_form.cost.id, step="0.01", min="0") }}
+    </div>
+    <button type="submit" class="btn btn-warning btn-sm">Convertir en maintenance</button>
+  </form>
+</section>
+{% endif %}
+
+{# Comments #}
+<section aria-labelledby="comments-heading" class="mb-4">
+  <h2 class="h5" id="comments-heading">
+    Commentaires
+    {% if task.comments %}<small class="text-muted">({{ task.comments | length }})</small>{% endif %}
+  </h2>
+
+  {% if task.comments %}
+  <ul class="list-group list-group-flush border rounded mb-3" aria-label="Fil de commentaires">
+    {% for comment in task.comments %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between mb-1">
+        <strong class="small">{{ comment.author.full_name }}</strong>
+        <small class="text-muted">{{ comment.created_at.strftime('%d/%m/%Y à %H:%M') }}</small>
+      </div>
+      <p class="mb-0" style="white-space: pre-wrap;">{{ comment.body }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <div style="max-width: 42rem;">
+    <form method="post" action="{{ url_for('tasks.add_comment', task_id=task.id) }}" novalidate>
+      {{ comment_form.hidden_tag() }}
+      <label for="{{ comment_form.body.id }}" class="form-label visually-hidden">
+        {{ comment_form.body.label.text }}
+      </label>
+      {{ comment_form.body(class="form-control mb-2", id=comment_form.body.id,
+                           rows=3, placeholder="Ajouter un commentaire…") }}
+      {% for e in comment_form.body.errors %}
+      <div class="text-danger small mb-1">{{ e }}</div>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary btn-sm">Envoyer</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

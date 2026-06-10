@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}{{ poll.title }} — Sondages — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('polls.list_polls') }}">Sondages</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ poll.title }}</li>
+  </ol>
+</nav>
+
+<div class="row g-4">
+  {# ── Left column — poll info ── #}
+  <div class="col-12 col-lg-7">
+
+    {# Cover image #}
+    {% if poll.cover_document_id %}
+    <img src="{{ url_for('documents.download', document_id=poll.cover_document_id) }}"
+         alt="" class="img-fluid rounded mb-3" style="max-height:280px;width:100%;object-fit:cover;" loading="lazy">
+    {% endif %}
+
+    {# Title + status badges #}
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+      <h1 class="h3 mb-0">{{ poll.title }}</h1>
+      {% if poll.is_closed %}
+      <span class="badge bg-secondary">Clôturé</span>
+      {% elif poll.is_expired %}
+      <span class="badge bg-warning text-dark">Expiré</span>
+      {% else %}
+      <span class="badge bg-success">Ouvert</span>
+      {% endif %}
+      {% if poll.allows_multiple %}
+      <span class="badge bg-info text-dark">Choix multiple</span>
+      {% endif %}
+    </div>
+
+    {# Meta #}
+    <p class="text-muted small mb-3">
+      <i class="bi bi-person me-1" aria-hidden="true"></i>{{ poll.created_by.first_name }} {{ poll.created_by.last_name }}
+      &nbsp;·&nbsp;<i class="bi bi-calendar me-1" aria-hidden="true"></i>{{ poll.created_at.strftime('%d/%m/%Y') }}
+      {% if poll.deadline %}
+      &nbsp;·&nbsp;<i class="bi bi-clock me-1" aria-hidden="true"></i>Deadline : {{ poll.deadline.strftime('%d/%m/%Y à %H:%M') }}
+      {% endif %}
+      &nbsp;·&nbsp;<i class="bi bi-people me-1" aria-hidden="true"></i>{{ poll.voter_count() }} participant{{ 's' if poll.voter_count() != 1 else '' }}
+    </p>
+
+    {% if poll.description %}
+    <div class="mb-4" style="white-space:pre-wrap;">{{ poll.description }}</div>
+    {% endif %}
+
+    {# ── Vote form ── #}
+    {% if poll.is_active %}
+    <form method="post" action="{{ url_for('polls.vote', poll_id=poll.id) }}" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <fieldset>
+        <legend class="h5 mb-3">{{ 'Modifier mon vote' if my_option_ids else 'Votre vote' }}</legend>
+        {% for option in poll.options %}
+        <div class="form-check mb-2">
+          {% if poll.allows_multiple %}
+          <input class="form-check-input" type="checkbox" name="option_id" value="{{ option.id }}"
+                 id="opt-{{ option.id }}" {{ 'checked' if option.id in my_option_ids }}>
+          {% else %}
+          <input class="form-check-input" type="radio" name="option_id" value="{{ option.id }}"
+                 id="opt-{{ option.id }}" {{ 'checked' if option.id in my_option_ids }}>
+          {% endif %}
+          <label class="form-check-label" for="opt-{{ option.id }}">{{ option.text }}</label>
+        </div>
+        {% endfor %}
+      </fieldset>
+      <button type="submit" class="btn btn-primary mt-2">
+        <i class="bi bi-check-lg me-1" aria-hidden="true"></i>{{ 'Modifier mon vote' if my_option_ids else 'Voter' }}
+      </button>
+    </form>
+
+    {% elif not poll.is_active and not my_option_ids %}
+    <p class="text-muted fst-italic">Le sondage est clôturé — vous n'aviez pas voté.</p>
+    {% endif %}
+
+    {# ── Results ── #}
+    {% if show_results %}
+    <div class="mt-4">
+      <h2 class="h5 mb-3">Résultats</h2>
+      {% for option in poll.options %}
+      {% set pct = ((option.vote_count / total_votes * 100) | round(1)) if total_votes else 0 %}
+      {% set is_my_vote = option.id in my_option_ids %}
+      <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-baseline mb-1">
+          <span class="{{ 'fw-semibold' if is_my_vote else '' }}">
+            {% if is_my_vote %}<i class="bi bi-check-circle-fill text-success me-1" aria-hidden="true"></i>{% endif %}
+            {{ option.text }}
+          </span>
+          <span class="text-muted small ms-2 text-nowrap">{{ option.vote_count }} vote{{ 's' if option.vote_count != 1 else '' }} ({{ pct }}%)</span>
+        </div>
+        <div class="progress" style="height:10px;" role="progressbar"
+             aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar {{ 'bg-success' if is_my_vote else 'bg-primary' }}"
+               style="width:{{ pct }}%;"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </div>{# /left col #}
+
+  {# ── Right column — bureau actions ── #}
+  {% if current_user.is_bureau %}
+  <div class="col-12 col-lg-4 offset-lg-1">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Actions bureau</div>
+      <div class="card-body d-grid gap-2">
+        <a href="{{ url_for('polls.edit', poll_id=poll.id) }}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-pencil me-1" aria-hidden="true"></i>Modifier le sondage
+        </a>
+
+        <form method="post" action="{{ url_for('polls.toggle_close', poll_id=poll.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-{{ 'success' if poll.is_closed else 'warning' }} btn-sm w-100">
+            <i class="bi bi-{{ 'unlock' if poll.is_closed else 'lock' }} me-1" aria-hidden="true"></i>
+            {{ 'Rouvrir' if poll.is_closed else 'Clôturer' }}
+          </button>
+        </form>
+
+        <form method="post" action="{{ url_for('polls.delete', poll_id=poll.id) }}"
+              data-confirm="Supprimer définitivement ce sondage et tous les votes ?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+            <i class="bi bi-trash me-1" aria-hidden="true"></i>Supprimer
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      if (!confirm(form.dataset.confirm)) { e.preventDefault(); }
+    });
+  });
+}());
+</script>
+{% endblock %}
+
+{% block page_help %}
+<p>Détail d'un sondage.</p>
+<ul>
+  <li>Sélectionnez votre réponse et cliquez sur <strong>Voter</strong>.</li>
+  <li>Les résultats apparaissent après votre vote.</li>
+  {% if current_user.is_bureau %}
+  <li>Bureau : modifiez, clôturez ou supprimez le sondage depuis le panneau à droite.</li>
+  {% endif %}
+</ul>
+{% endblock %}

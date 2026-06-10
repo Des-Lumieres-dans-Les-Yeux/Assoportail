@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Choisir une page Facebook — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('social.list_posts') }}">Publications</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('social.list_accounts') }}">Comptes</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Choisir une page</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-3">Quelle page Facebook connecter ?</h1>
+<p class="text-muted mb-4">
+  Votre compte gère plusieurs pages. Choisissez celle sur laquelle publier.
+</p>
+
+<div class="row g-3" style="max-width: 40rem;">
+  {% for page in pages %}
+  <div class="col-12">
+    <form method="post" action="{{ url_for('social.fb_select_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="page_id" value="{{ page.id }}">
+      <button type="submit" class="btn btn-outline-primary w-100 text-start p-3">
+        <i class="bi bi-facebook me-2" aria-hidden="true"></i>
+        <strong>{{ page.name }}</strong>
+        <small class="text-muted ms-2">ID: {{ page.id }}</small>
+      </button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+
+<p class="mt-3">
+  <a href="{{ url_for('social.list_accounts') }}" class="text-muted small">Annuler</a>
+</p>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Valider la demande — Centres — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('centers.list_centers') }}">Centres</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('centers.list_requests') }}">Demandes d'installation</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Valider la demande</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">Créer un centre partenaire à partir de la demande</h1>
+
+<div class="row">
+  <div class="col-md-7 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white py-2">
+        <h2 class="h6 mb-0"><i class="bi bi-file-earmark-check me-2"></i>Fiche du nouveau centre à valider</h2>
+      </div>
+      <div class="card-body">
+        <form method="post" action="" novalidate>
+          {{ form.hidden_tag() }}
+
+          <div class="mb-3">
+            <label for="{{ form.name.id }}" class="form-label">{{ form.name.label.text }} *</label>
+            {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""), id=form.name.id) }}
+            {% for e in form.name.errors %}
+            <div class="invalid-feedback">{{ e }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.address.id }}" class="form-label">{{ form.address.label.text }}</label>
+            {{ form.address(class="form-control" + (" is-invalid" if form.address.errors else ""), id=form.address.id) }}
+            {% for e in form.address.errors %}
+            <div class="invalid-feedback">{{ e }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-sm-4">
+              <label for="{{ form.zip_code.id }}" class="form-label">{{ form.zip_code.label.text }} *</label>
+              {{ form.zip_code(class="form-control" + (" is-invalid" if form.zip_code.errors else ""), id=form.zip_code.id) }}
+              {% for e in form.zip_code.errors %}
+              <div class="invalid-feedback">{{ e }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-sm-8">
+              <label for="{{ form.city.id }}" class="form-label">{{ form.city.label.text }} *</label>
+              {{ form.city(class="form-control" + (" is-invalid" if form.city.errors else ""), id=form.city.id) }}
+              {% for e in form.city.errors %}
+              <div class="invalid-feedback">{{ e }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.status.id }}" class="form-label">{{ form.status.label.text }}</label>
+            {{ form.status(class="form-select", id=form.status.id) }}
+            <div class="form-text">Choisissez « Partenaire actif » si vous souhaitez directement installer un flipper, ou « Prospect » sinon.</div>
+          </div>
+
+          <div class="mb-4">
+            <label for="{{ form.notes.id }}" class="form-label">{{ form.notes.label.text }}</label>
+            {{ form.notes(class="form-control", id=form.notes.id, rows=4, placeholder="Notes internes pour le suivi de ce centre...") }}
+            {% for e in form.notes.errors %}
+            <div class="invalid-feedback">{{ e }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-check-circle me-1"></i>Créer le centre & contact
+            </button>
+            <a href="{{ url_for('centers.list_requests') }}" class="btn btn-outline-secondary">Annuler</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-5">
+    <div class="card bg-light border-0 shadow-sm mb-4">
+      <div class="card-header bg-secondary text-white py-2">
+        <h2 class="h6 mb-0"><i class="bi bi-info-circle me-2"></i>Détails de la demande originale</h2>
+      </div>
+      <div class="card-body">
+        <h3 class="h6 fw-bold mb-1">Point de contact proposé</h3>
+        <p class="mb-1"><strong>{{ req.contact_name }}</strong>{% if req.contact_role %} <span class="text-muted">({{ req.contact_role }})</span>{% endif %}</p>
+        <p class="mb-1"><i class="bi bi-envelope me-1 text-muted"></i>{{ req.contact_email }}</p>
+        {% if req.contact_phone %}
+        <p class="mb-3"><i class="bi bi-telephone me-1 text-muted"></i>{{ req.contact_phone }}</p>
+        {% else %}
+        <p class="mb-3"></p>
+        {% endif %}
+
+        <h3 class="h6 fw-bold mb-1">Motivation / Présentation du centre</h3>
+        <p class="text-muted small text-break" style="white-space: pre-wrap;">{{ req.motivation }}</p>
+
+        <hr>
+        <small class="text-muted">
+          Une fois le centre validé, les informations du point de contact ci-dessus seront automatiquement enregistrées comme contact principal pour ce centre.
+        </small>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Certificat de bénévolat — {{ volunteer_name }}</title>
+  <style>
+    @page { size: A4 portrait; margin: 20mm 25mm; }
+    body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 12px; color: #222; line-height: 1.6; }
+    .header { text-align: center; margin-bottom: 30px; }
+    .logo { max-height: 80px; max-width: 200px; margin-bottom: 10px; }
+    .asso-name { font-size: 20px; font-weight: bold; color: #1e3a5f; margin: 5px 0; }
+    .asso-details { font-size: 10px; color: #666; }
+    .title { text-align: center; font-size: 18px; font-weight: bold; color: #1e3a5f; margin: 30px 0 20px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; }
+    .body-text { font-size: 12px; margin-bottom: 15px; text-align: justify; }
+    .highlight { font-weight: bold; }
+    .events-table { width: 100%; border-collapse: collapse; margin: 15px 0 25px; font-size: 11px; }
+    .events-table th { background-color: #1e3a5f; color: #fff; padding: 6px 10px; text-align: left; font-size: 10px; text-transform: uppercase; }
+    .events-table td { padding: 5px 10px; border-bottom: 1px solid #ddd; }
+    .events-table tr:nth-child(even) td { background-color: #f8f9fa; }
+    .total-row { font-weight: bold; border-top: 2px solid #1e3a5f; }
+    .signature-block { margin-top: 40px; }
+    .signature-line { display: flex; justify-content: space-between; align-items: flex-start; }
+    .signature-left { font-size: 11px; color: #666; }
+    .signature-right { text-align: center; min-width: 200px; }
+    .signature-title { font-size: 10px; color: #666; margin-bottom: 40px; }
+    .signature-name { font-size: 12px; font-weight: bold; border-top: 1px solid #999; padding-top: 5px; }
+    .footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 8px; color: #999; border-top: 1px solid #ddd; padding-top: 5px; }
+    .legal { font-size: 9px; color: #888; margin-top: 30px; font-style: italic; text-align: center; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  {% if logo_data %}
+  <img src="data:image/png;base64,{{ logo_data }}" class="logo" alt="Logo de l'association">
+  <br>
+  {% endif %}
+  <div class="asso-name">{{ config.name }}</div>
+  <div class="asso-details">
+    {{ config.legal_form or "Association loi 1901" }}
+    {% if config.rna %} — RNA : {{ config.rna }}{% endif %}
+    {% if config.siret %} — SIRET : {{ config.siret }}{% endif %}
+    <br>
+    {% if config.address %}{{ config.address }}, {% endif %}
+    {% if config.zip_code %}{{ config.zip_code }} {% endif %}
+    {{ config.city or "" }}
+  </div>
+</div>
+
+<div class="title">Certificat de bénévolat</div>
+
+<p class="body-text">
+  Je soussigné(e) <span class="highlight">{{ config.representative_name or "Le/La représentant(e)" }}</span>,
+  {{ config.representative_title or "Président(e)" }} de l'association
+  <span class="highlight">{{ config.name }}</span>,
+  {% if config.purpose %}
+  dont l'objet est : <em>{{ config.purpose }}</em>,
+  {% endif %}
+  certifie que :
+</p>
+
+<p class="body-text" style="font-size: 14px; text-align: center; margin: 20px 0;">
+  <span class="highlight">{{ volunteer_name }}</span>
+</p>
+
+<p class="body-text">
+  a participé bénévolement aux activités de l'association et a effectué un total de
+  <span class="highlight">{{ total_hours }} heure{{ 's' if total_hours != 1 }}</span>
+  de bénévolat, réparties sur les événements suivants :
+</p>
+
+<table class="events-table">
+  <thead>
+    <tr>
+      <th>Événement</th>
+      <th>Date</th>
+      <th>Lieu</th>
+      <th style="text-align: right;">Heures</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in participations %}
+    <tr>
+      <td>{{ p.title }}</td>
+      <td>{{ p.event_date.strftime('%d/%m/%Y') }}</td>
+      <td>{{ p.location or '—' }}</td>
+      <td style="text-align: right;">{{ p.hours }} h</td>
+    </tr>
+    {% endfor %}
+    <tr class="total-row">
+      <td colspan="3">Total</td>
+      <td style="text-align: right;">{{ total_hours }} h</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="body-text">
+  Ce certificat est délivré pour servir et valoir ce que de droit.
+</p>
+
+<div class="signature-block">
+  <table width="100%">
+    <tr>
+      <td style="vertical-align: top; font-size: 11px; color: #666;">
+        Fait à {{ config.city or "________" }},<br>
+        le {{ today.strftime('%d/%m/%Y') }}
+      </td>
+      <td style="text-align: center; min-width: 200px;">
+        <div style="font-size: 10px; color: #666; margin-bottom: 50px;">
+          {{ config.representative_title or "Le/La Président(e)" }}
+        </div>
+        <div style="font-size: 12px; font-weight: bold; border-top: 1px solid #999; padding-top: 5px; display: inline-block; min-width: 180px;">
+          {{ config.representative_name or "" }}
+        </div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p class="legal">
+  {{ config.name }}
+  {% if config.address %} — {{ config.address }}{% endif %}
+  {% if config.zip_code %}, {{ config.zip_code }}{% endif %}
+  {% if config.city %} {{ config.city }}{% endif %}
+</p>
+
+</body>
+</html>

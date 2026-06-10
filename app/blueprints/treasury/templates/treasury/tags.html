@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Étiquettes — Trésorerie — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('treasury.list_transactions') }}">Trésorerie</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Étiquettes</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Étiquettes</h1>
+</div>
+
+{% if tags %}
+<ul class="list-group list-group-flush border rounded mb-4" style="max-width: 30rem;"
+    aria-label="Liste des étiquettes">
+  {% for tag in tags %}
+  <li class="list-group-item d-flex justify-content-between align-items-center">
+    <span class="badge" style="background-color: {{ tag.color }}; font-size: 0.9rem;">
+      {{ tag.label }}
+    </span>
+    <div class="d-flex gap-2 align-items-center">
+      <small class="text-muted">{{ tag.color }}</small>
+      <form method="post"
+            action="{{ url_for('treasury.delete_tag', tag_id=tag.id) }}">
+        {{ form.hidden_tag() }}
+        <button type="submit" class="btn btn-outline-danger btn-sm"
+                aria-label="Supprimer {{ tag.label }}">
+          Supprimer
+        </button>
+      </form>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-muted">Aucune étiquette.</p>
+{% endif %}
+
+<h2 class="h5 mb-3">Créer une étiquette</h2>
+<form method="post" action="{{ url_for('treasury.manage_tags') }}"
+      novalidate style="max-width: 30rem;">
+  {{ form.hidden_tag() }}
+  <div class="row g-3 mb-3">
+    <div class="col">
+      <label for="{{ form.label.id }}" class="form-label">{{ form.label.label.text }} *</label>
+      {{ form.label(class="form-control" + (" is-invalid" if form.label.errors else ""),
+                    id=form.label.id, placeholder="Ex : subvention, achat") }}
+      {% for e in form.label.errors %}
+      <div class="invalid-feedback">{{ e }}</div>
+      {% endfor %}
+    </div>
+    <div class="col-auto">
+      <label for="{{ form.color.id }}" class="form-label">{{ form.color.label.text }}</label>
+      {{ form.color(class="form-control form-control-color" + (" is-invalid" if form.color.errors else ""),
+                    id=form.color.id, type="color") }}
+      {% for e in form.color.errors %}
+      <div class="invalid-feedback">{{ e }}</div>
+      {% endfor %}
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary">Créer</button>
+</form>
+{% endblock %}

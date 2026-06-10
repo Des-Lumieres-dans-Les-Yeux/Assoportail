@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Modifier mon profil — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('members.profile') }}">Mon profil</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Modifier</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">Modifier mes informations</h1>
+
+<form method="post" novalidate style="max-width: 40rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.first_name.id }}" class="form-label">{{ form.first_name.label.text }}</label>
+      {{ form.first_name(class="form-control" + (" is-invalid" if form.first_name.errors else ""),
+                         id=form.first_name.id, autocomplete="given-name") }}
+      {% for error in form.first_name.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+      {% endfor %}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.last_name.id }}" class="form-label">{{ form.last_name.label.text }}</label>
+      {{ form.last_name(class="form-control" + (" is-invalid" if form.last_name.errors else ""),
+                        id=form.last_name.id, autocomplete="family-name") }}
+      {% for error in form.last_name.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.email.id }}" class="form-label">{{ form.email.label.text }}</label>
+    {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""),
+                  id=form.email.id, type="email", autocomplete="email") }}
+    {% for error in form.email.errors %}
+    <div class="invalid-feedback">{{ error }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.gender.id }}" class="form-label">{{ form.gender.label.text }}</label>
+    {{ form.gender(class="form-select", id=form.gender.id) }}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.phone.id }}" class="form-label">{{ form.phone.label.text }}</label>
+    {{ form.phone(class="form-control", id=form.phone.id, type="tel", autocomplete="tel") }}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.address.id }}" class="form-label">{{ form.address.label.text }}</label>
+    {{ form.address(class="form-control", id=form.address.id, autocomplete="street-address") }}
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Enregistrer</button>
+    <a href="{{ url_for('members.profile') }}" class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+{% endblock %}

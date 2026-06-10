@@ -1,0 +1,80 @@
+{# Partial: single maintenance record row.
+   Expects: mr (MaintenanceRecord), machine, current_user, resolve_form (if open). #}
+<div class="d-flex justify-content-between align-items-start">
+  <div class="flex-grow-1">
+    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+      <strong>{{ mr.date.strftime('%d/%m/%Y') }}</strong>
+      {% if mr.status.value == "open" %}
+      <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>En cours</span>
+      {% else %}
+      <span class="badge bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i>Résolue</span>
+      {% endif %}
+      <span class="text-muted small">{{ mr.maintainer_name }}</span>
+      {% if mr.source_task_id %}
+      <span class="badge bg-secondary">Tâche #{{ mr.source_task_id }}</span>
+      {% endif %}
+    </div>
+    <p class="mb-1">{{ mr.description }}</p>
+    {% if mr.status.value == "resolved" and mr.resolved_at %}
+    <small class="text-muted">
+      <i class="bi bi-wrench me-1" aria-hidden="true"></i>
+      Résolu le {{ mr.resolved_at.strftime('%d/%m/%Y') }}
+      {% if mr.resolved_by %} par {{ mr.resolved_by.full_name }}{% endif %}
+    </small>
+    {% if mr.resolution_comment %}
+    <p class="mb-0 mt-1 fst-italic text-muted small">{{ mr.resolution_comment }}</p>
+    {% endif %}
+    {% endif %}
+  </div>
+  <div class="d-flex flex-column align-items-end gap-2 ms-3">
+    {% if mr.cost %}
+    <span class="fw-semibold text-nowrap">{{ "%.2f"|format(mr.cost) }} €</span>
+    {% endif %}
+    {% if current_user.is_bureau and mr.status.value == "open" %}
+    <button class="btn btn-outline-success btn-sm"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#resolve-form-{{ mr.id }}"
+            aria-expanded="false"
+            aria-controls="resolve-form-{{ mr.id }}">
+      <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Résoudre
+    </button>
+    {% endif %}
+    {% if current_user.is_bureau %}
+    <form method="post"
+          action="{{ url_for('machines.delete_maintenance', machine_id=machine.id, record_id=mr.id) }}"
+          data-confirm="Supprimer cette fiche de maintenance ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-trash" aria-hidden="true"></i>
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% if current_user.is_bureau and mr.status.value == "open" %}
+<div class="collapse mt-2" id="resolve-form-{{ mr.id }}">
+  <form method="post"
+        action="{{ url_for('machines.resolve_maintenance', machine_id=machine.id, record_id=mr.id) }}"
+        novalidate>
+    {{ resolve_form.hidden_tag() }}
+    <div class="row g-2 mb-2">
+      <div class="col-sm-4">
+        <label for="resolved_at_{{ mr.id }}" class="form-label form-label-sm mb-1">Date de résolution</label>
+        {{ resolve_form.resolved_at(class="form-control form-control-sm", id="resolved_at_" ~ mr.id) }}
+      </div>
+      <div class="col-sm-8">
+        <label for="resolution_comment_{{ mr.id }}" class="form-label form-label-sm mb-1">
+          Commentaire <span class="text-muted">(optionnel)</span>
+        </label>
+        {{ resolve_form.resolution_comment(class="form-control form-control-sm",
+                                           id="resolution_comment_" ~ mr.id, rows=2,
+                                           placeholder="Ce qui a été fait, pièces remplacées…") }}
+      </div>
+    </div>
+    <button type="submit" class="btn btn-success btn-sm">
+      <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Confirmer la résolution
+    </button>
+  </form>
+</div>
+{% endif %}

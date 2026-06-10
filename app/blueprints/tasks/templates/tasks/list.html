@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Tâches — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Tâches</h1>
+  {% if current_user.is_bureau %}
+  <a href="{{ url_for('tasks.create') }}" class="btn btn-primary btn-sm">Nouvelle tâche</a>
+  {% endif %}
+</div>
+
+{# Filters #}
+<form method="get" action="{{ url_for('tasks.list_tasks') }}" class="d-flex flex-wrap gap-2 mb-3">
+  <select name="status" class="form-select form-select-sm" style="width: auto;" aria-label="Filtrer par statut">
+    <option value="" {% if not status_filter %}selected{% endif %}>Tous les statuts</option>
+    <option value="open" {% if status_filter == 'open' %}selected{% endif %}>Ouvertes</option>
+    <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>En cours</option>
+    <option value="done" {% if status_filter == 'done' %}selected{% endif %}>Terminées</option>
+    <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Annulées</option>
+  </select>
+  <select name="priority" class="form-select form-select-sm" style="width: auto;" aria-label="Filtrer par priorité">
+    <option value="" {% if not priority_filter %}selected{% endif %}>Toutes les priorités</option>
+    <option value="urgent" {% if priority_filter == 'urgent' %}selected{% endif %}>Urgente</option>
+    <option value="high" {% if priority_filter == 'high' %}selected{% endif %}>Haute</option>
+    <option value="normal" {% if priority_filter == 'normal' %}selected{% endif %}>Normale</option>
+    <option value="low" {% if priority_filter == 'low' %}selected{% endif %}>Basse</option>
+  </select>
+  {% if not show_all %}
+  <a href="{{ url_for('tasks.list_tasks', all=1) }}" class="btn btn-outline-secondary btn-sm">
+    Afficher terminées
+  </a>
+  {% else %}
+  <a href="{{ url_for('tasks.list_tasks') }}" class="btn btn-outline-secondary btn-sm">
+    Masquer terminées
+  </a>
+  {% endif %}
+  <button type="submit" class="btn btn-outline-primary btn-sm">Filtrer</button>
+</form>
+
+{% if tasks %}
+<ul class="list-group list-group-flush border rounded" aria-label="Liste des tâches">
+  {% for task in tasks %}
+  <li class="list-group-item">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        {# Priority badge #}
+        {% if task.priority.value == 'urgent' %}
+        <span class="badge bg-danger me-1">Urgente</span>
+        {% elif task.priority.value == 'high' %}
+        <span class="badge bg-warning text-dark me-1">Haute</span>
+        {% endif %}
+
+        <a href="{{ url_for('tasks.detail', task_id=task.id) }}"
+           class="fw-semibold text-decoration-none
+                  {% if task.status.value in ['done', 'cancelled'] %}text-muted{% endif %}">
+          {{ task.title }}
+        </a>
+
+        {% if task.source.value == 'center_breakdown' and task.source_center %}
+        <small class="text-muted ms-2">
+          ⚠ {{ task.source_center.name }}
+        </small>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-2 align-items-center text-nowrap">
+        {% if task.assigned_to %}
+        <small class="text-muted">{{ task.assigned_to.full_name }}</small>
+        {% else %}
+        <small class="text-muted fst-italic">Non assignée</small>
+        {% endif %}
+
+        {% if task.status.value == 'open' %}
+        <span class="badge bg-secondary">Ouverte</span>
+        {% elif task.status.value == 'in_progress' %}
+        <span class="badge bg-primary">En cours</span>
+        {% elif task.status.value == 'done' %}
+        <span class="badge bg-success">Terminée</span>
+        {% elif task.status.value == 'cancelled' %}
+        <span class="badge bg-dark">Annulée</span>
+        {% endif %}
+
+        {% if task.due_date %}
+        <small class="text-muted">{{ task.due_date.strftime('%d/%m/%Y') }}</small>
+        {% endif %}
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+<p class="text-muted mt-2">
+  <small>{{ tasks | length }} tâche{{ 's' if tasks | length != 1 }}</small>
+</p>
+{% else %}
+<p class="text-muted">Aucune tâche.</p>
+{% endif %}
+
+{# Maintenance records #}
+<section aria-labelledby="maint-list-heading" class="mt-5">
+  <h2 class="h4 mb-3" id="maint-list-heading">
+    Fiches de maintenance
+    {% if maintenances %}<small class="text-muted fs-6">({{ maintenances | length }})</small>{% endif %}
+  </h2>
+
+  {% if maintenances %}
+  <ul class="list-group list-group-flush border rounded" aria-label="Fiches de maintenance">
+    {% for mr in maintenances %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          {% if current_user.has_permission('machines') %}
+          <a href="{{ url_for('machines.detail', machine_id=mr.machine.id) }}"
+             class="fw-semibold text-decoration-none">
+            {{ mr.machine.display_name }}
+          </a>
+          {% else %}
+          <span class="fw-semibold">{{ mr.machine.display_name }}</span>
+          {% endif %}
+          {% if mr.machine.internal_number %}
+          <small class="text-muted ms-1">[{{ mr.machine.internal_number }}]</small>
+          {% endif %}
+          <p class="mb-0 small text-muted mt-1">{{ mr.description }}</p>
+          <small class="text-muted">{{ mr.maintainer_name }} — {{ mr.date.strftime('%d/%m/%Y') }}</small>
+        </div>
+        <div class="d-flex flex-column align-items-end gap-1">
+          {% if mr.status.value == "open" %}
+          <span class="badge bg-warning text-dark">En cours</span>
+          {% else %}
+          <span class="badge bg-success">Résolue</span>
+          {% if mr.resolved_at %}
+          <small class="text-muted">{{ mr.resolved_at.strftime('%d/%m/%Y') }}</small>
+          {% endif %}
+          {% endif %}
+          {% if mr.cost %}
+          <small class="fw-semibold">{{ "%.2f"|format(mr.cost) }} €</small>
+          {% endif %}
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucune fiche de maintenance{% if not show_all %} en cours{% endif %}.</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block page_help %}
+<p>Suivi des tâches et des maintenances.</p>
+<h3>Sources</h3>
+<ul>
+  <li><strong>Manuel</strong> — créée directement par le Bureau.</li>
+  <li><strong>Email</strong> — issue de la messagerie entrante.</li>
+  <li><strong>Réunion</strong> — issue d'un compte-rendu.</li>
+  <li><strong>Panne centre</strong> — signalement d'un membre.</li>
+  <li><strong>Événement</strong> — liée à un événement.</li>
+</ul>
+<h3>Priorités</h3>
+<ul>
+  <li>Normale (défaut) → Haute → Urgente.</li>
+</ul>
+<h3>Filtres</h3>
+<ul>
+  <li>Les tâches terminées et annulées sont masquées par défaut.</li>
+  <li>Utilisez <em>Afficher terminées</em> pour les voir.</li>
+</ul>
+<h3>Maintenances</h3>
+<ul>
+  <li>Les fiches de maintenance ouvertes apparaissent en bas de page.</li>
+  <li>La résolution se fait depuis la fiche de la machine concernée.</li>
+</ul>
+{% endblock %}

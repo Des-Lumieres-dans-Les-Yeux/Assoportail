@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Membres — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h3 mb-0">Membres <small class="text-muted fw-normal">({{ members | length }})</small></h1>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <a href="{{ url_for('members.list_volunteers') }}"
+       class="btn btn-outline-info btn-sm">
+      <i class="bi bi-heart me-1" aria-hidden="true"></i>Bénévoles
+    </a>
+    <a href="{{ url_for('members.purge_inactive') }}"
+       class="btn btn-outline-danger btn-sm"
+       title="Purge RGPD — comptes inactifs depuis 2 ans">
+      <i class="bi bi-trash me-1" aria-hidden="true"></i>RGPD
+    </a>
+    <form method="post" action="{{ url_for('members.import_csv') }}" id="member-import-form"
+          enctype="multipart/form-data" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="file" name="csv_file" id="member-csv-file" accept=".csv" class="d-none"
+             data-auto-submit="member-import-form">
+      <label for="member-csv-file" class="btn btn-outline-secondary btn-sm" role="button">
+        <i class="bi bi-upload me-1" aria-hidden="true"></i>Importer CSV
+      </label>
+    </form>
+    <a href="{{ url_for('members.export_csv') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-download me-1" aria-hidden="true"></i>Exporter CSV
+    </a>
+    <a href="{{ url_for('members.create') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nouveau membre
+    </a>
+  </div>
+</div>
+
+{# Client-side search #}
+<div class="mb-3" style="max-width: 30rem;">
+  <label for="member-search" class="visually-hidden">Rechercher un membre</label>
+  <input id="member-search"
+         type="search"
+         class="form-control form-control-sm"
+         placeholder="Filtrer par nom, email, téléphone…"
+         aria-label="Filtrer la liste des membres"
+         data-table-filter="members-table">
+</div>
+
+{% if members %}
+<div class="table-responsive">
+  <table id="members-table" class="table table-sm table-hover align-middle mb-0" data-sortable>
+    <thead class="table-light">
+      <tr>
+        <th scope="col" data-sort>Nom</th>
+        <th scope="col" data-sort>Email</th>
+        <th scope="col" data-sort>Téléphone</th>
+        <th scope="col" data-sort>Rôle</th>
+        <th scope="col" data-sort>Bénévolat</th>
+        <th scope="col" data-sort>Cotisation</th>
+        <th scope="col" data-sort>Dernière connexion</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for user, latest_membership, hours in members %}
+    <tr {% if not user.is_active %}class="table-danger bg-opacity-10"{% endif %}>
+      <td>
+        <a href="{{ url_for('members.detail', user_id=user.id) }}" class="fw-semibold text-decoration-none">
+          {{ user.full_name }}
+        </a>
+        {% if not user.is_active %}
+        <span class="badge bg-danger ms-1">Désactivé</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="mailto:{{ user.email }}" class="text-decoration-none">{{ user.email }}</a>
+      </td>
+      <td>
+        {% if user.phone %}
+        <a href="tel:{{ user.phone }}" class="text-decoration-none text-nowrap">{{ user.phone }}</a>
+        {% else %}
+        <span class="text-muted">—</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if user.is_bureau %}
+        <span class="badge bg-warning text-dark">Bureau</span>
+        {% else %}
+        <span class="text-muted small">Membre</span>
+        {% endif %}
+      </td>
+      <td data-sort-value="{{ hours }}">
+        {% if hours > 0 %}
+        <span class="badge bg-info text-dark">{{ hours }} h</span>
+        {% else %}
+        <span class="text-muted">—</span>
+        {% endif %}
+      </td>
+      <td data-sort-value="{% if not user.is_active %}0{% elif latest_membership is none %}1{% elif latest_membership.status.value == 'active' %}4{% elif latest_membership.status.value == 'pending' %}3{% else %}2{% endif %}">
+        {% if latest_membership is none %}
+        <span class="badge bg-secondary">Sans cotisation</span>
+        {% elif latest_membership.status.value == "active" %}
+        <span class="badge bg-success">Actif</span>
+        <small class="text-muted d-block">→ {{ latest_membership.expires_at.strftime('%d/%m/%Y') }}</small>
+        {% elif latest_membership.status.value == "pending" %}
+        <span class="badge bg-warning text-dark">En attente</span>
+        {% else %}
+        <span class="badge bg-secondary">Expiré</span>
+        <small class="text-muted d-block">{{ latest_membership.expires_at.strftime('%d/%m/%Y') }}</small>
+        {% endif %}
+      </td>
+      <td data-sort-value="{{ user.last_login_at.isoformat() if user.last_login_at else '0' }}">
+        {% if user.last_login_at %}
+        <small>{{ user.last_login_at.strftime('%d/%m/%Y %H:%M') }}</small>
+        {% else %}
+        <small class="text-muted">Jamais</small>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">Aucun membre.</p>
+{% endif %}
+{% endblock %}

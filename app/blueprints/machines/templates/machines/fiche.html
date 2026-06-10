@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Fiche technique — {{ machine.display_name }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 20mm 15mm; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    .subtitle { color: #555; font-size: 12px; margin-bottom: 20px; }
+    h2 { font-size: 13px; font-weight: bold; border-bottom: 2px solid #2563EB;
+         color: #1e40af; padding-bottom: 3px; margin-top: 20px; margin-bottom: 10px; }
+    table.info { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    table.info td { padding: 5px 8px; border: 1px solid #ddd; vertical-align: top; }
+    table.info td:first-child { font-weight: bold; background: #f3f4f6; width: 10rem; color: #374151; }
+    table.history { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    table.history th {
+      background: #2563EB; color: #fff; padding: 6px 8px;
+      text-align: left; border: 1px solid #1d4ed8; font-size: 11px;
+    }
+    table.history td { padding: 6px 8px; border: 1px solid #ddd; font-size: 11px; }
+    table.history tr:nth-child(even) td { background: #f9fafb; }
+    .badge-installed { background: #16a34a; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+    .badge-stock { background: #6b7280; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+    .badge-maintenance { background: #d97706; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+    .badge-retired { background: #111827; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+    .badge-open { background: #dc2626; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+    .badge-resolved { background: #16a34a; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+    .empty { color: #9ca3af; font-style: italic; }
+    .footer { margin-top: 30px; font-size: 10px; color: #9ca3af; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 8px; }
+    @page { size: A4 portrait; margin: 20mm 15mm; }
+  </style>
+</head>
+<body>
+
+<h1>Fiche technique machine</h1>
+<p class="subtitle">Générée le {{ today.strftime('%d/%m/%Y') }}</p>
+
+<h2>Identification</h2>
+<table class="info">
+  <tr><td>Fabricant</td><td>{{ machine.manufacturer }}</td></tr>
+  <tr><td>Modèle</td><td>{{ machine.model }}</td></tr>
+  {% if machine.internal_number %}
+  <tr><td>N° interne</td><td>{{ machine.internal_number }}</td></tr>
+  {% endif %}
+  {% if machine.serial_number %}
+  <tr><td>N° de série</td><td>{{ machine.serial_number }}</td></tr>
+  {% endif %}
+  {% if machine.year %}
+  <tr><td>Année</td><td>{{ machine.year }}</td></tr>
+  {% endif %}
+  <tr>
+    <td>Statut</td>
+    <td>
+      {% if machine.status.value == "installed" %}<span class="badge-installed">Installée</span>
+      {% elif machine.status.value == "stock" %}<span class="badge-stock">En stock</span>
+      {% elif machine.status.value == "maintenance" %}<span class="badge-maintenance">Maintenance</span>
+      {% elif machine.status.value == "retired" %}<span class="badge-retired">Retirée</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% if machine.notes %}
+  <tr><td>Notes</td><td>{{ machine.notes }}</td></tr>
+  {% endif %}
+</table>
+
+<h2>Historique des installations</h2>
+{% if machine.installations %}
+<table class="history">
+  <thead>
+    <tr>
+      <th>Centre</th>
+      <th>Ville</th>
+      <th>Date d'installation</th>
+      <th>Date de retrait</th>
+      <th>Durée</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for inst in machine.installations %}
+    <tr>
+      <td>{{ inst.center.name }}</td>
+      <td>{{ inst.center.city }}</td>
+      <td>{{ inst.installed_at.strftime('%d/%m/%Y') }}</td>
+      <td>
+        {% if inst.removed_at %}{{ inst.removed_at.strftime('%d/%m/%Y') }}
+        {% else %}<span class="badge-installed">En cours</span>{% endif %}
+      </td>
+      <td>
+        {% if inst.removed_at %}
+          {{ (inst.removed_at - inst.installed_at).days }} j
+        {% else %}
+          {{ (today - inst.installed_at).days }} j (en cours)
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">Aucune installation enregistrée.</p>
+{% endif %}
+
+<h2>Historique de maintenance</h2>
+{% if machine.maintenance_records %}
+<table class="history">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Intervenant</th>
+      <th>Description</th>
+      <th>Coût</th>
+      <th>Statut</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for mr in machine.maintenance_records %}
+    <tr>
+      <td>{{ mr.date.strftime('%d/%m/%Y') }}</td>
+      <td>{{ mr.maintainer_name or '—' }}</td>
+      <td>{{ mr.description }}</td>
+      <td>{% if mr.cost %}{{ "%.2f"|format(mr.cost) }} €{% else %}—{% endif %}</td>
+      <td>
+        {% if mr.status.value == "open" %}<span class="badge-open">En cours</span>
+        {% else %}<span class="badge-resolved">Résolue</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% set total_cost = machine.maintenance_records | sum(attribute='cost') %}
+{% if total_cost %}
+<p style="text-align:right; margin-top:4px; font-size:11px;">
+  Coût total maintenance : <strong>{{ "%.2f"|format(total_cost) }} €</strong>
+</p>
+{% endif %}
+{% else %}
+<p class="empty">Aucune fiche de maintenance.</p>
+{% endif %}
+
+<div class="footer">
+  Assoportail — Document confidentiel — {{ today.strftime('%d/%m/%Y') }}
+</div>
+
+</body>
+</html>

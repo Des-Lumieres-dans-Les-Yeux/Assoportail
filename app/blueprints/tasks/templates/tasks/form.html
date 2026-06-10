@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('tasks.list_tasks') }}">Tâches</a></li>
+    {% if task is defined %}
+    <li class="breadcrumb-item">
+      <a href="{{ url_for('tasks.detail', task_id=task.id) }}">{{ task.title }}</a>
+    </li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-4">{{ title }}</h1>
+
+<form method="post" novalidate style="max-width: 36rem;">
+  {{ form.hidden_tag() }}
+
+  <div class="mb-3">
+    <label for="{{ form.title.id }}" class="form-label">{{ form.title.label.text }}</label>
+    {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""),
+                  id=form.title.id) }}
+    {% for e in form.title.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+  </div>
+
+  <div class="mb-3">
+    <label for="{{ form.description.id }}" class="form-label">{{ form.description.label.text }}</label>
+    {{ form.description(class="form-control", id=form.description.id, rows=4) }}
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.priority.id }}" class="form-label">{{ form.priority.label.text }}</label>
+      {{ form.priority(class="form-select", id=form.priority.id) }}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.status.id }}" class="form-label">{{ form.status.label.text }}</label>
+      {{ form.status(class="form-select", id=form.status.id) }}
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label for="{{ form.assigned_to_id.id }}" class="form-label">{{ form.assigned_to_id.label.text }}</label>
+      {{ form.assigned_to_id(class="form-select", id=form.assigned_to_id.id) }}
+    </div>
+    <div class="col-sm-6">
+      <label for="{{ form.due_date.id }}" class="form-label">{{ form.due_date.label.text }}</label>
+      {{ form.due_date(class="form-control", id=form.due_date.id) }}
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Enregistrer</button>
+    <a href="{{ url_for('tasks.list_tasks') }}" class="btn btn-outline-secondary">Annuler</a>
+  </div>
+</form>
+{% endblock %}

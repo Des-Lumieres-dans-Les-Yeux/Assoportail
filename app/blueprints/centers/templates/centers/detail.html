@@ -1,0 +1,569 @@
+{% extends "base.html" %}
+
+{% block title %}{{ center.name }} — Centres — Assoportail{% endblock %}
+
+{% block content %}
+<nav aria-label="Fil d'Ariane" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('centers.list_centers') }}">Centres</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ center.name }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-0">{{ center.name }}</h1>
+    <small class="text-muted">{{ center.city }} {{ center.zip_code }}</small>
+  </div>
+  {% if current_user.has_permission('centers') %}
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('centers.edit', center_id=center.id) }}"
+       class="btn btn-outline-secondary btn-sm">Modifier</a>
+    {% if current_user.is_bureau %}
+    <form method="post" action="{{ url_for('centers.delete', center_id=center.id) }}"
+          data-confirm="Supprimer le centre « {{ center.name }} » ? Cette action est irréversible.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{# Info #}
+<section aria-labelledby="info-heading" class="mb-4">
+  <h2 class="h5" id="info-heading">Informations</h2>
+  <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;">
+    {% if center.address %}
+    {% set full_address = [center.address, center.zip_code, center.city] | select | join(' ') %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Adresse</span>
+      <a href="https://maps.google.com/?q={{ full_address | urlencode }}"
+         target="_blank" rel="noopener" class="text-decoration-none text-end">
+        {{ center.address }}
+        <i class="bi bi-geo-alt text-muted ms-1" aria-hidden="true"></i>
+      </a>
+    </li>
+    {% endif %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Statut</span>
+      <span>
+        {% if center.status.value == "active" %}<span class="badge bg-success">Partenaire actif</span>
+        {% elif center.status.value == "prospect" %}<span class="badge bg-info text-dark">Prospect</span>
+        {% elif center.status.value == "inactive" %}<span class="badge bg-secondary">Inactif</span>
+        {% elif center.status.value == "lost" %}<span class="badge bg-danger">Perdu</span>
+        {% endif %}
+      </span>
+    </li>
+  </ul>
+  {% if center.notes %}
+  <p class="text-muted mt-2 fst-italic">{{ center.notes }}</p>
+  {% endif %}
+</section>
+
+{# Photos #}
+<section aria-labelledby="photos-heading" class="mb-4">
+  <h2 class="h5" id="photos-heading">
+    <i class="bi bi-images me-1" aria-hidden="true"></i>Photos
+    {% if center.documents %}<small class="text-muted">({{ center.documents | length }})</small>{% endif %}
+  </h2>
+
+  {% set photos = center.documents | selectattr('type', 'equalto', 'photo') | list %}
+  {% if photos %}
+  <div class="row g-2 mb-3">
+    {% for doc in photos %}
+    <div class="col-6 col-sm-4 col-md-3">
+      <div class="card border-0 h-100">
+        <a href="{{ doc.drive_web_link or url_for('documents.download', document_id=doc.id) }}"
+           target="_blank" class="d-block rounded overflow-hidden border"
+           style="aspect-ratio:1;">
+          <img src="{{ url_for('documents.download', document_id=doc.id) }}"
+               alt="{{ doc.description or doc.original_filename }}" loading="lazy"
+               class="w-100 h-100" style="object-fit:cover;">
+        </a>
+        <div class="card-body p-1">
+          {% if doc.description %}
+          <small class="text-muted">{{ doc.description }}</small>
+          {% endif %}
+          {% if current_user.is_bureau %}
+          <form method="post"
+                action="{{ url_for('centers.detach_photo', center_id=center.id, document_id=doc.id) }}"
+                data-confirm="Détacher cette photo ?" class="mt-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1">
+              <i class="bi bi-x-lg" aria-hidden="true"></i> <small>Retirer</small>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted">Aucune photo.</p>
+  {% endif %}
+
+  <details>
+    <summary class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-camera me-1" aria-hidden="true"></i>Ajouter une photo
+    </summary>
+    <form method="post" action="{{ url_for('centers.upload_photo', center_id=center.id) }}"
+          enctype="multipart/form-data"
+          class="mt-3 border rounded p-3 bg-light d-flex flex-wrap align-items-end gap-3"
+          style="max-width: 36rem;" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="flex-grow-1">
+        <label for="center-photo-file" class="form-label small">
+          Photo <span class="text-danger">*</span>
+          <span class="text-muted">(JPG, PNG, GIF, WebP — max 10 Mo)</span>
+        </label>
+        <input type="file" id="center-photo-file" name="file"
+               class="form-control form-control-sm"
+               accept="image/jpeg,image/png,image/gif,image/webp"
+               multiple required>
+      </div>
+      <div style="min-width: 14rem;">
+        <label for="center-photo-desc" class="form-label small">
+          Description <span class="text-muted">(optionnel)</span>
+        </label>
+        <input type="text" id="center-photo-desc" name="description"
+               class="form-control form-control-sm" maxlength="500"
+               placeholder="Ex : Salle d'attente, machine en place…">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm text-nowrap">
+        <i class="bi bi-upload me-1" aria-hidden="true"></i>Envoyer
+      </button>
+    </form>
+  </details>
+</section>
+
+{# Convention document #}
+<section aria-labelledby="convention-heading" class="mb-4">
+  <h2 class="h5" id="convention-heading">
+    <i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i>Convention
+  </h2>
+  {% if center.convention_document %}
+  {% set doc = center.convention_document %}
+  <div class="d-flex align-items-center gap-3 border rounded p-3 bg-light" style="max-width: 36rem;">
+    <i class="bi bi-file-earmark-text fs-3 text-secondary" aria-hidden="true"></i>
+    <div class="flex-grow-1 min-w-0">
+      <a href="{{ url_for('documents.download', document_id=doc.id) }}"
+         class="fw-semibold text-decoration-none text-truncate d-block"
+         target="_blank">{{ doc.original_filename }}</a>
+      <small class="text-muted">
+        {{ (doc.size_bytes / 1024) | round(1) }} Ko
+        — téléversé le {{ doc.uploaded_at.strftime('%d/%m/%Y') }}
+      </small>
+    </div>
+    {% if current_user.is_bureau %}
+    <form method="post" action="{{ url_for('centers.convention_detach', center_id=center.id) }}"
+          data-confirm="Détacher la convention ? Le fichier reste dans la galerie.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm" aria-label="Détacher la convention">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="text-muted mb-2">Aucune convention enregistrée.</p>
+  {% if current_user.is_bureau %}
+  <details>
+    <summary class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-upload me-1" aria-hidden="true"></i>Téléverser la convention
+    </summary>
+    <form method="post" action="{{ url_for('centers.convention_upload', center_id=center.id) }}"
+          enctype="multipart/form-data"
+          class="mt-3 border rounded p-3 bg-light d-flex align-items-end gap-3"
+          style="max-width: 36rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="flex-grow-1">
+        <label for="convention-file" class="form-label small">
+          Fichier PDF, DOCX ou ODT <span class="text-danger">*</span>
+        </label>
+        <input type="file" id="convention-file" name="convention_file"
+               class="form-control form-control-sm" accept=".pdf,.docx,.odt" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm text-nowrap">
+        <i class="bi bi-upload me-1" aria-hidden="true"></i>Envoyer
+      </button>
+    </form>
+  </details>
+  {% endif %}
+  {% endif %}
+</section>
+
+{# Contacts #}
+<section aria-labelledby="contacts-heading" class="mb-4">
+  <h2 class="h5" id="contacts-heading">
+    Contacts
+    {% if center.contacts %}<small class="text-muted">({{ center.contacts | length }})</small>{% endif %}
+  </h2>
+
+  {% if center.contacts %}
+  <ul class="list-group list-group-flush border rounded mb-3" style="max-width: 36rem;"
+      aria-label="Contacts du centre">
+    {% for contact in center.contacts %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <strong>{{ contact.name }}</strong>
+          {% if contact.role %}<span class="text-muted small ms-2">{{ contact.role }}</span>{% endif %}
+          <div class="d-flex flex-wrap gap-3 mt-1">
+            {% if contact.email %}
+            <a href="mailto:{{ contact.email }}" class="small">{{ contact.email }}</a>
+            {% endif %}
+            {% if contact.phone %}
+            <span class="small text-muted">{{ contact.phone }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if current_user.has_permission('centers') %}
+        <form method="post"
+              action="{{ url_for('centers.delete_contact', center_id=center.id, contact_id=contact.id) }}"
+              data-confirm="Supprimer ce contact ?">
+          {{ contact_form.hidden_tag() }}
+          <button type="submit" class="btn btn-outline-danger btn-sm"
+                  aria-label="Supprimer {{ contact.name }}">Supprimer</button>
+        </form>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucun contact enregistré.</p>
+  {% endif %}
+
+  {% if current_user.has_permission('centers') %}
+  <details>
+    <summary class="btn btn-outline-primary btn-sm">Ajouter un contact</summary>
+    <form method="post" action="{{ url_for('centers.add_contact', center_id=center.id) }}"
+          class="mt-3 border rounded p-3 bg-light" style="max-width: 36rem;" novalidate>
+      {{ contact_form.hidden_tag() }}
+      <div class="row g-2 mb-2">
+        <div class="col-sm-7">
+          <label for="{{ contact_form.name.id }}" class="form-label small">Nom *</label>
+          {{ contact_form.name(class="form-control form-control-sm", id=contact_form.name.id) }}
+          {% for e in contact_form.name.errors %}
+          <div class="text-danger small">{{ e }}</div>
+          {% endfor %}
+        </div>
+        <div class="col-sm-5">
+          <label for="{{ contact_form.role.id }}" class="form-label small">Rôle</label>
+          {{ contact_form.role(class="form-control form-control-sm", id=contact_form.role.id,
+                               placeholder="ex: Directeur") }}
+        </div>
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-sm-7">
+          <label for="{{ contact_form.email.id }}" class="form-label small">Email</label>
+          {{ contact_form.email(class="form-control form-control-sm", id=contact_form.email.id,
+                                type="email") }}
+          {% for e in contact_form.email.errors %}
+          <div class="text-danger small">{{ e }}</div>
+          {% endfor %}
+        </div>
+        <div class="col-sm-5">
+          <label for="{{ contact_form.phone.id }}" class="form-label small">Téléphone</label>
+          {{ contact_form.phone(class="form-control form-control-sm", id=contact_form.phone.id,
+                                type="tel") }}
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Ajouter</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+{# Installation history (all — active + historical) #}
+<section aria-labelledby="machines-heading" class="mb-4">
+  <h2 class="h5" id="machines-heading">
+    Machines
+    {% if center.installations %}<small class="text-muted">({{ center.installations | length }})</small>{% endif %}
+  </h2>
+  {% if center.installations %}
+  <ul class="list-group list-group-flush border rounded" aria-label="Historique des installations">
+    {% for inst in center.installations %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          {% if current_user.has_permission('machines') %}
+          <a href="{{ url_for('machines.detail', machine_id=inst.machine.id) }}"
+             class="fw-semibold text-decoration-none">
+            {{ inst.machine.display_name }}
+          </a>
+          {% else %}
+          <span class="fw-semibold">{{ inst.machine.display_name }}</span>
+          {% endif %}
+          {% if inst.machine.internal_number %}
+          <small class="text-muted ms-1">[{{ inst.machine.internal_number }}]</small>
+          {% endif %}
+        </div>
+        <div class="text-end">
+          <small class="text-muted">
+            {{ inst.installed_at.strftime('%d/%m/%Y') }}
+            {% if inst.removed_at %}
+            → {{ inst.removed_at.strftime('%d/%m/%Y') }}
+            {% else %}
+            <span class="badge bg-success ms-1">En cours</span>
+            {% endif %}
+          </small>
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucune machine installée.</p>
+  {% endif %}
+
+  {% if current_user.has_permission('centers') %}
+  <details class="mt-3">
+    <summary class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Installer une machine
+    </summary>
+    {% if available_machines %}
+    <form method="post" action="{{ url_for('centers.install_machine', center_id=center.id) }}"
+          class="mt-3 border rounded p-3 bg-light d-flex align-items-end gap-3 flex-wrap"
+          style="max-width: 42rem;" novalidate>
+      {{ install_form.hidden_tag() }}
+      <div class="flex-grow-1">
+        <label for="{{ install_form.machine_id.id }}" class="form-label small">
+          Machine <span class="text-danger">*</span>
+        </label>
+        {{ install_form.machine_id(class="form-select form-select-sm", id=install_form.machine_id.id) }}
+      </div>
+      <div>
+        <label for="{{ install_form.installed_at.id }}" class="form-label small">
+          Date d'installation <span class="text-danger">*</span>
+        </label>
+        {{ install_form.installed_at(class="form-control form-control-sm", id=install_form.installed_at.id,
+                                     type="date") }}
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm text-nowrap">
+        <i class="bi bi-box-arrow-in-down me-1" aria-hidden="true"></i>Installer
+      </button>
+    </form>
+    {% else %}
+    <p class="text-muted mt-3 mb-0">Aucune machine disponible en stock.</p>
+    {% endif %}
+  </details>
+  {% endif %}
+</section>
+
+{# Maintenance history at this center #}
+{% if center.maintenance_records %}
+<section aria-labelledby="maint-history-heading" class="mb-4">
+  <h2 class="h5" id="maint-history-heading">
+    Maintenances effectuées
+    <small class="text-muted">({{ center.maintenance_records | length }})</small>
+  </h2>
+  <ul class="list-group list-group-flush border rounded" aria-label="Maintenances au centre">
+    {% for mr in center.maintenance_records %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          {% if current_user.has_permission('machines') %}
+          <a href="{{ url_for('machines.detail', machine_id=mr.machine.id) }}"
+             class="fw-semibold text-decoration-none">{{ mr.machine.display_name }}</a>
+          {% else %}
+          <span class="fw-semibold">{{ mr.machine.display_name }}</span>
+          {% endif %}
+          <small class="text-muted ms-2">{{ mr.date.strftime('%d/%m/%Y') }}</small>
+          {% if mr.status.value == "open" %}
+          <span class="badge bg-warning text-dark ms-1">En cours</span>
+          {% else %}
+          <span class="badge bg-success ms-1">Résolue</span>
+          {% endif %}
+          <p class="mb-0 small mt-1">{{ mr.description }}</p>
+        </div>
+        {% if mr.cost %}
+        <span class="fw-semibold text-nowrap">{{ "%.2f"|format(mr.cost) }} €</span>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{# Breakdown report #}
+<section aria-labelledby="breakdown-heading" class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0" id="breakdown-heading">Signaler une panne</h2>
+    <button class="btn btn-outline-danger btn-sm"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#breakdown-form"
+            aria-expanded="false"
+            aria-controls="breakdown-form">
+      Signaler
+    </button>
+  </div>
+  <div class="collapse" id="breakdown-form">
+    <div class="border rounded p-3 bg-light" style="max-width: 36rem;">
+      <form method="post"
+            action="{{ url_for('centers.report_breakdown', center_id=center.id) }}"
+            novalidate>
+        {{ breakdown_form.hidden_tag() }}
+        <div class="mb-2">
+          <label for="{{ breakdown_form.description.id }}" class="form-label">
+            {{ breakdown_form.description.label.text }}
+          </label>
+          {{ breakdown_form.description(class="form-control", id=breakdown_form.description.id, rows=3) }}
+        </div>
+        <div class="mb-3">
+          <label for="{{ breakdown_form.priority.id }}" class="form-label">
+            {{ breakdown_form.priority.label.text }}
+          </label>
+          {{ breakdown_form.priority(class="form-select", id=breakdown_form.priority.id,
+                                      style="max-width: 12rem;") }}
+        </div>
+        <button type="submit" class="btn btn-danger">Envoyer le signalement</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+{# Guestbook & moderation (bureau) #}
+<section aria-labelledby="feedback-heading" class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0" id="feedback-heading">Témoignages</h2>
+    <a href="{{ url_for('centers.guestbook', center_id=center.id) }}"
+       class="btn btn-outline-secondary btn-sm">Voir le livre d'or</a>
+  </div>
+
+  {% if current_user.is_bureau %}
+  {# Feedback link management #}
+  <div class="border rounded p-3 bg-light mb-3" style="max-width: 42rem;">
+    <h3 class="h6 mb-2">Lien de témoignage public</h3>
+    {% if center.feedback_token %}
+    <p class="mb-2">
+      <small class="text-muted">Lien actuel (permanent) :</small><br>
+      <code class="user-select-all small" id="feedback-token-url">{{ url_for('centers.submit_feedback', token=center.feedback_token, _external=True) }}</code>
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm ms-1 align-text-bottom"
+              data-copy-target="feedback-token-url"
+              title="Copier le lien"
+              aria-label="Copier le lien de témoignage">
+        <i class="bi bi-clipboard" aria-hidden="true"></i>
+      </button>
+    </p>
+    {% else %}
+    <p class="text-muted small mb-2">Aucun lien généré.</p>
+    {% endif %}
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <form method="post" action="{{ url_for('centers.generate_feedback_link', center_id=center.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-primary btn-sm">
+          {% if center.feedback_token %}Régénérer le lien{% else %}Générer le lien{% endif %}
+        </button>
+      </form>
+      {% if center.feedback_token %}
+      <a href="{{ url_for('centers.qr_svg', center_id=center.id) }}"
+         class="btn btn-outline-secondary btn-sm" target="_blank"
+         title="Télécharger le QR code (SVG)">
+        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR code
+      </a>
+      {% endif %}
+    </div>
+    {% if center.feedback_token %}
+    <p class="text-muted small mt-2 mb-0">Régénérer invalide l'ancien lien.</p>
+    {% endif %}
+  </div>
+
+  {# Breakdown link management #}
+  <div class="border rounded p-3 bg-light mb-3" style="max-width: 42rem;">
+    <h3 class="h6 mb-2">Lien de signalement de panne</h3>
+    {% if center.breakdown_token %}
+    <p class="mb-2">
+      <small class="text-muted">Lien actuel (permanent) :</small><br>
+      <code class="user-select-all small" id="breakdown-token-url">{{ url_for('machines.public_breakdown', token=center.breakdown_token, _external=True) }}</code>
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm ms-1 align-text-bottom"
+              data-copy-target="breakdown-token-url"
+              title="Copier le lien"
+              aria-label="Copier le lien de signalement">
+        <i class="bi bi-clipboard" aria-hidden="true"></i>
+      </button>
+    </p>
+    {% else %}
+    <p class="text-muted small mb-2">Aucun lien généré.</p>
+    {% endif %}
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <form method="post" action="{{ url_for('centers.generate_breakdown_link', center_id=center.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-warning btn-sm">
+          {% if center.breakdown_token %}Régénérer le lien{% else %}Générer le lien{% endif %}
+        </button>
+      </form>
+      {% if center.breakdown_token %}
+      <a href="{{ url_for('centers.breakdown_qr_svg', center_id=center.id) }}"
+         class="btn btn-outline-secondary btn-sm" target="_blank"
+         title="Télécharger le QR code (SVG)">
+        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR code
+      </a>
+      {% endif %}
+    </div>
+    {% if center.breakdown_token %}
+    <p class="text-muted small mt-2 mb-0">Ce lien permet au centre de signaler une panne sur ses machines.</p>
+    {% endif %}
+  </div>
+
+  {% set pending = center.feedbacks | rejectattr('is_published') | list %}
+  {% if pending %}
+  <p class="text-muted"><small>{{ pending | length }} témoignage(s) en attente de modération.</small></p>
+  <ul class="list-group list-group-flush border rounded" aria-label="Témoignages à modérer">
+    {% for fb in pending %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <strong>{{ fb.submitted_by }}</strong>
+          <small class="text-muted ms-2">{{ fb.submitted_at.strftime('%d/%m/%Y') }}</small>
+          {% if fb.rating %}<small class="ms-1">{{ '★' * fb.rating }}</small>{% endif %}
+          <p class="mb-1 mt-1">{{ fb.content | truncate(200) }}</p>
+        </div>
+        <form method="post"
+              action="{{ url_for('centers.publish_feedback', center_id=center.id, fb_id=fb.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-success btn-sm">Publier</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted">Aucun témoignage en attente.</p>
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block page_help %}
+<p>Fiche d'un centre partenaire.</p>
+<h3>Contacts</h3>
+<ul>
+  <li>Personnes à contacter pour ce centre.</li>
+  <li>(Bureau) Ajouter / supprimer des contacts.</li>
+</ul>
+<h3>Machines</h3>
+<ul>
+  <li>Historique complet des installations (actives et passées).</li>
+</ul>
+<h3>Maintenances</h3>
+<ul>
+  <li>Fiches de maintenance liées aux machines de ce centre.</li>
+</ul>
+<h3>Signaler une panne</h3>
+<ul>
+  <li>Crée automatiquement une tâche de type <em>Panne centre</em> visible par le Bureau.</li>
+</ul>
+<h3>Témoignages</h3>
+<ul>
+  <li>Lien public permanent (sans connexion requise) à partager aux visiteurs.</li>
+  <li>Les témoignages sont publiés après modération par le Bureau.</li>
+  <li>Régénérer le lien invalide l'ancien.</li>
+</ul>
+{% endblock %}
