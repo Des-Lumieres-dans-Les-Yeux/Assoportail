@@ -49,6 +49,7 @@
       <span class="text-muted">Statut</span>
       <span>
         {% if center.status.value == "active" %}<span class="badge bg-success">Partenaire actif</span>
+        {% elif center.status.value == "to_install" %}<span class="badge bg-warning text-dark">À installer</span>
         {% elif center.status.value == "prospect" %}<span class="badge bg-info text-dark">Prospect</span>
         {% elif center.status.value == "inactive" %}<span class="badge bg-secondary">Inactif</span>
         {% elif center.status.value == "lost" %}<span class="badge bg-danger">Perdu</span>

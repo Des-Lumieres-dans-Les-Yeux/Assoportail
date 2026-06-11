@@ -21,6 +21,7 @@ class CenterStatus(enum.StrEnum):
     """Partnership status with a healthcare center."""
 
     PROSPECT = "prospect"
+    TO_INSTALL = "to_install"
     ACTIVE = "active"
     INACTIVE = "inactive"
     LOST = "lost"

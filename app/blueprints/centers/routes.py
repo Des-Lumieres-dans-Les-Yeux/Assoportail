@@ -1,7 +1,10 @@
 """Centers blueprint routes — management, breakdown reporting, guestbook."""
 
+import hashlib
+import hmac as _hmac
 import logging
 import os
+import random as _random
 import re
 import secrets
 from datetime import UTC, date, datetime
@@ -877,6 +880,67 @@ def delete(center_id: int):
 # ---------------------------------------------------------------------------
 
 
+def _verify_captcha() -> str | None:
+    """Validate the math captcha submitted in the installation request form.
+
+    Returns an error message string on failure, or None on success.
+    Checks HMAC integrity and rejects tokens older than _CAPTCHA_TTL seconds.
+    """
+    import time
+
+    a_str = request.form.get("captcha_a", "")
+    b_str = request.form.get("captcha_b", "")
+    ts_str = request.form.get("captcha_ts", "")
+    token = request.form.get("captcha_token", "")
+    answer = request.form.get("captcha_answer", "").strip()
+
+    _invalid = "Données de vérification invalides. Veuillez recharger la page."
+
+    try:
+        a, b, ts = int(a_str), int(b_str), int(ts_str)
+    except ValueError:
+        return _invalid
+
+    if time.time() - ts > _CAPTCHA_TTL:
+        return "Le formulaire a expiré. Veuillez recharger la page."
+
+    expected_token = _captcha_token(a, b, ts)
+    if not _hmac.compare_digest(token, expected_token):
+        return _invalid
+
+    try:
+        if int(answer) != a + b:
+            return "Réponse incorrecte à la question de vérification."
+    except ValueError:
+        return "Réponse incorrecte à la question de vérification."
+
+    return None
+
+
+def _alert_bureau_installation_request(req: "InstallationRequest") -> None:  # type: ignore[name-defined]
+    """Email all bureau members about a new public installation request (best-effort)."""
+    from app.models.user import User, UserRole
+    from app.services.mailer import send_installation_request_email
+
+    bureau_users = db.session.scalars(db.select(User).where(User.role == UserRole.BUREAU)).all()
+    portal_url = url_for("centers.list_requests", _external=True)
+    for bu in bureau_users:
+        if not bu.email:
+            continue
+        try:
+            send_installation_request_email(
+                to_email=bu.email,
+                full_name=bu.full_name,
+                center_name=req.center_name,
+                contact_name=req.contact_name,
+                contact_email=req.contact_email,
+                city=req.city,
+                portal_url=portal_url,
+            )
+        except Exception:
+            logger.exception("Failed to send installation request alert to %s", bu.email)
+
+
 def _alert_bureau_breakdown(task: "Task", center: "Center") -> None:  # type: ignore[name-defined]
     """Email all bureau members about a new breakdown task (best-effort)."""
     from app.models.user import User, UserRole
@@ -917,29 +981,85 @@ def _make_qr_svg(url: str) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+_CAPTCHA_TTL = 30 * 60  # seconds
+
+
+def _captcha_token(a: int, b: int, ts: int) -> str:
+    """HMAC-sign the captcha challenge including a timestamp to prevent replay attacks."""
+    key = current_app.secret_key
+    if isinstance(key, str):
+        key = key.encode()
+    msg = f"{a},{b},{ts}".encode()
+    return _hmac.new(key, msg, hashlib.sha256).hexdigest()
+
+
 @bp.route("/request-installation", methods=["GET", "POST"])
-@limiter.limit("5 per hour")
+@limiter.limit("5 per hour", methods=["POST"])
 def request_installation():
-    """Public page for centers to request machine installation."""
+    """Public page for centers to request machine installation.
+
+    After a successful submission the user is redirected back to this same URL
+    with ?merci=1 so the confirmation is shown without leaving the domain.
+    """
+    import time
+    from datetime import timedelta
+
     from app.models.center import InstallationRequest
 
+    # Show the confirmation card when the user just submitted
+    if request.args.get("merci"):
+        return render_template("centers/request_installation.html", submitted=True)
+
     form = InstallationRequestForm()
+
     if request.method == "POST":
-        # Honeypot check
+        # Honeypot check — silently redirect to confirm
         if form.website.data:
             logger.warning("Honeypot triggered on installation request form")
-            flash("Votre demande a été soumise avec succès.", "success")
-            return redirect(url_for("centers.request_installation_thanks"))
+            return redirect(url_for("centers.request_installation", merci=1))
+
+        # Math captcha verification
+        captcha_error = _verify_captcha()
+        if captcha_error:
+            flash(captcha_error, "danger")
+            ts = int(time.time())
+            captcha_a = _random.randint(1, 9)
+            captcha_b = _random.randint(1, 9)
+            return render_template(
+                "centers/request_installation.html",
+                form=form,
+                captcha_a=captcha_a,
+                captcha_b=captcha_b,
+                captcha_ts=ts,
+                captcha_token=_captcha_token(captcha_a, captcha_b, ts),
+            )
 
         if form.validate_on_submit():
+            email = form.contact_email.data.strip().lower()
+            center_name = form.center_name.data.strip()
+
+            # Deduplication: reject duplicate pending request within the last hour
+            cutoff = datetime.now(UTC) - timedelta(hours=1)
+            duplicate = db.session.scalars(
+                db.select(InstallationRequest).where(
+                    InstallationRequest.contact_email == email,
+                    InstallationRequest.center_name == center_name,
+                    InstallationRequest.status == "pending",
+                    InstallationRequest.created_at >= cutoff,
+                )
+            ).first()
+            if duplicate:
+                # Silent redirect — avoids leaking info about existing submissions
+                return redirect(url_for("centers.request_installation", merci=1))
+
             req = InstallationRequest(
-                center_name=form.center_name.data.strip(),
+                center_name=center_name,
                 address=(form.address.data or "").strip() or None,
                 city=form.city.data.strip(),
                 zip_code=form.zip_code.data.strip(),
                 contact_name=form.contact_name.data.strip(),
                 contact_role=(form.contact_role.data or "").strip() or None,
-                contact_email=form.contact_email.data.strip().lower(),
+                contact_email=email,
                 contact_phone=(form.contact_phone.data or "").strip() or None,
                 motivation=form.motivation.data.strip(),
                 status="pending",
@@ -947,19 +1067,22 @@ def request_installation():
             )
             db.session.add(req)
             db.session.commit()
-            flash(
-                "Votre demande a été enregistrée. Nous vous recontacterons prochainement.",
-                "success",
-            )
-            return redirect(url_for("centers.request_installation_thanks"))
+            _alert_bureau_installation_request(req)
+            return redirect(url_for("centers.request_installation", merci=1))
 
-    return render_template("centers/request_installation.html", form=form)
+    ts = int(time.time())
+    captcha_a = _random.randint(1, 9)
+    captcha_b = _random.randint(1, 9)
+    return render_template(
+        "centers/request_installation.html",
+        form=form,
+        captcha_a=captcha_a,
+        captcha_b=captcha_b,
+        captcha_ts=ts,
+        captcha_token=_captcha_token(captcha_a, captcha_b, ts),
+    )
 
 
-@bp.route("/request-installation/merci")
-def request_installation_thanks():
-    """Thank you page for public installation request."""
-    return render_template("centers/request_installation_thanks.html")
 
 
 # ---------------------------------------------------------------------------

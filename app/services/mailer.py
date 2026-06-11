@@ -119,6 +119,30 @@ def send_task_assigned_email(
     _deliver(to_email, subject, body)
 
 
+def send_installation_request_email(
+    to_email: str,
+    full_name: str,
+    center_name: str,
+    contact_name: str,
+    contact_email: str,
+    city: str,
+    portal_url: str,
+) -> None:
+    """Notify a bureau member of a new public installation request."""
+    subject = f"Nouvelle demande d'installation — {center_name}"
+    body = (
+        f"Bonjour {full_name},\n\n"
+        f"Une nouvelle demande d'installation de flipper a été soumise via le formulaire public.\n\n"
+        f"  Établissement : {center_name}\n"
+        f"  Ville         : {city}\n"
+        f"  Contact       : {contact_name} ({contact_email})\n\n"
+        f"Consultez et traitez la demande : {portal_url}\n\n"
+        f"Cordialement,\n"
+        f"Assoportail (notification automatique)"
+    )
+    _deliver(to_email, subject, body)
+
+
 def send_breakdown_alert_email(
     to_email: str,
     full_name: str,

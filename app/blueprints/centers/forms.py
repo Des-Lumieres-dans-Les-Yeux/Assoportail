@@ -16,6 +16,7 @@ from app.models.task import TaskPriority
 
 _STATUS_CHOICES = [
     (CenterStatus.PROSPECT.value, "Prospect"),
+    (CenterStatus.TO_INSTALL.value, "À installer"),
     (CenterStatus.ACTIVE.value, "Partenaire actif"),
     (CenterStatus.INACTIVE.value, "Inactif"),
     (CenterStatus.LOST.value, "Perdu"),

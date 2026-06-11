@@ -59,10 +59,11 @@
           aria-label="Filtrer par statut"
           data-auto-submit="center-filter-form">
     <option value="" {% if not status %}selected{% endif %}>Tous les statuts</option>
-    <option value="prospect" {% if status == 'prospect' %}selected{% endif %}>Prospect</option>
-    <option value="active"   {% if status == 'active' %}selected{% endif %}>Actif</option>
-    <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Inactif</option>
-    <option value="lost"     {% if status == 'lost' %}selected{% endif %}>Perdu</option>
+    <option value="prospect"   {% if status == 'prospect' %}selected{% endif %}>Prospect</option>
+    <option value="to_install" {% if status == 'to_install' %}selected{% endif %}>À installer</option>
+    <option value="active"     {% if status == 'active' %}selected{% endif %}>Actif</option>
+    <option value="inactive"   {% if status == 'inactive' %}selected{% endif %}>Inactif</option>
+    <option value="lost"       {% if status == 'lost' %}selected{% endif %}>Perdu</option>
   </select>
   {% if q or status %}
   <a href="{{ url_for('centers.list_centers') }}" class="btn btn-outline-secondary btn-sm"
@@ -111,6 +112,7 @@
         </small>
         {% endif %}
         {% if center.status.value == "active" %}<span class="badge bg-success">Actif</span>
+        {% elif center.status.value == "to_install" %}<span class="badge bg-warning text-dark">À installer</span>
         {% elif center.status.value == "prospect" %}<span class="badge bg-info text-dark">Prospect</span>
         {% elif center.status.value == "inactive" %}<span class="badge bg-secondary">Inactif</span>
         {% elif center.status.value == "lost" %}<span class="badge bg-danger">Perdu</span>
