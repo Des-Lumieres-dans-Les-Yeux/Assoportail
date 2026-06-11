@@ -22,9 +22,10 @@ depends_on = None
 
 def upgrade() -> None:
     # ALTER TYPE ADD VALUE cannot run inside a transaction block on PostgreSQL.
-    # execution_options returns a new proxy — assign it before executing.
-    conn = op.get_bind().execution_options(isolation_level="AUTOCOMMIT")
-    conn.execute(
+    # Issuing COMMIT first closes the implicit transaction Alembic opened,
+    # allowing the DDL to execute without the isolation_level workaround.
+    op.execute(sa.text("COMMIT"))
+    op.execute(
         sa.text("ALTER TYPE center_status ADD VALUE IF NOT EXISTS 'to_install' AFTER 'prospect'")
     )
 
