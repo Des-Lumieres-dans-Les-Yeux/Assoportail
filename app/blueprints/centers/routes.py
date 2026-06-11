@@ -4,7 +4,6 @@ import hashlib
 import hmac as _hmac
 import logging
 import os
-import random as _random
 import re
 import secrets
 from datetime import UTC, date, datetime
@@ -917,7 +916,7 @@ def _verify_captcha() -> str | None:
     return None
 
 
-def _alert_bureau_installation_request(req: "InstallationRequest") -> None:  # type: ignore[name-defined]
+def _alert_bureau_installation_request(req) -> None:  # type: ignore[annotation-unchecked]
     """Email all bureau members about a new public installation request (best-effort)."""
     from app.models.user import User, UserRole
     from app.services.mailer import send_installation_request_email
@@ -1023,8 +1022,8 @@ def request_installation():
         if captcha_error:
             flash(captcha_error, "danger")
             ts = int(time.time())
-            captcha_a = _random.randint(1, 9)
-            captcha_b = _random.randint(1, 9)
+            captcha_a = secrets.randbelow(9) + 1
+            captcha_b = secrets.randbelow(9) + 1
             return render_template(
                 "centers/request_installation.html",
                 form=form,
@@ -1071,8 +1070,8 @@ def request_installation():
             return redirect(url_for("centers.request_installation", merci=1))
 
     ts = int(time.time())
-    captcha_a = _random.randint(1, 9)
-    captcha_b = _random.randint(1, 9)
+    captcha_a = secrets.randbelow(9) + 1
+    captcha_b = secrets.randbelow(9) + 1
     return render_template(
         "centers/request_installation.html",
         form=form,
@@ -1081,8 +1080,6 @@ def request_installation():
         captcha_ts=ts,
         captcha_token=_captcha_token(captcha_a, captcha_b, ts),
     )
-
-
 
 
 # ---------------------------------------------------------------------------

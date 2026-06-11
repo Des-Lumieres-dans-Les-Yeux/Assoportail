@@ -132,7 +132,8 @@ def send_installation_request_email(
     subject = f"Nouvelle demande d'installation — {center_name}"
     body = (
         f"Bonjour {full_name},\n\n"
-        f"Une nouvelle demande d'installation de flipper a été soumise via le formulaire public.\n\n"
+        f"Une nouvelle demande d'installation de flipper a été soumise"
+        f" via le formulaire public.\n\n"
         f"  Établissement : {center_name}\n"
         f"  Ville         : {city}\n"
         f"  Contact       : {contact_name} ({contact_email})\n\n"

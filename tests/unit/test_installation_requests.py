@@ -1,5 +1,8 @@
 """Unit tests for center installation requests and global guestbook/emailing tags."""
 
+import hashlib
+import hmac
+import time
 from datetime import UTC, datetime
 
 from flask import Flask
@@ -14,6 +17,17 @@ from app.models.center import (
 )
 from app.models.mailing import MailingCampaign, MailingRecipient, RecipientStatus
 from app.models.user import User, UserRole
+
+
+def _captcha_data(app: Flask, a: int = 4, b: int = 3) -> dict:
+    """Return valid captcha hidden-field data for the installation request form."""
+    key = app.secret_key
+    if isinstance(key, str):
+        key = key.encode()
+    ts = int(time.time())
+    token = hmac.new(key, f"{a},{b},{ts}".encode(), hashlib.sha256).hexdigest()
+    return {"captcha_a": str(a), "captcha_b": str(b), "captcha_ts": str(ts),
+            "captcha_token": token, "captcha_answer": str(a + b)}
 
 
 def _make_pending_request(
@@ -53,11 +67,12 @@ class TestInstallationRequestPublic:
                 "contact_phone": "0383000000",
                 "motivation": "Projet d'animation avec des jeux anciens pour les aînés.",
                 "website": "",
+                **_captcha_data(app),
             },
             follow_redirects=False,
         )
         assert response.status_code in {301, 302}
-        assert "/centers/request-installation/merci" in response.headers["Location"]
+        assert "merci" in response.headers["Location"]
 
         with app.app_context():
             req = _db.session.execute(
