@@ -126,6 +126,8 @@ Copier `.env.example` vers `.env` et renseigner les valeurs. Les champs obligato
 |----------|-------------|
 | `REDIS_URL` **\*** | `redis://:password@redis:6379/0` |
 | `REDIS_PASSWORD` | Mot de passe AUTH Redis |
+| `TASK_BASE_URL` **\*** | Origine du portail pour les URLs construites par les workers Celery (ex. `https://portail.deslumieresdanslesyeux.fr`). Sans cette variable, les liens dans les emails pointent vers `http://localhost`. |
+| `LINKS_EXTERNAL_URL` | Origine publique pour les liens envoyés à des utilisateurs externes : formulaire de feedback (livre d'or), signalement de panne, confirmation bénévole. Permet d'utiliser un sous-domaine dédié (ex. `https://demande.deslumieresdanslesyeux.fr`) distinct du portail interne. Si non renseigné, utilise `TASK_BASE_URL`. |
 
 ### Google OAuth2
 

@@ -13,7 +13,6 @@ from app.blueprints.auth.forms import ChangePasswordForm, CreateUserForm, LoginF
 from app.decorators import bureau_required
 from app.extensions import db, limiter
 from app.models.user import User, UserRole
-from app.services.mailer import mask_email, send_welcome_email
 
 logger = logging.getLogger(__name__)
 
@@ -256,12 +255,8 @@ def create_user():
         db.session.add(user)
         db.session.commit()
 
-        send_welcome_email(
-            user.email,
-            temp_password,
-            user.full_name,
-            url_for("auth.login", _external=True),
-        )
+        from app.tasks.notifications import send_welcome_email_task
+        send_welcome_email_task.delay(user.id, temp_password)
 
         flash(
             f"Compte créé pour {user.full_name}."
@@ -324,14 +319,8 @@ def forgot_password():
         if user and user.is_active:
             token = _generate_reset_token(user.id)
             reset_url = url_for("auth.reset_password", token=token, _external=True)
-            try:
-                from app.services.mailer import send_password_reset_email
-
-                send_password_reset_email(user.email, user.full_name, reset_url)
-            except Exception:
-                logger.exception(
-                    "Failed to send password reset email to %s", mask_email(email_input)
-                )
+            from app.tasks.notifications import send_password_reset_task
+            send_password_reset_task.delay(user.id, reset_url)
 
         # Always show the same message to prevent user enumeration
         flash(
@@ -419,28 +408,13 @@ def admin_reset_password(user_id: int):
     user.must_change_password = True
     db.session.commit()
 
-    try:
-        from app.services.mailer import send_admin_reset_email
-
-        send_admin_reset_email(
-            user.email,
-            temp_password,
-            user.full_name,
-            url_for("auth.login", _external=True),
-        )
-        flash(
-            f"Mot de passe réinitialisé pour {user.full_name}. "
-            "Un email avec le nouveau mot de passe temporaire a été envoyé.",
-            "success",
-        )
-    except Exception:
-        logger.exception("Failed to send reset email to %s", mask_email(user.email))
-        flash(
-            f"Mot de passe modifié pour {user.full_name}, mais l'envoi de l'email a échoué. "
-            f"Nouveau mot de passe : {temp_password}",
-            "warning",
-        )
-
+    from app.tasks.notifications import send_admin_reset_task
+    send_admin_reset_task.delay(user.id, temp_password)
+    flash(
+        f"Mot de passe réinitialisé pour {user.full_name}. "
+        "Un email avec le nouveau mot de passe temporaire a été envoyé.",
+        "success",
+    )
     return redirect(url_for("members.detail", user_id=user.id))
 
 

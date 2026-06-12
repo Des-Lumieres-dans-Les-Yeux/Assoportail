@@ -174,7 +174,8 @@ def create():
         db.session.commit()
         flash(f"Tâche « {task.title} » créée.", "success")
         if task.assigned_to_id and task.assigned_to_id != current_user.id:
-            _notify_task_assigned(task)
+            from app.tasks.notifications import notify_task_assigned
+            notify_task_assigned.delay(task.id, current_user.full_name)
         return redirect(url_for("tasks.detail", task_id=task.id))
 
     return render_template("tasks/form.html", form=form, title="Nouvelle tâche")
@@ -221,7 +222,8 @@ def edit(task_id: int):
         assignee_changed = task.assigned_to_id and task.assigned_to_id != prev_assignee_id
         db.session.commit()
         if assignee_changed and task.assigned_to_id != current_user.id:
-            _notify_task_assigned(task)
+            from app.tasks.notifications import notify_task_assigned
+            notify_task_assigned.delay(task.id, current_user.full_name)
         flash("Tâche mise à jour.", "success")
         return redirect(url_for("tasks.detail", task_id=task.id))
 

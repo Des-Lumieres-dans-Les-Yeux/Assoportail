@@ -664,7 +664,8 @@ def report_breakdown(center_id: int):
         f"Panne signalée (tâche #{task.id} créée). Le bureau a été notifié.",
         "success",
     )
-    _alert_bureau_breakdown(task, center)
+    from app.tasks.centers import notify_bureau_breakdown
+    notify_bureau_breakdown.delay(task.id, current_user.full_name)
     return redirect(url_for("centers.detail", center_id=center_id))
 
 
@@ -1066,7 +1067,8 @@ def request_installation():
             )
             db.session.add(req)
             db.session.commit()
-            _alert_bureau_installation_request(req)
+            from app.tasks.centers import notify_bureau_installation_request
+            notify_bureau_installation_request.delay(req.id)
             return redirect(url_for("centers.request_installation", merci=1))
 
     ts = int(time.time())

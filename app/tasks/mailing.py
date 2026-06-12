@@ -301,13 +301,13 @@ def _send_recipients(campaign_id: int, client, *, rate_limit: int = 100) -> dict
                 if dirty:
                     db.session.flush()
 
-                from flask import url_for
+                from app.tasks.utils import public_url
 
-                breakdown_url = url_for(
-                    "machines.public_breakdown", token=center.breakdown_token, _external=True
+                breakdown_url = public_url(
+                    "machines.public_breakdown", token=center.breakdown_token
                 )
-                feedback_url = url_for(
-                    "centers.submit_feedback", token=center.feedback_token, _external=True
+                feedback_url = public_url(
+                    "centers.submit_feedback", token=center.feedback_token
                 )
             else:
                 breakdown_url = ""

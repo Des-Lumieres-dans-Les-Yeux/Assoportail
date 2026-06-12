@@ -19,7 +19,6 @@ from app.models.member import Membership, MembershipSource
 from app.models.task import Task, TaskStatus
 from app.models.user import BUREAU_DEFAULT_PERMISSIONS, MEMBER_DEFAULT_PERMISSIONS, User, UserRole
 from app.services.csv_io import export_members_csv, parse_members_csv
-from app.services.mailer import send_welcome_email
 
 # ---------------------------------------------------------------------------
 # Member list and detail — bureau only
@@ -376,6 +375,7 @@ def import_csv():
             return redirect(url_for("members.list_members"))
 
     created = 0
+    to_notify: list[tuple[int, str]] = []
     for row in rows:
         existing = db.session.execute(
             db.select(User).filter_by(email=row["email"])
@@ -402,15 +402,13 @@ def import_csv():
         user.set_password(temp_password)
         db.session.add(user)
         db.session.flush()
-        send_welcome_email(
-            user.email,
-            temp_password,
-            user.full_name,
-            url_for("auth.login", _external=True),
-        )
+        to_notify.append((user.id, temp_password))
         created += 1
 
     db.session.commit()
+    from app.tasks.notifications import send_welcome_email_task
+    for uid, pwd in to_notify:
+        send_welcome_email_task.delay(uid, pwd)
     if created:
         flash(
             f"{created} membre(s) importé(s). Un email d'accueil a été envoyé à chacun.", "success"
@@ -555,12 +553,8 @@ def create():
             user.set_password(temp_password)
             db.session.add(user)
             db.session.commit()
-            send_welcome_email(
-                user.email,
-                temp_password,
-                user.full_name,
-                url_for("auth.login", _external=True),
-            )
+            from app.tasks.notifications import send_welcome_email_task
+            send_welcome_email_task.delay(user.id, temp_password)
             flash(
                 f"Membre {user.full_name} créé. Un email avec les identifiants a été envoyé.",
                 "success",

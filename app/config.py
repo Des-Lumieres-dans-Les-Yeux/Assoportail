@@ -47,6 +47,17 @@ class Config:
     # Set to 1 GB to accommodate tombola media video uploads.
     MAX_CONTENT_LENGTH: int = int(os.environ.get("MAX_CONTENT_LENGTH", 1024 * 1024 * 1024))
 
+    # Base URL used by Celery workers to build external URLs (url_for _external=True).
+    # Workers run outside any HTTP request, so Flask cannot derive the host from headers.
+    # Set to the main portal origin, e.g. "https://portail.deslumieresdanslesyeux.fr".
+    TASK_BASE_URL: str = os.environ.get("TASK_BASE_URL", "http://localhost")
+
+    # Base URL for public-facing links sent in emails (feedback, signalement,
+    # volunteer confirmation…). These forms may be proxied via a dedicated
+    # subdomain (e.g. "https://demande.deslumieresdanslesyeux.fr").
+    # Falls back to TASK_BASE_URL when not set.
+    LINKS_EXTERNAL_URL: str = os.environ.get("LINKS_EXTERNAL_URL", "")
+
     # SMTP email delivery
     SMTP_HOST: str = os.environ.get("SMTP_HOST", "localhost")
     SMTP_PORT: int = int(os.environ.get("SMTP_PORT", 587))

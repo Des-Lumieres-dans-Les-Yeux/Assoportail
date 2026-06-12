@@ -25,10 +25,12 @@ def make_celery() -> Celery:
         broker=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
         backend=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
         include=[
+            "app.tasks.centers",
             "app.tasks.email_polling",
             "app.tasks.email_rules",
             "app.tasks.events",
             "app.tasks.mailing",
+            "app.tasks.notifications",
             "app.tasks.reminders",
             "app.tasks.social",
         ],
@@ -46,8 +48,11 @@ def make_celery() -> Celery:
             return ContextTask._flask_app
 
         def __call__(self, *args, **kwargs):
-            with self._flask().app_context():
-                return self.run(*args, **kwargs)
+            app = self._flask()
+            base_url = app.config.get("TASK_BASE_URL", "http://localhost")
+            with app.app_context():
+                with app.test_request_context(base_url=base_url):
+                    return self.run(*args, **kwargs)
 
     celery_app.Task = ContextTask
 

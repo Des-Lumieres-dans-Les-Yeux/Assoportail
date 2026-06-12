@@ -1475,7 +1475,8 @@ def volunteer_register(token: str):
             ).first()
             if existing:
                 # Resend confirmation email with their existing personal link
-                _send_volunteer_confirmation(existing, event)
+                from app.tasks.events import send_volunteer_confirmation
+                send_volunteer_confirmation.delay(existing.id)
                 flash("Un email avec votre lien personnel a été renvoyé.", "info")
                 return redirect(url_for("events.volunteer_register", token=token))
 
@@ -1489,7 +1490,8 @@ def volunteer_register(token: str):
             )
             db.session.add(volunteer)
             db.session.commit()
-            _send_volunteer_confirmation(volunteer, event)
+            from app.tasks.events import send_volunteer_confirmation
+            send_volunteer_confirmation.delay(volunteer.id)
             flash(
                 "Un email de confirmation a été envoyé. Vérifiez votre boîte de réception.",
                 "success",
@@ -1691,8 +1693,6 @@ def delete_volunteer(event_id: int, volunteer_id: int):
 @bureau_required
 def email_participants(event_id: int):
     """Send an email to all event members and confirmed volunteers."""
-    from app.services.mailer import _deliver
-
     event = db.session.get(
         Event,
         event_id,
@@ -1719,17 +1719,9 @@ def email_participants(event_id: int):
         flash("Aucun destinataire.", "warning")
         return redirect(url_for("events.detail", event_id=event_id))
 
-    sent = 0
-    for addr in recipients:
-        try:
-            _deliver(to_email=addr, subject=subject, body=body)
-            sent += 1
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception("Failed to email %s", addr)
-
-    flash(f"Email envoyé à {sent} participant(s).", "success")
+    from app.tasks.events import email_event_participants
+    email_event_participants.delay(event_id, subject, body)
+    flash(f"Envoi en cours à {len(recipients)} participant(s).", "success")
     return redirect(url_for("events.detail", event_id=event_id))
 
 
