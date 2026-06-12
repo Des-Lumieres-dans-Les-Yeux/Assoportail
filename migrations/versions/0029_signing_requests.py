@@ -21,17 +21,20 @@ depends_on = None
 
 def upgrade() -> None:
     # 1 — Create enum type (idempotent)
-    op.execute(sa.text("""
+    op.execute(
+        sa.text("""
         DO $$ BEGIN
             CREATE TYPE signing_status AS ENUM ('pending', 'completed', 'cancelled');
         EXCEPTION WHEN duplicate_object THEN NULL;
         END $$
-    """))
+    """)
+    )
 
     # 2 — Create table with a plain VARCHAR for status so SQLAlchemy never
     #     tries to (re-)create the enum type during the before_create event.
     #     IF NOT EXISTS handles the case where a previous run already created it.
-    op.execute(sa.text("""
+    op.execute(
+        sa.text("""
         CREATE TABLE IF NOT EXISTS signing_requests (
             id              SERIAL          NOT NULL,
             center_id       INTEGER         NOT NULL
@@ -50,11 +53,13 @@ def upgrade() -> None:
             notes           TEXT,
             PRIMARY KEY (id)
         )
-    """))
+    """)
+    )
 
     # 3 — Cast status column to the proper enum type.
     #     Guard with an information_schema check so re-runs are safe.
-    op.execute(sa.text("""
+    op.execute(
+        sa.text("""
         DO $$ BEGIN
             IF EXISTS (
                 SELECT 1 FROM information_schema.columns
@@ -70,17 +75,19 @@ def upgrade() -> None:
                     ALTER COLUMN status SET DEFAULT 'pending';
             END IF;
         END $$
-    """))
+    """)
+    )
 
     # 4 — Indexes (IF NOT EXISTS → safe to re-run)
-    op.execute(sa.text(
-        "CREATE INDEX IF NOT EXISTS ix_signing_requests_center_id "
-        "ON signing_requests (center_id)"
-    ))
-    op.execute(sa.text(
-        "CREATE INDEX IF NOT EXISTS ix_signing_requests_token "
-        "ON signing_requests (token)"
-    ))
+    op.execute(
+        sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_signing_requests_center_id "
+            "ON signing_requests (center_id)"
+        )
+    )
+    op.execute(
+        sa.text("CREATE INDEX IF NOT EXISTS ix_signing_requests_token ON signing_requests (token)")
+    )
 
 
 def downgrade() -> None:

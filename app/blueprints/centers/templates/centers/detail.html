@@ -255,8 +255,8 @@
         <small class="text-muted ms-2">signé le {{ sr.submitted_at.strftime('%d/%m/%Y') }} par {{ sr.submitter_name }}</small>
         {% if sr.signed_document %}
         —
-        <a href="{{ sr.signed_document.drive_web_link or url_for('documents.download', document_id=sr.signed_document.id) }}"
-           target="_blank" class="small">
+        <a href="{{ url_for('documents.download', document_id=sr.signed_document.id) }}"
+           class="small">
           <i class="bi bi-download me-1" aria-hidden="true"></i>Télécharger le signé
         </a>
         {% endif %}
@@ -286,17 +286,19 @@
         </label>
         <select id="signing-doc-select" name="document_id" class="form-select form-select-sm" required>
           <option value="">— Choisir un document —</option>
-          {% if center.convention_document %}
+          {% if center.convention_document and center.convention_document.mime_type == 'application/pdf' %}
           <option value="{{ center.convention_document.id }}">
             Convention — {{ center.convention_document.original_filename }}
           </option>
           {% endif %}
-          {% for doc in center.documents if doc.type in ('contract', 'report', 'other') %}
+          {% for doc in center.documents if doc.type in ('contract', 'report', 'other') and doc.mime_type == 'application/pdf' %}
           <option value="{{ doc.id }}">{{ doc.original_filename }}</option>
           {% endfor %}
         </select>
-        {% if not center.convention_document and not (center.documents | selectattr('type', 'in', ['contract', 'report', 'other']) | list) %}
-        <div class="text-muted small mt-1">Aucun document disponible. Téléversez d'abord une convention ou un contrat.</div>
+        {% set pdf_docs = center.documents | selectattr('mime_type', 'equalto', 'application/pdf') | selectattr('type', 'in', ['contract', 'report', 'other']) | list %}
+        {% set has_pdf = (center.convention_document and center.convention_document.mime_type == 'application/pdf') or pdf_docs %}
+        {% if not has_pdf %}
+        <div class="text-muted small mt-1">Aucun document PDF disponible. Téléversez d'abord une convention au format PDF.</div>
         {% endif %}
       </div>
       <button type="submit" class="btn btn-primary btn-sm text-nowrap">

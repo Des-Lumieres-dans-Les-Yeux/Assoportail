@@ -1330,22 +1330,16 @@ def sign_document(token: str):
             return render_template("centers/sign_request.html", req=req, center=center, token=token)
 
         ext = os.path.splitext(safe_name)[1].lower()
-        if ext not in _CONVENTION_EXTS:
-            flash("Seuls les fichiers PDF, DOCX et ODT sont acceptés.", "danger")
+        if ext != ".pdf":
+            flash("Seuls les fichiers PDF sont acceptés pour le document signé.", "danger")
             return render_template("centers/sign_request.html", req=req, center=center, token=token)
 
         data = file.read()
-        if data[:4] == b"%PDF":
-            detected_mime = "application/pdf"
-        elif data[:2] == b"PK":
-            detected_mime = "application/zip"
-        else:
-            flash("Contenu du fichier invalide (vérification MIME).", "danger")
+        if data[:4] != b"%PDF":
+            flash("Contenu du fichier invalide — un PDF valide est requis.", "danger")
             return render_template("centers/sign_request.html", req=req, center=center, token=token)
 
-        if detected_mime != _CONVENTION_EXTS[ext]:
-            flash("Le contenu du fichier ne correspond pas à son extension.", "danger")
-            return render_template("centers/sign_request.html", req=req, center=center, token=token)
+        detected_mime = "application/pdf"
 
         if len(data) > _CONVENTION_MAX_BYTES:
             flash("Le fichier dépasse la limite de 20 Mo.", "danger")
