@@ -531,6 +531,7 @@ def create():
             target_audience=form.target_audience.data or None,
             latitude=form.latitude.data,
             longitude=form.longitude.data,
+            opening_hours=(form.opening_hours.data or "").strip() or None,
             notes=(form.notes.data or "").strip() or None,
         )
 
@@ -571,6 +572,7 @@ def edit(center_id: int):
         center.status = form.status.data
         center.pathology = form.pathology.data or None
         center.target_audience = form.target_audience.data or None
+        center.opening_hours = (form.opening_hours.data or "").strip() or None
         center.notes = (form.notes.data or "").strip() or None
 
         # Keep the submitted coordinates unless the address changed.
@@ -1071,6 +1073,7 @@ def request_installation():
                 contact_role=(form.contact_role.data or "").strip() or None,
                 contact_email=email,
                 contact_phone=(form.contact_phone.data or "").strip() or None,
+                opening_hours=(form.opening_hours.data or "").strip() or None,
                 motivation=form.motivation.data.strip(),
                 status="pending",
                 created_at=datetime.now(UTC),
@@ -1140,6 +1143,7 @@ def approve_request(request_id: int):
         form.address.data = req.address
         form.city.data = req.city
         form.zip_code.data = req.zip_code
+        form.opening_hours.data = req.opening_hours
         form.status.data = CenterStatus.PROSPECT.value
 
     if form.validate_on_submit():
@@ -1150,6 +1154,7 @@ def approve_request(request_id: int):
             city=form.city.data.strip(),
             zip_code=form.zip_code.data.strip(),
             status=form.status.data,
+            opening_hours=(form.opening_hours.data or "").strip() or None,
             notes=(form.notes.data or "").strip() or None,
         )
 

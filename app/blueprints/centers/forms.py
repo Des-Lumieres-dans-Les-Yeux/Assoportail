@@ -63,6 +63,10 @@ class CenterForm(FlaskForm):
     status = SelectField("Statut", choices=_STATUS_CHOICES, default=CenterStatus.PROSPECT.value)
     pathology = SelectField("Pathologie", choices=_PATHOLOGY_CHOICES, default="")
     target_audience = SelectField("Catégorie / Public", choices=_AUDIENCE_CHOICES, default="")
+    opening_hours = TextAreaField(
+        "Horaires d'ouverture",
+        validators=[Optional(), Length(max=500)],
+    )
     latitude = FloatField("Latitude", validators=[Optional()])
     longitude = FloatField("Longitude", validators=[Optional()])
     notes = TextAreaField("Notes internes", validators=[Optional(), Length(max=2000)])
@@ -165,6 +169,10 @@ class InstallationRequestForm(FlaskForm):
         ],
     )
     contact_phone = StringField("Téléphone du contact", validators=[Optional(), Length(max=30)])
+    opening_hours = TextAreaField(
+        "Horaires d'ouverture",
+        validators=[Optional(), Length(max=500)],
+    )
     motivation = TextAreaField(
         "Motivation pour la demande / présentation du centre.",
         validators=[

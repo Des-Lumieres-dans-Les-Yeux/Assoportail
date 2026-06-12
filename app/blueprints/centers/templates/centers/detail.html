@@ -56,6 +56,12 @@
         {% endif %}
       </span>
     </li>
+    {% if center.opening_hours %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Horaires d'ouverture</span>
+      <span class="text-end" style="white-space: pre-line;">{{ center.opening_hours }}</span>
+    </li>
+    {% endif %}
   </ul>
   {% if center.notes %}
   <p class="text-muted mt-2 fst-italic">{{ center.notes }}</p>

@@ -43,6 +43,7 @@ class Center(db.Model):
         city: City.
         zip_code: Postal code.
         status: Partnership status.
+        opening_hours: Free-text opening days/hours (nullable).
         notes: Internal notes (nullable).
         created_at: Record creation timestamp (UTC).
     """
@@ -59,6 +60,7 @@ class Center(db.Model):
     longitude: Mapped[float | None] = mapped_column(db.Float, nullable=True)
     pathology: Mapped[str | None] = mapped_column(String(100), nullable=True)
     target_audience: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    opening_hours: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[CenterStatus] = mapped_column(
         Enum(
             CenterStatus, name="center_status", values_callable=lambda obj: [e.value for e in obj]
@@ -214,6 +216,7 @@ class InstallationRequest(db.Model):
         contact_role: Contact person's role (nullable).
         contact_email: Contact person's email.
         contact_phone: Contact person's phone (nullable).
+        opening_hours: Free-text opening days/hours of the center (nullable).
         motivation: Statement explaining why they want a machine.
         status: Current status of the request (e.g. pending, approved, rejected).
         created_at: Submission timestamp (UTC).
@@ -235,6 +238,8 @@ class InstallationRequest(db.Model):
     contact_role: Mapped[str | None] = mapped_column(String(100), nullable=True)
     contact_email: Mapped[str] = mapped_column(String(254), nullable=False)
     contact_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    opening_hours: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     motivation: Mapped[str] = mapped_column(Text, nullable=False)
 

@@ -63,6 +63,14 @@
     </div>
   </div>
 
+  <div class="mb-3">
+    <label for="{{ form.opening_hours.id }}" class="form-label">{{ form.opening_hours.label.text }}</label>
+    {{ form.opening_hours(class="form-control", id=form.opening_hours.id, rows=3,
+                          placeholder="Ex : Lun-Ven 9h-18h, Sam 10h-12h, fermé dimanche et jours fériés") }}
+    {% for e in form.opening_hours.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+    <div class="form-text">Jours et heures où le centre est accessible.</div>
+  </div>
+
   <div class="row g-3 mb-3">
     <div class="col-sm-6">
       <label for="{{ form.latitude.id }}" class="form-label">{{ form.latitude.label.text }}</label>
