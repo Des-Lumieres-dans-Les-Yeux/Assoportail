@@ -180,11 +180,12 @@ def preview(campaign_id: int):
             dirty = True
         if dirty:
             db.session.commit()
-        breakdown_url = url_for(
-            "machines.public_breakdown", token=selected_center.breakdown_token, _external=True
+        from app.tasks.utils import public_url
+        breakdown_url = public_url(
+            "machines.public_breakdown", token=selected_center.breakdown_token
         )
-        feedback_url = url_for(
-            "centers.submit_feedback", token=selected_center.feedback_token, _external=True
+        feedback_url = public_url(
+            "centers.submit_feedback", token=selected_center.feedback_token
         )
     else:
         # Tags that don't apply to this audience are replaced with empty string.
@@ -221,6 +222,21 @@ def preview(campaign_id: int):
     for tag in ["{numeros_tombola}", "{{numeros_tombola}}", "[[numeros_tombola]]"]:
         body = body.replace(tag, numeros)
         subject = subject.replace(tag, numeros)
+
+    if "[[qr_panne]]" in body:
+        from app.tasks.utils import make_qr_img_tag
+        try:
+            qr_tag = make_qr_img_tag(breakdown_url) if breakdown_url else ""
+        except Exception:
+            qr_tag = breakdown_url
+        body = body.replace("[[qr_panne]]", qr_tag)
+    if "[[qr_livre_or]]" in body:
+        from app.tasks.utils import make_qr_img_tag
+        try:
+            qr_tag = make_qr_img_tag(feedback_url) if feedback_url else ""
+        except Exception:
+            qr_tag = feedback_url
+        body = body.replace("[[qr_livre_or]]", qr_tag)
 
     return render_template(
         "mailing/preview.html",

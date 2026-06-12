@@ -52,10 +52,24 @@
       Contenu HTML de l'email. Les balises de style inline sont recommandées pour la compatibilité des clients mail.<br>
       Balises disponibles, personnalisées par destinataire :
       <ul class="mb-0 mt-1">
-        <li><code>[[lien_panne]]</code> — lien de signalement de panne (centres).</li>
-        <li><code>[[lien_livre_or]]</code> — lien livre d'or (centres).</li>
-        <li><code>[[numeros_tombola]]</code> — liste des numéros de billet du participant (tombola).</li>
+        <li class="mt-1"><strong>Centres</strong>
+          <ul class="mb-0">
+            <li><code>[[lien_panne]]</code> — lien de signalement de panne.</li>
+            <li><code>[[lien_livre_or]]</code> — lien livre d'or / feedback.</li>
+            <li><code>[[qr_panne]]</code> — QR code image (signalement de panne).</li>
+            <li><code>[[qr_livre_or]]</code> — QR code image (livre d'or).</li>
+          </ul>
+        </li>
+        <li class="mt-1"><strong>Tombola</strong>
+          <ul class="mb-0">
+            <li><code>[[numeros_tombola]]</code> — numéros de billet du participant.</li>
+          </ul>
+        </li>
       </ul>
+      <div class="mt-1 text-muted" style="font-size:.85em;">
+        Les balises centres sont ignorées pour les membres&nbsp;/ tombola, et vice-versa.
+        Les balises QR ne fonctionnent que dans le corps, pas dans l'objet.
+      </div>
     </div>
   </div>
 
