@@ -86,6 +86,7 @@
             <form method="post"
                   action="{{ url_for('events.volunteer_set_availability', personal_token=personal_token, slot_id=slot.id) }}"
                   class="d-flex gap-2 align-items-center">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <select name="status" class="form-select form-select-sm" style="width: auto;" aria-label="Disponibilité">
                 <option value="present" {% if my_status == 'present' %}selected{% endif %}>Présent</option>
                 <option value="maybe" {% if my_status == 'maybe' %}selected{% endif %}>Peut-être</option>
@@ -150,6 +151,7 @@
       <form method="post" action="{{ url_for('events.volunteer_upload_media', personal_token=personal_token) }}"
             enctype="multipart/form-data"
             class="mt-3 card card-body" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-2">
           <label for="vol-media-file" class="form-label small">
             Photo ou vidéo <span class="text-danger">*</span>

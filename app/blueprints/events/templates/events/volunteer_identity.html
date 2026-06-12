@@ -41,6 +41,7 @@
         pour gérer vos créneaux et ajouter des photos.
       </p>
       <form method="post" action="{{ url_for('events.volunteer_register', token=token) }}" novalidate>
+        {{ form.hidden_tag() }}
         {{ form.website() }}
         <div class="mb-3">
           <label for="{{ form.name.id }}" class="form-label">{{ form.name.label.text }}</label>
