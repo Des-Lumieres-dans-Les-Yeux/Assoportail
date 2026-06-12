@@ -320,6 +320,23 @@ def _send_recipients(campaign_id: int, client, *, rate_limit: int = 100) -> dict
                 recipient_subject = recipient_subject.replace(tag, feedback_url)
                 recipient_body = recipient_body.replace(tag, feedback_url)
 
+            # QR code tags — body only (no meaning in a subject line).
+            # Degrade gracefully: if QR generation fails, replace with the raw URL.
+            if "[[qr_panne]]" in recipient_body:
+                try:
+                    qr_tag = _make_qr_img_tag(breakdown_url) if breakdown_url else ""
+                except Exception:
+                    logger.exception("QR generation failed for [[qr_panne]]")
+                    qr_tag = breakdown_url
+                recipient_body = recipient_body.replace("[[qr_panne]]", qr_tag)
+            if "[[qr_livre_or]]" in recipient_body:
+                try:
+                    qr_tag = _make_qr_img_tag(feedback_url) if feedback_url else ""
+                except Exception:
+                    logger.exception("QR generation failed for [[qr_livre_or]]")
+                    qr_tag = feedback_url
+                recipient_body = recipient_body.replace("[[qr_livre_or]]", qr_tag)
+
             # [[numeros_tombola]] — ticket numbers for this recipient (O(1) dict lookup).
             numeros = tombola_numbers_by_email.get(recipient.email.lower(), "")
             for tag in ["{numeros_tombola}", "{{numeros_tombola}}", "[[numeros_tombola]]"]:
@@ -376,3 +393,28 @@ def _build_raw_message(to: str, subject: str, body_html: str) -> str:
     msg["Subject"] = subject
     msg.attach(MIMEText(body_html, "html", "utf-8"))
     return base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+
+def _make_qr_img_tag(url: str, size_px: int = 150) -> str:
+    """Return an inline HTML <img> tag containing a base64-encoded PNG QR code.
+
+    Args:
+        url: The URL to encode in the QR code.
+        size_px: Rendered width/height in pixels (default 150).
+    """
+    import io
+
+    import qrcode
+
+    qr = qrcode.QRCode(box_size=6, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return (
+        f'<img src="data:image/png;base64,{b64}"'
+        f' width="{size_px}" height="{size_px}"'
+        f' style="display:block;" alt="QR code">'
+    )
