@@ -14,6 +14,9 @@ branch_labels = None
 depends_on = None
 
 signing_status = sa.Enum("pending", "completed", "cancelled", name="signing_status")
+signing_status_ref = sa.Enum(
+    "pending", "completed", "cancelled", name="signing_status", create_type=False
+)
 
 
 def upgrade() -> None:
@@ -25,7 +28,7 @@ def upgrade() -> None:
         sa.Column("document_id", sa.Integer(), nullable=True),
         sa.Column("signed_document_id", sa.Integer(), nullable=True),
         sa.Column("token", sa.String(64), nullable=False),
-        sa.Column("status", signing_status, nullable=False, server_default="pending"),
+        sa.Column("status", signing_status_ref, nullable=False, server_default="pending"),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("sent_by_id", sa.Integer(), nullable=True),
         sa.Column("submitted_at", sa.DateTime(timezone=True), nullable=True),
