@@ -256,6 +256,7 @@ def create_user():
         db.session.commit()
 
         from app.tasks.notifications import send_welcome_email_task
+
         send_welcome_email_task.delay(user.id, temp_password)
 
         flash(
@@ -320,6 +321,7 @@ def forgot_password():
             token = _generate_reset_token(user.id)
             reset_url = url_for("auth.reset_password", token=token, _external=True)
             from app.tasks.notifications import send_password_reset_task
+
             send_password_reset_task.delay(user.id, reset_url)
 
         # Always show the same message to prevent user enumeration
@@ -409,6 +411,7 @@ def admin_reset_password(user_id: int):
     db.session.commit()
 
     from app.tasks.notifications import send_admin_reset_task
+
     send_admin_reset_task.delay(user.id, temp_password)
     flash(
         f"Mot de passe réinitialisé pour {user.full_name}. "

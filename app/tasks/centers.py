@@ -29,9 +29,7 @@ def notify_bureau_installation_request(self, request_id: int) -> dict:
     if req is None:
         return {"status": "error", "error": "InstallationRequest introuvable."}
 
-    bureau_users = db.session.scalars(
-        db.select(User).where(User.role == UserRole.BUREAU)
-    ).all()
+    bureau_users = db.session.scalars(db.select(User).where(User.role == UserRole.BUREAU)).all()
 
     portal_url = url_for("centers.list_requests", _external=True)
     sent = 0
@@ -86,9 +84,7 @@ def notify_bureau_breakdown(self, task_id: int, reporter_name: str) -> dict:
     if center is None:
         return {"status": "error", "error": f"Center pour task {task_id} introuvable."}
 
-    bureau_users = db.session.scalars(
-        db.select(User).where(User.role == UserRole.BUREAU)
-    ).all()
+    bureau_users = db.session.scalars(db.select(User).where(User.role == UserRole.BUREAU)).all()
 
     portal_url = url_for("tasks.detail", task_id=task.id, _external=True)
     sent = 0

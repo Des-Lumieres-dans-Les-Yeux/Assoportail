@@ -308,9 +308,7 @@ def _send_recipients(campaign_id: int, client, *, rate_limit: int = 100) -> dict
                 breakdown_url = public_url(
                     "machines.public_breakdown", token=center.breakdown_token
                 )
-                feedback_url = public_url(
-                    "centers.submit_feedback", token=center.feedback_token
-                )
+                feedback_url = public_url("centers.submit_feedback", token=center.feedback_token)
             else:
                 breakdown_url = ""
                 feedback_url = ""
@@ -395,5 +393,3 @@ def _build_raw_message(to: str, subject: str, body_html: str) -> str:
     msg["Subject"] = subject
     msg.attach(MIMEText(body_html, "html", "utf-8"))
     return base64.urlsafe_b64encode(msg.as_bytes()).decode()
-
-

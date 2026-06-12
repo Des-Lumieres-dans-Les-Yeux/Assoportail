@@ -17,6 +17,12 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
+class SigningStatus(enum.StrEnum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
 class CenterStatus(enum.StrEnum):
     """Partnership status with a healthcare center."""
 
@@ -100,6 +106,12 @@ class Center(db.Model):
         "InstallationRequest",
         back_populates="created_center",
         foreign_keys="[InstallationRequest.created_center_id]",
+    )
+    signing_requests: Mapped[list[SigningRequest]] = relationship(
+        "SigningRequest",
+        back_populates="center",
+        order_by="SigningRequest.sent_at.desc()",
+        cascade="all, delete-orphan",
     )
 
     @property
@@ -247,3 +259,52 @@ class InstallationRequest(db.Model):
 
     def __repr__(self) -> str:
         return f"<InstallationRequest center={self.center_name!r} status={self.status}>"
+
+
+class SigningRequest(db.Model):
+    """A document sent to a center contact for signature.
+
+    The center follows a token-based link, downloads the document, and uploads
+    the signed copy back. The bureau is notified upon completion.
+    """
+
+    __tablename__ = "signing_requests"
+    __auditable__ = True
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    center_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("centers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
+    )
+    signed_document_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
+    )
+    token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    status: Mapped[SigningStatus] = mapped_column(
+        Enum(
+            SigningStatus, name="signing_status", values_callable=lambda obj: [e.value for e in obj]
+        ),
+        nullable=False,
+        default=SigningStatus.PENDING,
+    )
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    sent_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    submitter_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    center: Mapped[Center] = relationship("Center", back_populates="signing_requests")
+    document: Mapped[Document | None] = relationship("Document", foreign_keys=[document_id])
+    signed_document: Mapped[Document | None] = relationship(
+        "Document", foreign_keys=[signed_document_id]
+    )
+    sent_by: Mapped[User | None] = relationship("User", foreign_keys=[sent_by_id])
+
+    def __repr__(self) -> str:
+        return f"<SigningRequest center={self.center_id} status={self.status.value}>"

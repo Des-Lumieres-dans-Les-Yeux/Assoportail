@@ -199,7 +199,7 @@ class TestVolunteerFlow:
         assert resp.status_code == 200
         assert b"Inscription" in resp.data
 
-    @patch("app.blueprints.events.routes._send_volunteer_confirmation")
+    @patch("app.tasks.events.send_volunteer_confirmation")
     def test_volunteer_submit_sends_email(
         self, mock_send, app: Flask, client: FlaskClient, bureau_client: FlaskClient, bureau_user
     ):
@@ -216,7 +216,7 @@ class TestVolunteerFlow:
             follow_redirects=True,
         )
         assert resp.status_code == 200
-        mock_send.assert_called_once()
+        mock_send.delay.assert_called_once()
         with app.app_context():
             vol = db.session.scalars(
                 db.select(EventVolunteer).where(EventVolunteer.email == "vol@test.fr")
@@ -225,7 +225,7 @@ class TestVolunteerFlow:
             assert not vol.confirmed
             db.session.remove()
 
-    @patch("app.blueprints.events.routes._send_volunteer_confirmation")
+    @patch("app.tasks.events.send_volunteer_confirmation")
     def test_volunteer_confirm_and_portal(
         self, mock_send, app: Flask, client: FlaskClient, bureau_client: FlaskClient, bureau_user
     ):

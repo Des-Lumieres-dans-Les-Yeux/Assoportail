@@ -181,12 +181,11 @@ def preview(campaign_id: int):
         if dirty:
             db.session.commit()
         from app.tasks.utils import public_url
+
         breakdown_url = public_url(
             "machines.public_breakdown", token=selected_center.breakdown_token
         )
-        feedback_url = public_url(
-            "centers.submit_feedback", token=selected_center.feedback_token
-        )
+        feedback_url = public_url("centers.submit_feedback", token=selected_center.feedback_token)
     else:
         # Tags that don't apply to this audience are replaced with empty string.
         breakdown_url = ""
@@ -225,6 +224,7 @@ def preview(campaign_id: int):
 
     if "[[qr_panne]]" in body:
         from app.tasks.utils import make_qr_img_tag
+
         try:
             qr_tag = make_qr_img_tag(breakdown_url) if breakdown_url else ""
         except Exception:
@@ -232,6 +232,7 @@ def preview(campaign_id: int):
         body = body.replace("[[qr_panne]]", qr_tag)
     if "[[qr_livre_or]]" in body:
         from app.tasks.utils import make_qr_img_tag
+
         try:
             qr_tag = make_qr_img_tag(feedback_url) if feedback_url else ""
         except Exception:

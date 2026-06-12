@@ -195,6 +195,118 @@
   {% endif %}
 </section>
 
+{# Signing requests #}
+{% if current_user.has_permission('centers') %}
+<section aria-labelledby="signing-heading" class="mb-4">
+  <h2 class="h5" id="signing-heading">
+    <i class="bi bi-pen me-1" aria-hidden="true"></i>Documents à signer
+  </h2>
+
+  {% set active_signing = center.signing_requests | selectattr('status', 'equalto', 'pending') | list %}
+  {% set completed_signing = center.signing_requests | selectattr('status', 'equalto', 'completed') | list %}
+
+  {% if active_signing %}
+  <ul class="list-group list-group-flush border rounded mb-3" style="max-width: 42rem;" aria-label="Demandes en attente">
+    {% for sr in active_signing %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <i class="bi bi-hourglass-split text-warning me-1" aria-hidden="true"></i>
+          <strong>{{ sr.document.original_filename if sr.document else '(document supprimé)' }}</strong>
+          <small class="text-muted ms-2">envoyé le {{ sr.sent_at.strftime('%d/%m/%Y') }}</small>
+          <div class="mt-1">
+            <code class="small user-select-all" id="signing-url-{{ sr.id }}">{{ url_for('centers.sign_document', token=sr.token, _external=True) }}</code>
+            <button type="button"
+                    class="btn btn-outline-secondary btn-sm py-0 px-1 ms-1 align-text-bottom"
+                    data-copy-target="signing-url-{{ sr.id }}"
+                    title="Copier le lien" aria-label="Copier le lien de signature">
+              <i class="bi bi-clipboard" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+        <form method="post"
+              action="{{ url_for('centers.cancel_signing_request', center_id=center.id, req_id=sr.id) }}"
+              data-confirm="Annuler cette demande de signature ?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-danger btn-sm text-nowrap">Annuler</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted mb-2">Aucune demande en attente.</p>
+  {% endif %}
+
+  {% if completed_signing %}
+  <details class="mb-3">
+    <summary class="text-muted small">{{ completed_signing | length }} demande(s) complétée(s)</summary>
+    <ul class="list-group list-group-flush border rounded mt-2" style="max-width: 42rem;">
+      {% for sr in completed_signing %}
+      <li class="list-group-item">
+        <i class="bi bi-check-circle-fill text-success me-1" aria-hidden="true"></i>
+        <strong>{{ sr.document.original_filename if sr.document else '(document supprimé)' }}</strong>
+        <small class="text-muted ms-2">signé le {{ sr.submitted_at.strftime('%d/%m/%Y') }} par {{ sr.submitter_name }}</small>
+        {% if sr.signed_document %}
+        —
+        <a href="{{ sr.signed_document.drive_web_link or url_for('documents.download', document_id=sr.signed_document.id) }}"
+           target="_blank" class="small">
+          <i class="bi bi-download me-1" aria-hidden="true"></i>Télécharger le signé
+        </a>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  {# Send a document for signature #}
+  {% set signable_docs = [] %}
+  {% if center.convention_document %}{% set signable_docs = signable_docs + [center.convention_document] %}{% endif %}
+  {% for doc in center.documents if doc.type in ('contract', 'report', 'other') %}{% set signable_docs = signable_docs + [doc] %}{% endfor %}
+
+  <details>
+    <summary class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-send me-1" aria-hidden="true"></i>Envoyer un document à signer
+    </summary>
+    <form method="post"
+          action="{{ url_for('centers.create_signing_request', center_id=center.id) }}"
+          class="mt-3 border rounded p-3 bg-light d-flex align-items-end gap-3 flex-wrap"
+          style="max-width: 42rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="flex-grow-1">
+        <label for="signing-doc-select" class="form-label small">
+          Document à envoyer <span class="text-danger">*</span>
+        </label>
+        <select id="signing-doc-select" name="document_id" class="form-select form-select-sm" required>
+          <option value="">— Choisir un document —</option>
+          {% if center.convention_document %}
+          <option value="{{ center.convention_document.id }}">
+            Convention — {{ center.convention_document.original_filename }}
+          </option>
+          {% endif %}
+          {% for doc in center.documents if doc.type in ('contract', 'report', 'other') %}
+          <option value="{{ doc.id }}">{{ doc.original_filename }}</option>
+          {% endfor %}
+        </select>
+        {% if not center.convention_document and not (center.documents | selectattr('type', 'in', ['contract', 'report', 'other']) | list) %}
+        <div class="text-muted small mt-1">Aucun document disponible. Téléversez d'abord une convention ou un contrat.</div>
+        {% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm text-nowrap">
+        <i class="bi bi-send me-1" aria-hidden="true"></i>Envoyer
+      </button>
+    </form>
+    {% if center.contacts | selectattr('email') | list | length == 0 %}
+    <p class="text-muted small mt-2">
+      <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+      Aucun contact avec une adresse email — le lien sera affiché pour copie manuelle.
+    </p>
+    {% endif %}
+  </details>
+</section>
+{% endif %}
+
 {# Contacts #}
 <section aria-labelledby="contacts-heading" class="mb-4">
   <h2 class="h5" id="contacts-heading">

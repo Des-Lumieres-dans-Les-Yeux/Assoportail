@@ -26,8 +26,13 @@ def _captcha_data(app: Flask, a: int = 4, b: int = 3) -> dict:
         key = key.encode()
     ts = int(time.time())
     token = hmac.new(key, f"{a},{b},{ts}".encode(), hashlib.sha256).hexdigest()
-    return {"captcha_a": str(a), "captcha_b": str(b), "captcha_ts": str(ts),
-            "captcha_token": token, "captcha_answer": str(a + b)}
+    return {
+        "captcha_a": str(a),
+        "captcha_b": str(b),
+        "captcha_ts": str(ts),
+        "captcha_token": token,
+        "captcha_answer": str(a + b),
+    }
 
 
 def _make_pending_request(

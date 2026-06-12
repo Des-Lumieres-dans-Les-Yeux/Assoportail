@@ -165,6 +165,52 @@ def send_breakdown_alert_email(
     _deliver(to_email, subject, body)
 
 
+def send_signing_request_email(
+    to_email: str,
+    contact_name: str,
+    center_name: str,
+    document_name: str,
+    signing_url: str,
+) -> None:
+    """Notify a center contact that a document is waiting for their signature."""
+    subject = f"Document à signer — {center_name}"
+    body = (
+        f"Bonjour {contact_name},\n\n"
+        f"Un document vous a été envoyé par l'association Des Lumières Dans Les Yeux "
+        f"pour signature concernant le centre « {center_name} ».\n\n"
+        f"  Document : {document_name}\n\n"
+        f"Pour signer et retourner le document, cliquez sur le lien suivant :\n"
+        f"{signing_url}\n\n"
+        f"Ce lien vous permet de :\n"
+        f"  1. Télécharger le document à signer\n"
+        f"  2. Imprimer, signer, scanner (ou signer numériquement)\n"
+        f"  3. Déposer le document signé directement via le lien\n\n"
+        f"Cordialement,\n"
+        f"L'équipe Assoportail"
+    )
+    _deliver(to_email, subject, body)
+
+
+def send_signing_completed_email(
+    to_email: str,
+    full_name: str,
+    center_name: str,
+    submitter_name: str,
+    portal_url: str,
+) -> None:
+    """Notify a bureau member that a signed document has been returned."""
+    subject = f"Document signé reçu — {center_name}"
+    body = (
+        f"Bonjour {full_name},\n\n"
+        f"Le document envoyé au centre « {center_name} » a été signé et retourné "
+        f"par {submitter_name}.\n\n"
+        f"Consultez le document signé sur la fiche du centre :\n{portal_url}\n\n"
+        f"Cordialement,\n"
+        f"Assoportail (notification automatique)"
+    )
+    _deliver(to_email, subject, body)
+
+
 def send_cerfa_receipt_email(
     to_email: str,
     donor_name: str,

@@ -1476,6 +1476,7 @@ def volunteer_register(token: str):
             if existing:
                 # Resend confirmation email with their existing personal link
                 from app.tasks.events import send_volunteer_confirmation
+
                 send_volunteer_confirmation.delay(existing.id)
                 flash("Un email avec votre lien personnel a été renvoyé.", "info")
                 return redirect(url_for("events.volunteer_register", token=token))
@@ -1491,6 +1492,7 @@ def volunteer_register(token: str):
             db.session.add(volunteer)
             db.session.commit()
             from app.tasks.events import send_volunteer_confirmation
+
             send_volunteer_confirmation.delay(volunteer.id)
             flash(
                 "Un email de confirmation a été envoyé. Vérifiez votre boîte de réception.",
@@ -1720,6 +1722,7 @@ def email_participants(event_id: int):
         return redirect(url_for("events.detail", event_id=event_id))
 
     from app.tasks.events import email_event_participants
+
     email_event_participants.delay(event_id, subject, body)
     flash(f"Envoi en cours à {len(recipients)} participant(s).", "success")
     return redirect(url_for("events.detail", event_id=event_id))

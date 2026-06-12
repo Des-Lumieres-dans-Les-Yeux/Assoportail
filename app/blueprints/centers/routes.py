@@ -25,7 +25,14 @@ from app.blueprints.centers.forms import (
 from app.blueprints.documents.routes import _detect_mime
 from app.decorators import bureau_required, permission_required
 from app.extensions import db, limiter
-from app.models.center import Center, CenterContact, CenterFeedback, CenterStatus
+from app.models.center import (
+    Center,
+    CenterContact,
+    CenterFeedback,
+    CenterStatus,
+    SigningRequest,
+    SigningStatus,
+)
 from app.models.document import Document, DocumentType, center_documents
 from app.models.machine import Machine, MachineInstallation, MachineStatus, MaintenanceRecord
 from app.models.task import Task, TaskSource, TaskStatus
@@ -203,6 +210,8 @@ def detail(center_id: int):
             selectinload(Center.feedbacks),
             selectinload(Center.documents),
             selectinload(Center.convention_document),
+            selectinload(Center.signing_requests).selectinload(SigningRequest.document),
+            selectinload(Center.signing_requests).selectinload(SigningRequest.signed_document),
         ],
     )
     if center is None:
@@ -665,6 +674,7 @@ def report_breakdown(center_id: int):
         "success",
     )
     from app.tasks.centers import notify_bureau_breakdown
+
     notify_bureau_breakdown.delay(task.id, current_user.full_name)
     return redirect(url_for("centers.detail", center_id=center_id))
 
@@ -1068,6 +1078,7 @@ def request_installation():
             db.session.add(req)
             db.session.commit()
             from app.tasks.centers import notify_bureau_installation_request
+
             notify_bureau_installation_request.delay(req.id)
             return redirect(url_for("centers.request_installation", merci=1))
 
@@ -1193,6 +1204,230 @@ def reject_request(request_id: int):
 
     flash("La demande a été rejetée.", "info")
     return redirect(url_for("centers.list_requests"))
+
+
+# ---------------------------------------------------------------------------
+# Signing requests — bureau creates, center submits via public token link
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/<int:center_id>/signing-requests", methods=["POST"])
+@permission_required(UserPermission.CENTERS)
+def create_signing_request(center_id: int):
+    """Send a document to center contacts for signature."""
+    center = db.session.get(
+        Center,
+        center_id,
+        options=[selectinload(Center.contacts)],
+    )
+    if center is None:
+        abort(404)
+
+    document_id = request.form.get("document_id", type=int)
+    if not document_id:
+        flash("Veuillez sélectionner un document à envoyer.", "warning")
+        return redirect(url_for("centers.detail", center_id=center_id))
+
+    doc = db.session.get(Document, document_id)
+    if doc is None:
+        abort(404)
+
+    token = secrets.token_urlsafe(32)
+    signing_req = SigningRequest(
+        center_id=center_id,
+        document_id=document_id,
+        token=token,
+        status=SigningStatus.PENDING,
+        sent_by_id=current_user.id,
+    )
+    db.session.add(signing_req)
+    db.session.commit()
+
+    signing_url = url_for("centers.sign_document", token=token, _external=True)
+    contacts_with_email = [c for c in center.contacts if c.email]
+
+    if contacts_with_email:
+        from app.services.mailer import send_signing_request_email
+
+        for contact in contacts_with_email:
+            try:
+                send_signing_request_email(
+                    to_email=contact.email,
+                    contact_name=contact.name,
+                    center_name=center.name,
+                    document_name=doc.original_filename,
+                    signing_url=signing_url,
+                )
+            except Exception:
+                logger.exception("Failed to send signing request email to %s", contact.email)
+        flash(
+            f"Demande de signature envoyée à {len(contacts_with_email)} contact(s). "
+            f"Lien : {signing_url}",
+            "success",
+        )
+    else:
+        flash(
+            f"Demande créée. Aucun contact email — lien à transmettre manuellement : {signing_url}",
+            "warning",
+        )
+
+    return redirect(url_for("centers.detail", center_id=center_id))
+
+
+@bp.route("/<int:center_id>/signing-requests/<int:req_id>/cancel", methods=["POST"])
+@permission_required(UserPermission.CENTERS)
+def cancel_signing_request(center_id: int, req_id: int):
+    """Cancel a pending signing request."""
+    req = db.session.get(SigningRequest, req_id)
+    if req is None or req.center_id != center_id:
+        abort(404)
+    if req.status != SigningStatus.PENDING:
+        flash("Cette demande n'est plus en attente.", "warning")
+        return redirect(url_for("centers.detail", center_id=center_id))
+    req.status = SigningStatus.CANCELLED
+    db.session.commit()
+    flash("Demande de signature annulée.", "info")
+    return redirect(url_for("centers.detail", center_id=center_id))
+
+
+@bp.route("/sign/<token>", methods=["GET", "POST"])
+@limiter.limit(
+    "10 per hour", key_func=lambda: f"{request.remote_addr}:{request.view_args.get('token', '')}"
+)
+def sign_document(token: str):
+    """Public page: download the document and upload the signed copy."""
+    req = db.session.scalars(
+        db.select(SigningRequest).where(SigningRequest.token == token)
+    ).first()
+    if req is None or req.status == SigningStatus.CANCELLED:
+        abort(403)
+
+    center = db.session.get(Center, req.center_id)
+
+    if request.method == "POST":
+        if req.status == SigningStatus.COMPLETED:
+            flash("Ce document a déjà été retourné.", "info")
+            return redirect(url_for("centers.sign_thanks"))
+
+        submitter_name = request.form.get("submitter_name", "").strip()
+        notes = request.form.get("notes", "").strip() or None
+        file = request.files.get("signed_file")
+
+        if not submitter_name:
+            flash("Veuillez indiquer votre nom.", "danger")
+            return render_template("centers/sign_request.html", req=req, center=center, token=token)
+
+        if not file or not file.filename:
+            flash("Veuillez sélectionner le document signé.", "danger")
+            return render_template("centers/sign_request.html", req=req, center=center, token=token)
+
+        safe_name = secure_filename(file.filename)
+        if not safe_name:
+            flash("Nom de fichier invalide.", "danger")
+            return render_template("centers/sign_request.html", req=req, center=center, token=token)
+
+        ext = os.path.splitext(safe_name)[1].lower()
+        if ext not in _CONVENTION_EXTS:
+            flash("Seuls les fichiers PDF, DOCX et ODT sont acceptés.", "danger")
+            return render_template("centers/sign_request.html", req=req, center=center, token=token)
+
+        data = file.read()
+        if data[:4] == b"%PDF":
+            detected_mime = "application/pdf"
+        elif data[:2] == b"PK":
+            detected_mime = "application/zip"
+        else:
+            flash("Contenu du fichier invalide (vérification MIME).", "danger")
+            return render_template("centers/sign_request.html", req=req, center=center, token=token)
+
+        if detected_mime != _CONVENTION_EXTS[ext]:
+            flash("Le contenu du fichier ne correspond pas à son extension.", "danger")
+            return render_template("centers/sign_request.html", req=req, center=center, token=token)
+
+        if len(data) > _CONVENTION_MAX_BYTES:
+            flash("Le fichier dépasse la limite de 20 Mo.", "danger")
+            return render_template("centers/sign_request.html", req=req, center=center, token=token)
+
+        slug = (
+            re.sub(r"[^a-z0-9]+", "-", os.path.splitext(safe_name)[0].lower()).strip("-")[:40]
+            or "signe"
+        )
+        stored_name = f"{date.today().isoformat()}_contract_signe_{slug}{ext}"
+
+        signed_doc = Document(
+            original_filename=file.filename,
+            stored_filename=stored_name,
+            type=DocumentType.CONTRACT.value,
+            category="convention_signee",
+            mime_type=detected_mime,
+            size_bytes=len(data),
+            description=f"Convention signée — {center.name}",
+        )
+        db.session.add(signed_doc)
+        db.session.flush()
+
+        drive_uploaded = False
+        if current_app.config.get("GOOGLE_SHARED_DRIVE_ID"):
+            try:
+                from app.services.drive import DriveService
+
+                file_id, web_link = DriveService.from_db().upload_file(
+                    data, file.filename, detected_mime, DocumentType.CONTRACT.value
+                )
+                signed_doc.drive_file_id = file_id
+                signed_doc.drive_web_link = web_link
+                drive_uploaded = True
+            except Exception as exc:
+                logger.warning("Drive upload failed for signed document: %s", exc)
+
+        if not drive_uploaded:
+            subdir = os.path.join(current_app.config["UPLOAD_FOLDER"], "contracts")
+            os.makedirs(subdir, exist_ok=True)
+            with open(os.path.join(subdir, stored_name), "wb") as fh:
+                fh.write(data)
+
+        req.signed_document_id = signed_doc.id
+        req.status = SigningStatus.COMPLETED
+        req.submitted_at = datetime.now(UTC)
+        req.submitter_name = submitter_name
+        req.notes = notes
+        db.session.commit()
+
+        portal_url = url_for("centers.detail", center_id=center.id, _external=True)
+        _notify_bureau_signing_completed(center, submitter_name, portal_url)
+
+        return redirect(url_for("centers.sign_thanks"))
+
+    return render_template("centers/sign_request.html", req=req, center=center, token=token)
+
+
+@bp.route("/sign/merci")
+def sign_thanks():
+    """Thank-you page after submitting a signed document."""
+    return render_template("centers/sign_thanks.html")
+
+
+def _notify_bureau_signing_completed(
+    center: "Center", submitter_name: str, portal_url: str
+) -> None:
+    """Email all bureau members when a signed document is returned (best-effort)."""
+    from app.models.user import User, UserRole
+    from app.services.mailer import send_signing_completed_email
+
+    bureau_users = db.session.scalars(db.select(User).where(User.role == UserRole.BUREAU)).all()
+    for bu in bureau_users:
+        if not bu.email:
+            continue
+        try:
+            send_signing_completed_email(
+                to_email=bu.email,
+                full_name=bu.full_name,
+                center_name=center.name,
+                submitter_name=submitter_name,
+                portal_url=portal_url,
+            )
+        except Exception:
+            logger.exception("Failed to send signing completed alert to %s", bu.email)
 
 
 # ---------------------------------------------------------------------------

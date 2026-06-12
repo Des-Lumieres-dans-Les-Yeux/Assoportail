@@ -407,6 +407,7 @@ def import_csv():
 
     db.session.commit()
     from app.tasks.notifications import send_welcome_email_task
+
     for uid, pwd in to_notify:
         send_welcome_email_task.delay(uid, pwd)
     if created:
@@ -554,6 +555,7 @@ def create():
             db.session.add(user)
             db.session.commit()
             from app.tasks.notifications import send_welcome_email_task
+
             send_welcome_email_task.delay(user.id, temp_password)
             flash(
                 f"Membre {user.full_name} créé. Un email avec les identifiants a été envoyé.",
