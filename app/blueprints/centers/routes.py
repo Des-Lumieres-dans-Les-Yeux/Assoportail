@@ -1296,9 +1296,7 @@ def cancel_signing_request(center_id: int, req_id: int):
 )
 def sign_document(token: str):
     """Public page: download the document and upload the signed copy."""
-    req = db.session.scalars(
-        db.select(SigningRequest).where(SigningRequest.token == token)
-    ).first()
+    req = db.session.scalars(db.select(SigningRequest).where(SigningRequest.token == token)).first()
     if req is None or req.status == SigningStatus.CANCELLED:
         abort(403)
 
