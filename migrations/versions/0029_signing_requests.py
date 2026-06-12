@@ -13,14 +13,19 @@ down_revision = "0028"
 branch_labels = None
 depends_on = None
 
-signing_status = sa.Enum("pending", "completed", "cancelled", name="signing_status")
-signing_status_ref = sa.Enum(
-    "pending", "completed", "cancelled", name="signing_status", create_type=False
-)
-
 
 def upgrade() -> None:
-    signing_status.create(op.get_bind(), checkfirst=True)
+    # Create the enum type idempotently — the EXCEPTION block handles the case
+    # where a previous failed migration run already created the type.
+    op.execute(sa.text("""
+        DO $$ BEGIN
+            CREATE TYPE signing_status AS ENUM ('pending', 'completed', 'cancelled');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+    """))
+
+    # Use sa.String for the status column so SQLAlchemy does not try to
+    # (re-)create the enum type during the before_create table event.
     op.create_table(
         "signing_requests",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -28,7 +33,7 @@ def upgrade() -> None:
         sa.Column("document_id", sa.Integer(), nullable=True),
         sa.Column("signed_document_id", sa.Integer(), nullable=True),
         sa.Column("token", sa.String(64), nullable=False),
-        sa.Column("status", signing_status_ref, nullable=False, server_default="pending"),
+        sa.Column("status", sa.String(20), nullable=False, server_default="pending"),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("sent_by_id", sa.Integer(), nullable=True),
         sa.Column("submitted_at", sa.DateTime(timezone=True), nullable=True),
@@ -41,6 +46,14 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("token"),
     )
+
+    # Cast the column to the proper enum type now that the table exists.
+    op.execute(sa.text(
+        "ALTER TABLE signing_requests "
+        "ALTER COLUMN status TYPE signing_status "
+        "USING status::signing_status"
+    ))
+
     op.create_index("ix_signing_requests_center_id", "signing_requests", ["center_id"])
     op.create_index("ix_signing_requests_token", "signing_requests", ["token"])
 
@@ -49,4 +62,4 @@ def downgrade() -> None:
     op.drop_index("ix_signing_requests_token", "signing_requests")
     op.drop_index("ix_signing_requests_center_id", "signing_requests")
     op.drop_table("signing_requests")
-    signing_status.drop(op.get_bind(), checkfirst=True)
+    op.execute(sa.text("DROP TYPE IF EXISTS signing_status"))
