@@ -1248,7 +1248,9 @@ def create_signing_request(center_id: int):
     db.session.add(signing_req)
     db.session.commit()
 
-    signing_url = url_for("centers.sign_document", token=token, _external=True)
+    from app.tasks.utils import public_url
+
+    signing_url = public_url("centers.sign_document", token=token)
     contacts_with_email = [c for c in center.contacts if c.email]
 
     if contacts_with_email:
@@ -1396,6 +1398,48 @@ def sign_document(token: str):
         return redirect(url_for("centers.sign_thanks"))
 
     return render_template("centers/sign_request.html", req=req, center=center, token=token)
+
+
+@bp.route("/sign/<token>/document")
+@limiter.limit(
+    "30 per hour", key_func=lambda: f"{request.remote_addr}:{request.view_args.get('token', '')}"
+)
+def sign_document_download(token: str):
+    """Public download of the document to sign, authorised by the signing token."""
+    from flask import send_file
+
+    req = db.session.scalars(db.select(SigningRequest).where(SigningRequest.token == token)).first()
+    if req is None or req.status == SigningStatus.CANCELLED or req.document is None:
+        abort(404)
+
+    doc = req.document
+
+    if doc.drive_file_id:
+        try:
+            from app.services.drive import DriveService
+
+            data = DriveService.from_db().download_file(doc.drive_file_id)
+            return Response(
+                data,
+                mimetype=doc.mime_type or "application/octet-stream",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{doc.original_filename}"',
+                    "Cache-Control": "private, no-store",
+                },
+            )
+        except Exception:
+            logger.exception("Drive proxy failed for signing token %s", token)
+            abort(502)
+
+    file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], doc.subdir, doc.stored_filename)
+    real_path = os.path.realpath(file_path)
+    upload_folder = os.path.realpath(current_app.config["UPLOAD_FOLDER"])
+    if not real_path.startswith(upload_folder + os.sep):
+        abort(403)
+    if not os.path.isfile(file_path):
+        abort(404)
+
+    return send_file(file_path, download_name=doc.original_filename, as_attachment=True)
 
 
 @bp.route("/sign/merci")

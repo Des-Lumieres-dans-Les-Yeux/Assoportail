@@ -39,7 +39,7 @@
       </h2>
       {% if req.document %}
       <p class="mb-2 text-muted small">{{ req.document.original_filename }}</p>
-      <a href="{{ url_for('documents.download', document_id=req.document.id) }}"
+      <a href="{{ url_for('centers.sign_document_download', token=token) }}"
          class="btn btn-outline-primary btn-sm">
         <i class="bi bi-download me-1" aria-hidden="true"></i>Télécharger
       </a>
