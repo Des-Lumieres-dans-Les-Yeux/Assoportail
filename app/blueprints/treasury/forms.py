@@ -30,6 +30,22 @@ _CGI_CHOICES = [
     ("238 bis", "Art. 238 bis CGI — entreprises (mécénat, réduction IS 60%)"),
 ]
 
+# CERFA page-1 "Cochez la case concernée" — keys must match
+# app.services.cerfa.ORG_CATEGORY_FIELDS.
+_CERFA_ORG_CATEGORY_CHOICES = [
+    ("oeuvre", "Œuvre ou organisme d'intérêt général"),
+    ("rup", "Association/fondation reconnue d'utilité publique (ou mission RUP Alsace-Moselle)"),
+    ("alsace_moselle", "Association cultuelle ou de bienfaisance reconnue d'Alsace-Moselle"),
+    ("aide_alimentaire", "Aide alimentaire / soins médicaux / logement de personnes en difficulté"),
+    ("fondation_entreprise", "Fondation d'entreprise"),
+    ("fondation_universitaire", "Fondation universitaire ou partenariale"),
+    ("musee", "Musée de France"),
+    ("enseignement_sup", "Établissement d'enseignement supérieur ou artistique d'intérêt général"),
+    ("creation_entreprises", "Organisme de financement de la création d'entreprises"),
+    ("festivals", "Organisme d'organisation de festivals"),
+    ("recherche", "Établissement de recherche d'intérêt général à but non lucratif"),
+]
+
 
 class TransactionForm(FlaskForm):
     """Form for creating or editing a financial transaction (bureau only)."""
@@ -173,6 +189,11 @@ class AssociationConfigForm(FlaskForm):
         "Article CGI applicable",
         choices=_CGI_CHOICES,
         default="200",
+    )
+    cerfa_org_category = SelectField(
+        "Catégorie de l'organisme (case cochée sur le CERFA)",
+        choices=_CERFA_ORG_CATEGORY_CHOICES,
+        default="oeuvre",
     )
     representative_name = StringField(
         "Nom du représentant légal",

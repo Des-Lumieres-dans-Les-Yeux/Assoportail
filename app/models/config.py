@@ -44,12 +44,18 @@ class AssociationConfig(db.Model):
     )
     purpose: Mapped[str | None] = mapped_column(Text, nullable=True)
     cgi_article: Mapped[str] = mapped_column(String(20), nullable=False, default="200")
+    # CERFA page-1 "Cochez la case concernée" — organism category key
+    # (see app.services.cerfa.ORG_CATEGORY_FIELDS).
+    cerfa_org_category: Mapped[str] = mapped_column(String(40), nullable=False, default="oeuvre")
     representative_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     representative_title: Mapped[str | None] = mapped_column(String(100), nullable=True)
     km_rate: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True, default=0.603)
 
     # Association logo (PNG/JPG) for certificates and official documents
     logo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+
+    # Signature image (transparent PNG recommended) stamped on generated CERFA receipts
+    signature: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
     # CERFA DOCX templates stored as binary blobs (nullable = not uploaded yet)
     cerfa_tpl_particulier: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)

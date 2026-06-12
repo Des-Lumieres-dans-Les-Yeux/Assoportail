@@ -102,7 +102,18 @@
     </div>
   </div>
 
-
+  <div class="row g-3 mb-3">
+    <div class="col-sm-5">
+      <label for="{{ form.cgi_article.id }}" class="form-label">{{ form.cgi_article.label.text }}</label>
+      {{ form.cgi_article(class="form-select", id=form.cgi_article.id) }}
+      <div class="form-text">Case cochée sur le reçu (page 2). Le mécénat entreprise force « 238 bis ».</div>
+    </div>
+    <div class="col-sm-7">
+      <label for="{{ form.cerfa_org_category.id }}" class="form-label">{{ form.cerfa_org_category.label.text }}</label>
+      {{ form.cerfa_org_category(class="form-select", id=form.cerfa_org_category.id) }}
+      <div class="form-text">Case « Cochez la case concernée » (page 1) du CERFA.</div>
+    </div>
+  </div>
 
   {% if cfg.name %}
   <div class="alert alert-success d-flex align-items-center gap-2 mb-4" role="alert">
@@ -151,68 +162,93 @@
   </form>
 </div>
 
-<h2 class="h5 mb-3 mt-5">
-  Modèles CERFA (DOCX)
+<h2 class="h5 mb-3 mt-5">Signature du représentant</h2>
+<p class="text-muted small mb-3">
+  Signature incrustée automatiquement dans la case « Date et signature » des reçus
+  CERFA générés (particuliers et mécénat). <strong>PNG à fond transparent recommandé</strong>,
+  2 Mo maximum.
+</p>
+<div style="max-width: 24rem;">
+  {% if cfg.signature %}
+  <div class="d-flex align-items-center gap-3 mb-2">
+    <span class="badge bg-success"><i class="bi bi-check-lg me-1" aria-hidden="true"></i>Chargée</span>
+    <form method="post" action="{{ url_for('treasury.delete_signature') }}"
+          class="d-inline" data-confirm="Supprimer la signature ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-trash me-1" aria-hidden="true"></i>Supprimer
+      </button>
+    </form>
+  </div>
+  {% else %}
+  <span class="badge bg-secondary mb-2">Non chargée</span>
+  {% endif %}
+  <form method="post" action="{{ url_for('treasury.upload_signature') }}"
+        enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="input-group input-group-sm">
+      <input type="file" name="file" class="form-control form-control-sm" accept=".png,.jpg,.jpeg,.webp" required>
+      <button type="submit" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-upload me-1" aria-hidden="true"></i>Téléverser
+      </button>
+    </div>
+  </form>
+</div>
+
+<h2 class="h5 mb-3 mt-5">Génération des reçus CERFA</h2>
+<div class="alert alert-info" role="alert" style="max-width: 48rem;">
+  <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+  Les reçus <strong>dons de particuliers</strong> et <strong>mécénat entreprise</strong>
+  sont générés automatiquement à partir du <strong>formulaire officiel CERFA n° 11580*04</strong>
+  intégré à l'application : aucun modèle à téléverser, les informations ci-dessus
+  (nom, adresse, objet, article CGI, catégorie d'organisme) et les données du don
+  remplissent directement les champs du formulaire.
+</div>
+
+<h3 class="h6 mb-2 mt-4">
+  Modèle « Don en nature » (DOCX)
   <button type="button" class="btn btn-link btn-sm p-0 ms-1" data-bs-toggle="tooltip" data-bs-html="true"
-          title="<strong>Champs de fusion obligatoires :</strong><br>
-          <code>Prénom</code>, <code>Nom</code>, <code>IDRECU</code>, <code>Montant_perçu</code>, <code>Date</code><br>
-          <strong>Optionnels :</strong><br>
-          <code>Adresse_de_livraison</code>, <code>Ville_de_livraison</code>, <code>Code_postal_de_livraison</code><br>
-          <strong>Don en nature uniquement :</strong><br>
-          <code>Courriel</code>, <code>Don</code><br><br>
-          Créez un document Word (.docx) et insérez ces champs via <em>Insertion &gt; Champ &gt; MergeField</em> dans Word, ou utilisez la syntaxe <code>«NomDuChamp»</code>.">
+          title="<strong>Champs de fusion :</strong><br>
+          <code>IDRECU</code>, <code>Date</code>, <code>Nom</code>, <code>Prénom</code>,
+          <code>Adresse_de_livraison</code>, <code>Ville_de_livraison</code>,
+          <code>Code_postal_de_livraison</code>, <code>Courriel</code>, <code>Don</code>">
     <i class="bi bi-info-circle text-muted" aria-hidden="true"></i>
   </button>
-</h2>
+</h3>
 <p class="text-muted small mb-3">
-  Téléversez vos modèles de reçus fiscaux au format DOCX avec champs de fusion
-  (MailMerge). Le système vérifie automatiquement que les champs obligatoires sont présents.
+  Les dons en nature ne sont pas attestés sur le CERFA officiel mais sur votre
+  lettre d'attestation personnalisée (en-tête, valeur déclarée, signature).
+  Téléversez-la au format DOCX avec champs de fusion (MailMerge).
 </p>
 
-<div class="row g-3" style="max-width: 48rem;">
-  {% set templates = [
-    ('particulier', 'Don de particulier', cfg.cerfa_tpl_particulier),
-    ('entreprise', 'Mécénat entreprise', cfg.cerfa_tpl_entreprise),
-    ('nature', 'Don en nature', cfg.cerfa_tpl_nature),
-  ] %}
-  {% for tpl_type, label, data in templates %}
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-header py-2">
-        <strong class="small">{{ label }}</strong>
-      </div>
-      <div class="card-body py-2">
-        {% if data %}
-        <div class="d-flex align-items-center gap-2 mb-2">
-          <span class="badge bg-success"><i class="bi bi-check-lg me-1" aria-hidden="true"></i>Chargé</span>
-          <a href="{{ url_for('treasury.download_cerfa_template', tpl_type=tpl_type) }}"
-             class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-download" aria-hidden="true"></i>
-          </a>
-          <form method="post" action="{{ url_for('treasury.delete_cerfa_template', tpl_type=tpl_type) }}"
-                class="d-inline" data-confirm="Supprimer ce modèle ?">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-outline-danger btn-sm">
-              <i class="bi bi-trash" aria-hidden="true"></i>
-            </button>
-          </form>
-        </div>
-        {% else %}
-        <span class="badge bg-secondary mb-2">Non chargé</span>
-        {% endif %}
-        <form method="post" action="{{ url_for('treasury.upload_cerfa_template', tpl_type=tpl_type) }}"
-              enctype="multipart/form-data">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <div class="input-group input-group-sm">
-            <input type="file" name="file" class="form-control form-control-sm" accept=".docx" required>
-            <button type="submit" class="btn btn-outline-primary btn-sm">
-              <i class="bi bi-upload" aria-hidden="true"></i>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+<div style="max-width: 24rem;">
+  {% if cfg.cerfa_tpl_nature %}
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <span class="badge bg-success"><i class="bi bi-check-lg me-1" aria-hidden="true"></i>Chargé</span>
+    <a href="{{ url_for('treasury.download_cerfa_template', tpl_type='nature') }}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-download" aria-hidden="true"></i>
+    </a>
+    <form method="post" action="{{ url_for('treasury.delete_cerfa_template', tpl_type='nature') }}"
+          class="d-inline" data-confirm="Supprimer ce modèle ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-trash" aria-hidden="true"></i>
+      </button>
+    </form>
   </div>
-  {% endfor %}
+  {% else %}
+  <span class="badge bg-secondary mb-2">Non chargé</span>
+  {% endif %}
+  <form method="post" action="{{ url_for('treasury.upload_cerfa_template', tpl_type='nature') }}"
+        enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="input-group input-group-sm">
+      <input type="file" name="file" class="form-control form-control-sm" accept=".docx" required>
+      <button type="submit" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-upload me-1" aria-hidden="true"></i>Téléverser
+      </button>
+    </div>
+  </form>
 </div>
 {% endblock %}

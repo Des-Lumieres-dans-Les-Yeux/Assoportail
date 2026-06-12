@@ -234,22 +234,13 @@ def generate_cerfa(transaction_id: int):
         )
         return redirect(url_for("treasury.association_config"))
 
+    from app.services.cerfa import generate_cerfa_pdf
+
     try:
-        docx_bytes, filename = _generate_cerfa_document(transaction)
+        pdf_bytes, pdf_filename = generate_cerfa_pdf(transaction, cfg)
     except Exception as exc:
         flash(f"Erreur lors de la génération du CERFA : {exc}", "danger")
         return redirect(url_for("treasury.detail", transaction_id=transaction_id))
-
-    # Convert DOCX to PDF
-    try:
-        from app.tasks.cerfa import _convert_docx_to_pdf
-
-        pdf_bytes = _convert_docx_to_pdf(docx_bytes)
-        pdf_filename = filename.replace(".docx", ".pdf")
-    except Exception as exc:
-        logger.warning("PDF conversion failed, returning DOCX: %s", exc)
-        pdf_bytes = docx_bytes
-        pdf_filename = filename
 
     return Response(
         pdf_bytes,
@@ -307,14 +298,12 @@ def association_config():
     return render_template("treasury/config.html", form=form, cfg=cfg)
 
 
+# Only the in-kind ("don en nature") receipt uses a DOCX letter template;
+# particulier/entreprise receipts are generated from the official CERFA AcroForm.
 _CERFA_COLUMN_MAP = {
-    "particulier": "cerfa_tpl_particulier",
-    "entreprise": "cerfa_tpl_entreprise",
     "nature": "cerfa_tpl_nature",
 }
 _CERFA_LABELS = {
-    "particulier": "Don de particulier",
-    "entreprise": "Mécénat entreprise",
     "nature": "Don en nature",
 }
 
@@ -341,10 +330,8 @@ def upload_cerfa_template(tpl_type: str):
         flash("Le fichier dépasse 5 Mo.", "danger")
         return redirect(url_for("treasury.association_config"))
 
-    # Validate merge fields
-    required_fields = {"Prénom", "Nom", "IDRECU", "Montant_perçu", "Date"}
-    if tpl_type == "nature":
-        required_fields |= {"Courriel", "Don"}
+    # Validate merge fields (in-kind letter: no "Montant_perçu" — uses "Don")
+    required_fields = {"IDRECU", "Date", "Nom", "Don"}
     missing = _check_merge_fields(data, required_fields)
     if missing:
         flash(
@@ -432,6 +419,42 @@ def delete_logo():
     cfg.logo = None
     db.session.commit()
     flash("Logo supprimé.", "info")
+    return redirect(url_for("treasury.association_config"))
+
+
+@bp.route("/config/signature/upload", methods=["POST"])
+@bureau_required
+def upload_signature():
+    """Upload the representative's signature image stamped on CERFA receipts."""
+    file = request.files.get("file")
+    if not file or not file.filename:
+        flash("Aucun fichier sélectionné.", "warning")
+        return redirect(url_for("treasury.association_config"))
+
+    if file.filename.lower().rsplit(".", 1)[-1] not in ("png", "jpg", "jpeg", "webp"):
+        flash("Seuls les fichiers PNG, JPG ou WebP sont acceptés.", "danger")
+        return redirect(url_for("treasury.association_config"))
+
+    data = file.read()
+    if len(data) > 2 * 1024 * 1024:
+        flash("Le fichier dépasse 2 Mo.", "danger")
+        return redirect(url_for("treasury.association_config"))
+
+    cfg = AssociationConfig.get()
+    cfg.signature = data
+    db.session.commit()
+    flash("Signature téléversée.", "success")
+    return redirect(url_for("treasury.association_config"))
+
+
+@bp.route("/config/signature/delete", methods=["POST"])
+@bureau_required
+def delete_signature():
+    """Remove the stored signature image."""
+    cfg = AssociationConfig.get()
+    cfg.signature = None
+    db.session.commit()
+    flash("Signature supprimée.", "info")
     return redirect(url_for("treasury.association_config"))
 
 
@@ -638,67 +661,6 @@ def _apply_donor_fields(form: TransactionForm, transaction: Transaction) -> None
         transaction.donor_description = None
 
 
-_DONATION_TYPE_TO_TPL_COL = {
-    "particulier": "cerfa_tpl_particulier",
-    "mecena": "cerfa_tpl_entreprise",
-    "nature": "cerfa_tpl_nature",
-}
-
-
-def _generate_cerfa_document(transaction: Transaction) -> tuple[bytes, str]:
-    """Fill the appropriate CERFA DOCX template and return (bytes, filename).
-
-    Templates are loaded from the database (AssociationConfig blobs).
-    Raises RuntimeError if the template has not been uploaded yet.
-    """
-    from mailmerge import MailMerge  # requires mailmerge2
-
-    donation_type = transaction.donation_type or "particulier"
-    col = _DONATION_TYPE_TO_TPL_COL.get(donation_type, "cerfa_tpl_particulier")
-
-    cfg = AssociationConfig.get()
-    tpl_data = getattr(cfg, col)
-    if tpl_data is None:
-        raise RuntimeError(
-            "Modèle CERFA non configuré. Téléversez-le dans Configuration > Modèles CERFA."
-        )
-
-    import tempfile
-
-    # MailMerge requires a file path — write to a temp file
-    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
-        tmp.write(tpl_data)
-        template_path = tmp.name
-
-    receipt_id = f"DON-{transaction.date.year}-{transaction.id:05d}"
-    merge_data = {
-        "Prénom": transaction.donor_first_name or "",
-        "Nom": transaction.donor_name or "",
-        "Adresse_de_livraison": transaction.donor_address or "",
-        "Ville_de_livraison": transaction.donor_city or "",
-        "Code_postal_de_livraison": transaction.donor_zip or "",
-        "IDRECU": receipt_id,
-        "Montant_perçu": f"{transaction.amount:.2f} €",
-        "Date": transaction.date.strftime("%d/%m/%Y"),
-    }
-    if donation_type == "nature":
-        merge_data["Courriel"] = transaction.donor_email or ""
-        merge_data["Don"] = transaction.donor_description or ""
-
-    try:
-        with MailMerge(template_path) as document:
-            document.merge(**merge_data)
-            buf = io.BytesIO()
-            document.write(buf)
-    finally:
-        import os
-
-        os.unlink(template_path)
-
-    filename = f"{receipt_id}.docx"
-    return buf.getvalue(), filename
-
-
 def _check_merge_fields(docx_bytes: bytes, required: set[str]) -> set[str]:
     """Return the set of required merge fields missing from a DOCX template."""
     import tempfile
@@ -720,23 +682,3 @@ def _check_merge_fields(docx_bytes: bytes, required: set[str]) -> set[str]:
     except Exception:
         logger.warning("Could not inspect merge fields in uploaded DOCX")
         return set()  # allow upload if inspection fails
-
-
-def _amount_to_words(amount: Decimal) -> str:
-    """Return the French words for a monetary amount.
-
-    Example: 150.50 → 'Cent cinquante euros et cinquante centimes'.
-    """
-    try:
-        from num2words import num2words
-
-        euros = int(amount)
-        cents = round(int((amount - euros) * 100))
-        parts = [num2words(euros, lang="fr") + (" euro" if euros <= 1 else " euros")]
-        if cents > 0:
-            parts.append(
-                "et " + num2words(cents, lang="fr") + (" centime" if cents <= 1 else " centimes")
-            )
-        return " ".join(parts).capitalize()
-    except Exception:
-        return f"{amount:.2f} €"
