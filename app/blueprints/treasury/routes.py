@@ -2,9 +2,10 @@
 
 import io
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
+from email_validator import EmailNotValidError, validate_email
 from flask import Response, abort, flash, redirect, render_template, request, url_for
 
 logger = logging.getLogger(__name__)
@@ -215,29 +216,40 @@ def delete(transaction_id: int):
 # ---------------------------------------------------------------------------
 
 
-@bp.route("/<int:transaction_id>/cerfa")
-@bureau_required
-def generate_cerfa(transaction_id: int):
-    """Generate and serve the filled CERFA DOCX for a donation transaction."""
+def _donation_or_redirect(transaction_id: int):
+    """Return a donation transaction + config, or a redirect response (as 2nd item)."""
     transaction = db.session.get(Transaction, transaction_id)
     if transaction is None:
         abort(404)
     if transaction.source != TransactionSource.DONATION.value:
         flash("Le CERFA n'est disponible que pour les transactions de type Don.", "warning")
-        return redirect(url_for("treasury.detail", transaction_id=transaction_id))
-
+        return transaction, redirect(url_for("treasury.detail", transaction_id=transaction_id))
     cfg = AssociationConfig.get()
     if not cfg.name:
         flash(
             "Configurez d'abord les informations de l'association avant de générer un CERFA.",
             "warning",
         )
-        return redirect(url_for("treasury.association_config"))
+        return transaction, redirect(url_for("treasury.association_config"))
+    return transaction, None
 
-    from app.services.cerfa import generate_cerfa_pdf
+
+@bp.route("/<int:transaction_id>/cerfa", methods=["POST"])
+@bureau_required
+def generate_cerfa(transaction_id: int):
+    """Issue the CERFA (assign number + archive to Drive) and download the PDF.
+
+    POST (not GET) because it has side effects — a permanent receipt number and
+    a Drive upload — and must be CSRF-protected and immune to link prefetching.
+    """
+    transaction, redirect_resp = _donation_or_redirect(transaction_id)
+    if redirect_resp is not None:
+        return redirect_resp
+
+    from app.services.cerfa import issue_cerfa
 
     try:
-        pdf_bytes, pdf_filename = generate_cerfa_pdf(transaction, cfg)
+        pdf_bytes, pdf_filename = issue_cerfa(transaction)
     except Exception as exc:
         flash(f"Erreur lors de la génération du CERFA : {exc}", "danger")
         return redirect(url_for("treasury.detail", transaction_id=transaction_id))
@@ -249,31 +261,50 @@ def generate_cerfa(transaction_id: int):
     )
 
 
+@bp.route("/<int:transaction_id>/cerfa/mark-sent", methods=["POST"])
+@bureau_required
+def mark_cerfa_sent(transaction_id: int):
+    """Mark the CERFA as sent (handed over / mailed manually), recording the date.
+
+    Also issues the receipt (number + Drive archival) if not already done.
+    """
+    transaction, redirect_resp = _donation_or_redirect(transaction_id)
+    if redirect_resp is not None:
+        return redirect_resp
+
+    from app.services.cerfa import issue_cerfa
+
+    try:
+        issue_cerfa(transaction)
+    except Exception as exc:
+        flash(f"Erreur lors de la génération du CERFA : {exc}", "danger")
+        return redirect(url_for("treasury.detail", transaction_id=transaction_id))
+
+    transaction.cerfa_sent_at = datetime.now(UTC)
+    db.session.commit()
+    flash("Reçu marqué comme envoyé.", "success")
+    return redirect(url_for("treasury.detail", transaction_id=transaction_id))
+
+
 @bp.route("/<int:transaction_id>/cerfa/send", methods=["POST"])
 @bureau_required
 def send_cerfa_email(transaction_id: int):
-    """Queue CERFA generation + email delivery as an async Celery task."""
-    transaction = db.session.get(Transaction, transaction_id)
-    if transaction is None:
-        abort(404)
-    if transaction.source != TransactionSource.DONATION.value:
-        abort(400)
-    if not transaction.donor_email:
-        flash("Aucun email de donateur enregistré pour cette transaction.", "warning")
-        return redirect(url_for("treasury.detail", transaction_id=transaction_id))
+    """Queue CERFA issuance + email delivery to the address from the form."""
+    transaction, redirect_resp = _donation_or_redirect(transaction_id)
+    if redirect_resp is not None:
+        return redirect_resp
 
-    cfg = AssociationConfig.get()
-    if not cfg.name:
-        flash("Configurez d'abord les informations de l'association.", "warning")
-        return redirect(url_for("treasury.association_config"))
+    to_email = (request.form.get("to_email") or transaction.donor_email or "").strip()
+    try:
+        validate_email(to_email)
+    except (EmailNotValidError, ValueError):
+        flash("Adresse email invalide.", "danger")
+        return redirect(url_for("treasury.detail", transaction_id=transaction_id))
 
     from app.tasks.cerfa import generate_and_send_cerfa
 
-    generate_and_send_cerfa.delay(transaction_id)
-    flash(
-        f"Génération et envoi du CERFA à {transaction.donor_email} en cours…",
-        "info",
-    )
+    generate_and_send_cerfa.delay(transaction_id, to_email=to_email)
+    flash(f"Génération et envoi du CERFA à {to_email} en cours…", "info")
     return redirect(url_for("treasury.detail", transaction_id=transaction_id))
 
 
@@ -566,7 +597,7 @@ def cerfa_stats():
         )
         .where(
             Transaction.source == TransactionSource.DONATION.value,
-            Transaction.cerfa_sent_at.is_not(None),
+            Transaction.cerfa_generated_at.is_not(None),
         )
         .group_by("year", Transaction.donation_type)
         .order_by(extract("year", Transaction.date).desc(), Transaction.donation_type)

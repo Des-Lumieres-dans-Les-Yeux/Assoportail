@@ -115,6 +115,12 @@ class Transaction(db.Model):
     donor_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     donor_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     donor_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Sequential per-year receipt number "DON-AAAA-NNNNN", assigned on first
+    # generation and never reused.
+    cerfa_number: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True)
+    cerfa_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     cerfa_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cerfa_drive_file_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     cerfa_drive_web_link: Mapped[str | None] = mapped_column(String(500), nullable=True)

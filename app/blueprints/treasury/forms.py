@@ -30,20 +30,34 @@ _CGI_CHOICES = [
     ("238 bis", "Art. 238 bis CGI — entreprises (mécénat, réduction IS 60%)"),
 ]
 
-# CERFA page-1 "Cochez la case concernée" — keys must match
-# app.services.cerfa.ORG_CATEGORY_FIELDS.
+# CERFA page-1 "Cochez la case concernée" — verbatim official categories.
+# Keys MUST match app.services.cerfa.ORG_CATEGORY_FIELDS (1 case cochée = 1 clé).
 _CERFA_ORG_CATEGORY_CHOICES = [
     ("oeuvre", "Œuvre ou organisme d'intérêt général"),
-    ("rup", "Association/fondation reconnue d'utilité publique (ou mission RUP Alsace-Moselle)"),
+    (
+        "rup",
+        "Association/fondation reconnue d'utilité publique (ou mission RUP en Alsace-Moselle)",
+    ),
     ("alsace_moselle", "Association cultuelle ou de bienfaisance reconnue d'Alsace-Moselle"),
-    ("aide_alimentaire", "Aide alimentaire / soins médicaux / logement de personnes en difficulté"),
+    (
+        "aide_alimentaire",
+        "Aide alimentaire / soins médicaux / logement de personnes en difficulté",
+    ),
     ("fondation_entreprise", "Fondation d'entreprise"),
-    ("fondation_universitaire", "Fondation universitaire ou partenariale"),
+    ("fondation_universitaire", "Fondation universitaire ou partenariale (L. 719-12 / L. 719-13)"),
+    ("fondation_patrimoine", "Fondation du patrimoine (ou association affectant les dons à celle-ci)"),
     ("musee", "Musée de France"),
     ("enseignement_sup", "Établissement d'enseignement supérieur ou artistique d'intérêt général"),
     ("creation_entreprises", "Organisme de financement de la création d'entreprises"),
-    ("festivals", "Organisme d'organisation de festivals"),
+    ("festivals", "Organisme dont l'activité principale est l'organisation de festivals"),
     ("recherche", "Établissement de recherche d'intérêt général à but non lucratif"),
+    ("recherche_agree", "Société ou organisme agréé de recherche scientifique ou technique"),
+    ("anr", "Agence nationale de la recherche (ANR)"),
+    ("entreprise_insertion", "Entreprise d'insertion ou de travail temporaire d'insertion"),
+    ("association_intermediaire", "Association intermédiaire (L. 5132-7 du code du travail)"),
+    ("ateliers_insertion", "Ateliers et chantiers d'insertion (L. 5132-15 du code du travail)"),
+    ("entreprises_adaptees", "Entreprises adaptées (L. 5213-13 du code du travail)"),
+    ("autres", "Autres organismes"),
 ]
 
 

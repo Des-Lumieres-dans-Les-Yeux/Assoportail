@@ -21,8 +21,10 @@ coordinates, so trust the constants here, not the raw field names.
 from __future__ import annotations
 
 import io
+import logging
 import re
 import textwrap
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,6 +33,8 @@ from app.models.config import AssociationConfig
 
 if TYPE_CHECKING:
     from app.models.treasury import Transaction
+
+logger = logging.getLogger(__name__)
 
 TEMPLATE_PATH = Path(__file__).parent / "assets" / "cerfa_11580_04.pdf"
 
@@ -61,8 +65,42 @@ ORG_CATEGORY_FIELDS: dict[str, str] = {
         "Association fournissant gratuitement une aide alimentaire ou des "
         "soins médicaux à des personnes en"
     ),
+    "fondation_patrimoine": (
+        "Fondation du patrimoine ou fondation ou association qui affecte "
+        "irrévocablement les dons à la Fondation du"
+    ),
     "recherche": "Etablissement de recherche public ou privé dintérêt général à but non lucratif",
+    "entreprise_insertion": (
+        "Entreprise dinsertion ou entreprise de travail temporaire dinsertion "
+        "articles L 51325 et L 51326 du"
+    ),
+    "association_intermediaire": "Association intermédiaire article L51327 du code du travail",
+    "ateliers_insertion": "Ateliers et chantiers dinsertion article L513215 du code du travail",
+    "entreprises_adaptees": "Entreprises adaptées article L521313 du code du travail",
+    "anr": "Agence nationale de la recherche ANR",
+    "recherche_agree": "Société ou organisme agrée de recherche scientifique ou technique 2",
+    "autres": "Autres organisme",
 }
+
+# Characters Helvetica/WinAnsi supports but pypdf's appearance encoder does not
+# map (the cp1252 0x80–0x9F block and a few Unicode punctuation marks). Without
+# this, pypdf writes them as "?" in the baked appearance stream.
+_WINANSI_SUBST = {
+    "Œ": "OE", "œ": "oe",  # Œ œ
+    "‘": "'", "’": "'", "‚": "'", "′": "'",  # ‘ ’ ‚ ′
+    "“": '"', "”": '"', "„": '"',  # “ ” „
+    "–": "-", "—": "-", "−": "-", "•": "-",  # – — − •
+    "…": "...",  # …
+    " ": " ", " ": " ", " ": " ",  # nbsp / narrow nbsp / thin space
+    "€": "EUR",  # €
+}
+
+
+def _winansi_safe(text: str) -> str:
+    """Replace characters pypdf can't encode into the form font with safe equivalents."""
+    for src, dst in _WINANSI_SUBST.items():
+        text = text.replace(src, dst)
+    return text
 
 # "Le bénéficiaire certifie ... la réduction d'impôt prévue à l'article (3)"
 CGI_FIELDS = {"200": "200 du CGI", "238 bis": "238 bis du CGI", "978": "978 du CGI"}
@@ -71,6 +109,15 @@ CGI_FIELDS = {"200": "200 du CGI", "238 bis": "238 bis du CGI", "978": "978 du C
 SIGNATURE_BOX = (372.0, 28.0, 519.0, 86.0)
 # Page index (0-based) the signature box sits on.
 SIGNATURE_PAGE = 1
+
+
+def _receipt_id(transaction: Transaction) -> str:
+    """Return the receipt number — the assigned sequential one, or a fallback.
+
+    ``issue_cerfa`` assigns ``cerfa_number`` before generation; the fallback only
+    applies to ad-hoc previews of a transaction that was never formally issued.
+    """
+    return transaction.cerfa_number or f"DON-{transaction.date.year}-{transaction.id:05d}"
 
 
 def _split_street(addr: str | None) -> tuple[str, str]:
@@ -159,7 +206,7 @@ def build_cerfa_pdf(
         raise RuntimeError("Configuration de l'association incomplète (nom manquant).")
 
     donation_type = transaction.donation_type or "particulier"
-    receipt_id = f"DON-{transaction.date.year}-{transaction.id:05d}"
+    receipt_id = _receipt_id(transaction)
     amount: Decimal = transaction.amount
     date_str = transaction.date.strftime("%d/%m/%Y")
 
@@ -190,6 +237,7 @@ def build_cerfa_pdf(
     values["Euros"] = f"{amount:.2f}".replace(".", ",")
     values["Somme en toutes lettres"] = _amount_words(amount)
     values["date4"] = date_str  # Date du versement ou du don
+    values["date5"] = date_str  # date next to "Date et signature"
 
     # ---- Checkboxes (value '/On' ticks them) ----
     checks: list[str] = []
@@ -211,15 +259,19 @@ def build_cerfa_pdf(
     # Nature du don — cash (in-kind donations use the dedicated letter, not this form)
     checks.append("Numéraire")
 
-    field_values = {**values, **{name: "/On" for name in checks}}
+    # Sanitize text values to characters the form font can render (keeps accents
+    # like é/è/à/ç; fixes œ, curly quotes, dashes that pypdf would turn into "?").
+    text_values = {k: _winansi_safe(v) for k, v in values.items()}
+    field_values = {**text_values, **{name: "/On" for name in checks}}
 
     reader = PdfReader(str(TEMPLATE_PATH))
     writer = PdfWriter()
     writer.append(reader)
     for page in writer.pages:
         writer.update_page_form_field_values(page, field_values, auto_regenerate=False)
-    # Make viewers render the filled values / ticks (esp. checkboxes).
-    writer.set_need_appearances_writer(True)
+    # Do NOT set NeedAppearances: we rely on the appearance streams pypdf bakes
+    # above (correct WinAnsi encoding). Setting NeedAppearances makes viewers
+    # regenerate appearances with their own font, which corrupts accents.
 
     if cfg.signature:
         _stamp_signature(writer, cfg.signature)
@@ -280,7 +332,7 @@ def build_cerfa_nature_pdf(
             "Modèle « don en nature » non configuré. Téléversez-le dans Trésorerie › Configuration."
         )
 
-    receipt_id = f"DON-{transaction.date.year}-{transaction.id:05d}"
+    receipt_id = _receipt_id(transaction)
     merge_data = {
         "IDRECU": receipt_id,
         "Date": transaction.date.strftime("%d/%m/%Y"),
@@ -321,3 +373,90 @@ def generate_cerfa_pdf(
     if (transaction.donation_type or "particulier") == "nature":
         return build_cerfa_nature_pdf(transaction, cfg)
     return build_cerfa_pdf(transaction, cfg)
+
+
+# ---------------------------------------------------------------------------
+# Issuance orchestration: number assignment, Drive archival, generation
+# ---------------------------------------------------------------------------
+
+
+def assign_cerfa_number(transaction: Transaction) -> str:
+    """Assign a sequential per-year receipt number if not already set; return it.
+
+    Numbers reset each calendar year of the donation date and are never reused.
+    A unique constraint on ``cerfa_number`` guards against concurrent assignment;
+    on collision we retry inside a SAVEPOINT so only the failed assignment is
+    rolled back — never the caller's other pending changes.
+    """
+    if transaction.cerfa_number:
+        return transaction.cerfa_number
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.extensions import db
+    from app.models.treasury import Transaction as Txn
+
+    year = transaction.date.year
+    prefix = f"DON-{year}-"
+    for _ in range(8):
+        existing = db.session.scalars(
+            db.select(Txn.cerfa_number).where(Txn.cerfa_number.like(f"{prefix}%"))
+        ).all()
+        # Only parse well-formed "DON-AAAA-NNNNN" suffixes; ignore anything else
+        # (defensive against hand-edited values) instead of crashing on int().
+        seqs = [int(s) for n in existing if (s := n.rsplit("-", 1)[-1]).isdigit()]
+        candidate = f"{prefix}{max(seqs, default=0) + 1:05d}"
+        transaction.cerfa_number = candidate
+        try:
+            with db.session.begin_nested():  # SAVEPOINT — isolates this flush
+                db.session.flush()
+            return candidate
+        except IntegrityError:
+            transaction.cerfa_number = None
+    raise RuntimeError("Impossible d'attribuer un numéro de reçu (collisions répétées).")
+
+
+def archive_cerfa_to_drive(transaction: Transaction, pdf_bytes: bytes, filename: str) -> None:
+    """Upload the receipt PDF to Drive under Comptabilité/Reçus fiscaux/<year>.
+
+    No-op if already archived or if no Shared Drive is configured. Best-effort:
+    failures are logged, not raised (generation must still succeed offline).
+    """
+    if transaction.cerfa_drive_file_id:
+        return
+    try:
+        from flask import current_app
+
+        from app.services.drive import DriveService
+
+        if not current_app.config.get("GOOGLE_SHARED_DRIVE_ID"):
+            return
+        drive_svc = DriveService.from_db()
+        fid, wlink = drive_svc.upload_file(
+            pdf_bytes, filename, "application/pdf", "cerfa", year=transaction.date.year
+        )
+        transaction.cerfa_drive_file_id = fid
+        transaction.cerfa_drive_web_link = wlink
+    except Exception as exc:
+        logger.warning("Drive archival of CERFA failed: %s", exc)
+
+
+def issue_cerfa(
+    transaction: Transaction, cfg: AssociationConfig | None = None
+) -> tuple[bytes, str]:
+    """Issue the receipt: assign a number, generate the PDF, archive it to Drive.
+
+    Idempotent — re-issuing reuses the same number and Drive file. Commits the
+    resulting ``cerfa_number`` / ``cerfa_generated_at`` / Drive references.
+    Returns ``(pdf_bytes, filename)``.
+    """
+    from app.extensions import db
+
+    cfg = cfg or AssociationConfig.get()
+    assign_cerfa_number(transaction)
+    pdf_bytes, filename = generate_cerfa_pdf(transaction, cfg)
+    if transaction.cerfa_generated_at is None:
+        transaction.cerfa_generated_at = datetime.now(UTC)
+    archive_cerfa_to_drive(transaction, pdf_bytes, filename)
+    db.session.commit()
+    return pdf_bytes, filename
