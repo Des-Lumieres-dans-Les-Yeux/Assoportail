@@ -45,7 +45,10 @@ _CERFA_ORG_CATEGORY_CHOICES = [
     ),
     ("fondation_entreprise", "Fondation d'entreprise"),
     ("fondation_universitaire", "Fondation universitaire ou partenariale (L. 719-12 / L. 719-13)"),
-    ("fondation_patrimoine", "Fondation du patrimoine (ou association affectant les dons à celle-ci)"),
+    (
+        "fondation_patrimoine",
+        "Fondation du patrimoine (ou association affectant les dons à celle-ci)",
+    ),
     ("musee", "Musée de France"),
     ("enseignement_sup", "Établissement d'enseignement supérieur ou artistique d'intérêt général"),
     ("creation_entreprises", "Organisme de financement de la création d'entreprises"),
