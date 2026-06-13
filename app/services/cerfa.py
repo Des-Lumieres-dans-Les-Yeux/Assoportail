@@ -82,25 +82,6 @@ ORG_CATEGORY_FIELDS: dict[str, str] = {
     "autres": "Autres organisme",
 }
 
-# Characters Helvetica/WinAnsi supports but pypdf's appearance encoder does not
-# map (the cp1252 0x80–0x9F block and a few Unicode punctuation marks). Without
-# this, pypdf writes them as "?" in the baked appearance stream.
-_WINANSI_SUBST = {
-    "Œ": "OE", "œ": "oe",  # Œ œ
-    "‘": "'", "’": "'", "‚": "'", "′": "'",  # ‘ ’ ‚ ′
-    "“": '"', "”": '"', "„": '"',  # “ ” „
-    "–": "-", "—": "-", "−": "-", "•": "-",  # – — − •
-    "…": "...",  # …
-    " ": " ", " ": " ", " ": " ",  # nbsp / narrow nbsp / thin space
-    "€": "EUR",  # €
-}
-
-
-def _winansi_safe(text: str) -> str:
-    """Replace characters pypdf can't encode into the form font with safe equivalents."""
-    for src, dst in _WINANSI_SUBST.items():
-        text = text.replace(src, dst)
-    return text
 
 # "Le bénéficiaire certifie ... la réduction d'impôt prévue à l'article (3)"
 CGI_FIELDS = {"200": "200 du CGI", "238 bis": "238 bis du CGI", "978": "978 du CGI"}
@@ -109,6 +90,110 @@ CGI_FIELDS = {"200": "200 du CGI", "238 bis": "238 bis du CGI", "978": "978 du C
 SIGNATURE_BOX = (372.0, 28.0, 519.0, 86.0)
 # Page index (0-based) the signature box sits on.
 SIGNATURE_PAGE = 1
+
+# Bundled TrueType font used to raster field text. We do NOT rely on AcroForm
+# fields for display: many viewers (PDF.js, Drive preview…) regenerate field
+# appearances with their own font, corrupting accents and character widths.
+# Instead we draw every value as a crisp raster image and flatten the form —
+# the result renders identically everywhere. DejaVu Sans covers full Unicode.
+FONT_PATH = Path(__file__).parent / "assets" / "DejaVuSans.ttf"
+_TEXT_SUPERSAMPLE = 3  # render at 3× then place at 1× → ~216 DPI, crisp output
+
+
+def _image_overlay_page(img):
+    """Save an RGB PIL image as a 1-page PDF; return (page, width_pt, height_pt)."""
+    from pypdf import PdfReader
+
+    buf = io.BytesIO()
+    img.save(buf, format="PDF", resolution=72.0)  # 1 px = 1 pt
+    buf.seek(0)
+    page = PdfReader(buf).pages[0]
+    return page, float(page.mediabox.width), float(page.mediabox.height)
+
+
+def _place_overlay(writer, page_idx: int, overlay_page, scale: float, tx: float, ty: float):
+    from pypdf import Transformation
+
+    writer.pages[page_idx].merge_transformed_page(
+        overlay_page, Transformation().scale(scale, scale).translate(tx, ty)
+    )
+
+
+def _overlay_text(
+    writer, page_idx: int, rect, text: str, *, max_pt: float = 10.5, pad: float = 2.0
+):
+    """Draw *text* as a raster image stamped into *rect* (left-aligned, v-centered)."""
+    text = (text or "").strip()
+    if not text:
+        return
+    from PIL import Image, ImageDraw, ImageFont
+
+    x0, y0, x1, y1 = rect
+    box_w, box_h = x1 - x0, y1 - y0
+    font_pt = min(max_pt, box_h * 0.72)
+    s = _TEXT_SUPERSAMPLE
+    font = bbox = None
+    for _ in range(4):  # shrink to fit the box width
+        font = ImageFont.truetype(str(FONT_PATH), max(1, round(font_pt * s)))
+        bbox = font.getbbox(text)
+        text_w_pt = (bbox[2] - bbox[0]) / s
+        if text_w_pt <= box_w - 2 * pad or font_pt <= 5:
+            break
+        font_pt *= (box_w - 2 * pad) / text_w_pt
+    l, t, r, b = bbox
+    img = Image.new("RGB", (max(1, r - l + 2), max(1, b - t + 2)), (255, 255, 255))
+    ImageDraw.Draw(img).text((1 - l, 1 - t), text, font=font, fill=(0, 0, 0))
+    overlay, _pw, ph = _image_overlay_page(img)
+    ty = y0 + (box_h - ph / s) / 2
+    _place_overlay(writer, page_idx, overlay, 1.0 / s, x0 + pad, ty)
+
+
+def _overlay_check(writer, page_idx: int, rect):
+    """Stamp an "X" mark centered in a checkbox *rect*."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    x0, y0, x1, y1 = rect
+    side = min(x1 - x0, y1 - y0)
+    s = _TEXT_SUPERSAMPLE
+    font = ImageFont.truetype(str(FONT_PATH), max(1, round(side * 0.9 * s)))
+    l, t, r, b = font.getbbox("X")
+    img = Image.new("RGB", (max(1, r - l + 2), max(1, b - t + 2)), (255, 255, 255))
+    ImageDraw.Draw(img).text((1 - l, 1 - t), "X", font=font, fill=(0, 0, 0))
+    overlay, pw, ph = _image_overlay_page(img)
+    cx = x0 + (x1 - x0 - pw / s) / 2
+    cy = y0 + (y1 - y0 - ph / s) / 2
+    _place_overlay(writer, page_idx, overlay, 1.0 / s, cx, cy)
+
+
+def _field_rects(writer) -> dict:
+    """Map each AcroForm field name to (page_index, (x0, y0, x1, y1)) in PDF points."""
+    rects: dict = {}
+    for pidx, page in enumerate(writer.pages):
+        for a in page.get("/Annots") or []:
+            o = a.get_object()
+            if o.get("/Subtype") != "/Widget":
+                continue
+            parent = o.get("/Parent")
+            name = o.get("/T") or (parent.get_object().get("/T") if parent else None)
+            if name is None:
+                continue
+            r = [float(v) for v in o["/Rect"]]
+            x0, x1 = sorted((r[0], r[2]))
+            y0, y1 = sorted((r[1], r[3]))
+            rects[str(name)] = (pidx, (x0, y0, x1, y1))
+    return rects
+
+
+def _flatten_form(writer) -> None:
+    """Remove all widget annotations and the AcroForm so nothing re-renders."""
+    from pypdf.generic import ArrayObject, NameObject
+
+    for page in writer.pages:
+        if "/Annots" in page:
+            page[NameObject("/Annots")] = ArrayObject()
+    root = writer._root_object
+    if "/AcroForm" in root:
+        del root[NameObject("/AcroForm")]
 
 
 def _receipt_id(transaction: Transaction) -> str:
@@ -136,11 +221,8 @@ def _stamp_signature(writer, signature_bytes: bytes) -> None:
     breaks because of a bad signature image. Transparency is flattened onto
     white (the signature box is blank white space, so this is invisible).
     """
-    import logging
-
     try:
         from PIL import Image
-        from pypdf import PdfReader, Transformation
 
         img = Image.open(io.BytesIO(signature_bytes))
         if img.mode in ("RGBA", "LA", "P"):
@@ -151,27 +233,17 @@ def _stamp_signature(writer, signature_bytes: bytes) -> None:
         else:
             img = img.convert("RGB")
 
-        img_buf = io.BytesIO()
-        img.save(img_buf, format="PDF", resolution=72.0)
-        img_buf.seek(0)
-        overlay = PdfReader(img_buf).pages[0]
-
-        pw = float(overlay.mediabox.width)
-        ph = float(overlay.mediabox.height)
+        overlay, pw, ph = _image_overlay_page(img)
         if pw <= 0 or ph <= 0:
             return
-
         x0, y0, x1, y1 = SIGNATURE_BOX
         box_w, box_h = x1 - x0, y1 - y0
         scale = min(box_w / pw, box_h / ph)
-        tw, th = pw * scale, ph * scale
-        tx = x0 + (box_w - tw) / 2
-        ty = y0 + (box_h - th) / 2
-
-        ctm = Transformation().scale(scale, scale).translate(tx, ty)
-        writer.pages[SIGNATURE_PAGE].merge_transformed_page(overlay, ctm)
+        tx = x0 + (box_w - pw * scale) / 2
+        ty = y0 + (box_h - ph * scale) / 2
+        _place_overlay(writer, SIGNATURE_PAGE, overlay, scale, tx, ty)
     except Exception:
-        logging.getLogger(__name__).warning("CERFA signature overlay skipped", exc_info=True)
+        logger.warning("CERFA signature overlay skipped", exc_info=True)
 
 
 def _amount_words(amount: Decimal) -> str:
@@ -259,22 +331,27 @@ def build_cerfa_pdf(
     # Nature du don — cash (in-kind donations use the dedicated letter, not this form)
     checks.append("Numéraire")
 
-    # Sanitize text values to characters the form font can render (keeps accents
-    # like é/è/à/ç; fixes œ, curly quotes, dashes that pypdf would turn into "?").
-    text_values = {k: _winansi_safe(v) for k, v in values.items()}
-    field_values = {**text_values, **{name: "/On" for name in checks}}
-
     reader = PdfReader(str(TEMPLATE_PATH))
     writer = PdfWriter()
     writer.append(reader)
-    for page in writer.pages:
-        writer.update_page_form_field_values(page, field_values, auto_regenerate=False)
-    # Do NOT set NeedAppearances: we rely on the appearance streams pypdf bakes
-    # above (correct WinAnsi encoding). Setting NeedAppearances makes viewers
-    # regenerate appearances with their own font, which corrupts accents.
+    rects = _field_rects(writer)
+
+    # Raster every value into its field rect, then tick the checkboxes. We bypass
+    # interactive AcroForm fields entirely (see FONT_PATH note) for viewer-proof
+    # output.
+    for name, text in values.items():
+        loc = rects.get(name)
+        if loc and text:
+            _overlay_text(writer, loc[0], loc[1], text)
+    for name in checks:
+        loc = rects.get(name)
+        if loc:
+            _overlay_check(writer, loc[0], loc[1])
 
     if cfg.signature:
         _stamp_signature(writer, cfg.signature)
+
+    _flatten_form(writer)
 
     buf = io.BytesIO()
     writer.write(buf)
