@@ -51,9 +51,13 @@ def detail(campaign_id: int):
     )
     if campaign is None:
         abort(404)
+    pending_count = sum(
+        1 for r in campaign.recipients if r.status == RecipientStatus.PENDING.value
+    )
     return render_template(
         "mailing/detail.html",
         campaign=campaign,
+        pending_count=pending_count,
         CampaignStatus=CampaignStatus,
         RecipientStatus=RecipientStatus,
     )
@@ -401,30 +405,44 @@ def edit(campaign_id: int):
 def send(campaign_id: int):
     """Trigger sending — or resuming — a campaign via Celery.
 
-    ``draft``/``scheduled`` start a fresh send. ``sending`` is allowed too, so a
-    campaign whose worker was interrupted (e.g. killed mid-batch) can be resumed:
-    the task only ever processes recipients still ``pending``, so already-sent
-    ones are never re-sent.
+    ``draft``/``scheduled`` start a fresh send. Any other status is allowed to
+    *resume* as long as recipients are still ``pending`` — e.g. a campaign whose
+    worker was interrupted (killed mid-batch) and left stuck in ``sending``, or
+    one finalised early. The task only ever processes ``pending`` recipients, so
+    already-sent ones are never re-sent.
     """
     campaign = db.session.get(MailingCampaign, campaign_id)
     if campaign is None:
         abort(404)
-    resumable = (
-        CampaignStatus.DRAFT.value,
-        CampaignStatus.SCHEDULED.value,
-        CampaignStatus.SENDING.value,
+
+    is_fresh = campaign.status in (CampaignStatus.DRAFT.value, CampaignStatus.SCHEDULED.value)
+    pending_count = db.session.scalar(
+        db.select(db.func.count(MailingRecipient.id))
+        .where(MailingRecipient.campaign_id == campaign.id)
+        .where(MailingRecipient.status == RecipientStatus.PENDING.value)
     )
-    if campaign.status not in resumable:
-        flash("Cette campagne a déjà été envoyée.", "warning")
+
+    if not is_fresh and not pending_count:
+        flash("Cette campagne a déjà été entièrement envoyée.", "warning")
         return redirect(url_for("mailing.detail", campaign_id=campaign.id))
+
+    # Resuming a finalised campaign: flip it back to ``sending`` so the task
+    # (which skips sent/failed campaigns) will pick it up.
+    if not is_fresh and campaign.status != CampaignStatus.SENDING.value:
+        campaign.status = CampaignStatus.SENDING.value
+        db.session.commit()
 
     from app.tasks.mailing import send_campaign
 
     send_campaign.delay(campaign_id)
-    if campaign.status == CampaignStatus.SENDING.value:
-        flash(f"Reprise de l'envoi de « {campaign.name} »…", "info")
-    else:
+    if is_fresh:
         flash(f"Envoi de la campagne « {campaign.name} » en cours…", "info")
+    else:
+        flash(
+            f"Reprise de l'envoi de « {campaign.name} » "
+            f"({pending_count} destinataire(s) en attente)…",
+            "info",
+        )
     return redirect(url_for("mailing.detail", campaign_id=campaign.id))
 
 

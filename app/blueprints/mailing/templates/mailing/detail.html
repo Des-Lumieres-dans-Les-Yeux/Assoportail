@@ -31,6 +31,16 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer</button>
     </form>
+    {% elif pending_count %}
+    {# Campaign already started but recipients remain pending (e.g. interrupted
+       worker): allow resuming. Only the pending ones are (re)processed. #}
+    <form method="post" action="{{ url_for('mailing.send', campaign_id=campaign.id) }}"
+          data-confirm="Reprendre l'envoi pour les {{ pending_count }} destinataire(s) restant(s) ?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary btn-sm">
+        Reprendre l'envoi ({{ pending_count }})
+      </button>
+    </form>
     {% endif %}
   </div>
 </div>
