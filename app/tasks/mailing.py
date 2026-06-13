@@ -110,9 +110,7 @@ def send_campaign(self, campaign_id: int) -> dict:
         rate_limit = current_app.config.get("MAILING_RATE_LIMIT", 100)
         # rate_limit == 0 means "no throttling" (tests / unlimited): send everything
         # in a single pass. Otherwise process a bounded batch and reschedule.
-        batch_size = (
-            current_app.config.get("MAILING_BATCH_SIZE", 10) if rate_limit > 0 else None
-        )
+        batch_size = current_app.config.get("MAILING_BATCH_SIZE", 10) if rate_limit > 0 else None
 
         result = _send_recipients(campaign_id, client, batch_size=batch_size)
     finally:
