@@ -140,9 +140,9 @@ def _overlay_text(
         if text_w_pt <= box_w - 2 * pad or font_pt <= 5:
             break
         font_pt *= (box_w - 2 * pad) / text_w_pt
-    l, t, r, b = bbox
-    img = Image.new("RGB", (max(1, r - l + 2), max(1, b - t + 2)), (255, 255, 255))
-    ImageDraw.Draw(img).text((1 - l, 1 - t), text, font=font, fill=(0, 0, 0))
+    bx0, by0, bx1, by1 = bbox
+    img = Image.new("RGB", (max(1, bx1 - bx0 + 2), max(1, by1 - by0 + 2)), (255, 255, 255))
+    ImageDraw.Draw(img).text((1 - bx0, 1 - by0), text, font=font, fill=(0, 0, 0))
     overlay, _pw, ph = _image_overlay_page(img)
     ty = y0 + (box_h - ph / s) / 2
     _place_overlay(writer, page_idx, overlay, 1.0 / s, x0 + pad, ty)
@@ -156,9 +156,9 @@ def _overlay_check(writer, page_idx: int, rect):
     side = min(x1 - x0, y1 - y0)
     s = _TEXT_SUPERSAMPLE
     font = ImageFont.truetype(str(FONT_PATH), max(1, round(side * 0.9 * s)))
-    l, t, r, b = font.getbbox("X")
-    img = Image.new("RGB", (max(1, r - l + 2), max(1, b - t + 2)), (255, 255, 255))
-    ImageDraw.Draw(img).text((1 - l, 1 - t), "X", font=font, fill=(0, 0, 0))
+    bx0, by0, bx1, by1 = font.getbbox("X")
+    img = Image.new("RGB", (max(1, bx1 - bx0 + 2), max(1, by1 - by0 + 2)), (255, 255, 255))
+    ImageDraw.Draw(img).text((1 - bx0, 1 - by0), "X", font=font, fill=(0, 0, 0))
     overlay, pw, ph = _image_overlay_page(img)
     cx = x0 + (x1 - x0 - pw / s) / 2
     cy = y0 + (y1 - y0 - ph / s) / 2
