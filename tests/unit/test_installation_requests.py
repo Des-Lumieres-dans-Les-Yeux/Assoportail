@@ -249,7 +249,7 @@ class TestMailingPlaceholderTags:
         # needing SERVER_NAME configured in settings.
         with app.test_request_context():
             # Call _send_recipients (requires Flask app + request context for url_for)
-            result = _send_recipients(campaign_id, mock_client, rate_limit=0)
+            result = _send_recipients(campaign_id, mock_client)
             assert result["sent"] == 1
 
             # Fetch the updated center to get expected tokens

@@ -399,18 +399,32 @@ def edit(campaign_id: int):
 @bp.route("/<int:campaign_id>/send", methods=["POST"])
 @bureau_required
 def send(campaign_id: int):
-    """Trigger sending a campaign via Celery."""
+    """Trigger sending — or resuming — a campaign via Celery.
+
+    ``draft``/``scheduled`` start a fresh send. ``sending`` is allowed too, so a
+    campaign whose worker was interrupted (e.g. killed mid-batch) can be resumed:
+    the task only ever processes recipients still ``pending``, so already-sent
+    ones are never re-sent.
+    """
     campaign = db.session.get(MailingCampaign, campaign_id)
     if campaign is None:
         abort(404)
-    if campaign.status not in (CampaignStatus.DRAFT.value, CampaignStatus.SCHEDULED.value):
-        flash("Cette campagne a déjà été envoyée ou est en cours d'envoi.", "warning")
+    resumable = (
+        CampaignStatus.DRAFT.value,
+        CampaignStatus.SCHEDULED.value,
+        CampaignStatus.SENDING.value,
+    )
+    if campaign.status not in resumable:
+        flash("Cette campagne a déjà été envoyée.", "warning")
         return redirect(url_for("mailing.detail", campaign_id=campaign.id))
 
     from app.tasks.mailing import send_campaign
 
     send_campaign.delay(campaign_id)
-    flash(f"Envoi de la campagne « {campaign.name} » en cours…", "info")
+    if campaign.status == CampaignStatus.SENDING.value:
+        flash(f"Reprise de l'envoi de « {campaign.name} »…", "info")
+    else:
+        flash(f"Envoi de la campagne « {campaign.name} » en cours…", "info")
     return redirect(url_for("mailing.detail", campaign_id=campaign.id))
 
 

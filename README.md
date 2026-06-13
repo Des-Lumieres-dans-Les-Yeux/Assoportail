@@ -173,7 +173,8 @@ Copier `.env.example` vers `.env` et renseigner les valeurs. Les champs obligato
 
 | Variable | Description |
 |----------|-------------|
-| `MAILING_RATE_LIMIT` | Emails envoyés par minute |
+| `MAILING_RATE_LIMIT` | Emails envoyés par **heure** (0 = sans limite) |
+| `MAILING_BATCH_SIZE` | Emails envoyés par lot avant de reprogrammer la tâche (défaut 10) |
 | `MAILING_POLL_INTERVAL` | Intervalle de polling Celery (secondes) |
 
 ### Notifications push (VAPID)

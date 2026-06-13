@@ -36,6 +36,9 @@ class Config:
     # Comma-separated list of base64url-encoded Fernet keys (newest first for key rotation)
     ENCRYPTION_KEYS: list[str] = [k for k in os.environ.get("ENCRYPTION_KEYS", "").split(",") if k]
     MAILING_RATE_LIMIT: int = int(os.environ.get("MAILING_RATE_LIMIT", 100))
+    # Emails sent back-to-back per task invocation before rescheduling the next
+    # batch. Keeps each task short so it can never hit its time limit mid-send.
+    MAILING_BATCH_SIZE: int = int(os.environ.get("MAILING_BATCH_SIZE", 10))
     MAX_UPLOAD_PHOTO: int = int(os.environ.get("MAX_UPLOAD_PHOTO", 10 * 1024 * 1024))
     MAX_UPLOAD_VIDEO: int = int(os.environ.get("MAX_UPLOAD_VIDEO", 50 * 1024 * 1024))
     MAX_UPLOAD_DOCUMENT: int = int(os.environ.get("MAX_UPLOAD_DOCUMENT", 20 * 1024 * 1024))

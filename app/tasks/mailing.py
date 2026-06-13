@@ -2,19 +2,21 @@
 
 Workflow
 --------
-1. Load campaign; bail out if status is not ``draft`` or ``scheduled``.
-2. Resolve recipients from ``campaign.recipients_filter`` and persist them.
-3. Mark campaign as ``sending``.
-4. For each pending recipient, build and send a Gmail message.
-5. Mark each recipient ``sent`` or ``bounced`` and increment stats counters.
-6. Mark campaign ``sent`` (or ``failed`` if every send failed).
+1. Load campaign. On the first run (``draft``/``scheduled``) resolve recipients
+   and switch to ``sending``; a ``sending`` campaign is treated as a *resume*.
+2. Send a small batch of pending recipients back-to-back (no blocking sleep),
+   marking each ``sent`` or ``bounced``.
+3. If recipients remain, reschedule the task with a ``countdown`` derived from
+   the rate limit — the worker is never blocked, so the task can never hit its
+   time limit mid-send and die silently.
+4. Once no pending recipient remains, finalise the campaign: recompute stats
+   from the recipients' real statuses and mark it ``sent`` (or ``failed``).
 """
 
 from __future__ import annotations
 
 import base64
 import logging
-import time
 from collections import defaultdict
 from datetime import UTC, datetime
 from email.mime.multipart import MIMEMultipart
@@ -27,6 +29,10 @@ from app.tasks.utils import make_qr_img_tag as _make_qr_img_tag
 
 logger = logging.getLogger(__name__)
 
+# Namespace for the per-campaign PostgreSQL advisory lock (two-int form), so the
+# campaign-id key can never collide with an advisory lock taken elsewhere.
+_LOCK_NAMESPACE = 0x4D41  # "MA" (mailing)
+
 if TYPE_CHECKING:
     from app.models.mailing import MailingCampaign
 
@@ -35,17 +41,24 @@ if TYPE_CHECKING:
     name="tasks.send_campaign",
     bind=True,
     max_retries=2,
-    time_limit=3600,
-    soft_time_limit=3540,
+    time_limit=600,
+    soft_time_limit=540,
 )
 def send_campaign(self, campaign_id: int) -> dict:
-    """Send a mailing campaign.
+    """Send (or resume sending) a mailing campaign, one batch per invocation.
+
+    On the first run the campaign is in ``draft``/``scheduled``: recipients are
+    resolved and the status flips to ``sending``. A ``sending`` campaign is a
+    *resume* — recipients are not re-resolved. Each invocation sends at most
+    ``MAILING_BATCH_SIZE`` emails then, if any remain, reschedules itself with a
+    ``countdown`` so the rate limit is honoured without ever blocking the worker.
 
     Args:
         campaign_id: Primary key of the MailingCampaign to send.
 
     Returns:
-        Dict with ``sent`` and ``bounced`` counts, or ``skipped: True``.
+        Dict with this batch's ``sent``/``bounced`` counts and ``remaining``
+        pending recipients, or ``{"skipped": True, ...}``.
     """
     from app.extensions import db
     from app.models.mailing import CampaignStatus, MailingCampaign
@@ -54,29 +67,74 @@ def send_campaign(self, campaign_id: int) -> dict:
     if campaign is None:
         logger.error("Campaign %d not found", campaign_id)
         return {"skipped": True, "reason": "not_found"}
-    if campaign.status not in (CampaignStatus.DRAFT.value, CampaignStatus.SCHEDULED.value):
-        logger.info("Campaign %d already in status %r, skipping", campaign_id, campaign.status)
-        return {"skipped": True, "reason": campaign.status}
 
-    _resolve_recipients(campaign)
-    campaign.status = CampaignStatus.SENDING.value
-    db.session.commit()
+    # Serialise per campaign across workers: only one instance may resolve/send a
+    # given campaign at a time, otherwise two concurrent runs (a reschedule plus a
+    # manual resume, with --concurrency=2) could fetch the same pending recipients
+    # and send duplicates. A PostgreSQL session-level advisory lock on a dedicated
+    # connection is released explicitly below, and automatically by the server if
+    # this worker dies (the connection drops) — so it can never deadlock a resume.
+    lock_conn = db.engine.connect()
+    got_lock = lock_conn.exec_driver_sql(
+        "SELECT pg_try_advisory_lock(%s, %s)", (_LOCK_NAMESPACE, campaign_id)
+    ).scalar()
+    if not got_lock:
+        lock_conn.close()
+        logger.info("Campaign %d already being sent by another worker — skipping", campaign_id)
+        return {"skipped": True, "reason": "locked"}
 
     try:
-        from app.services.gmail import GmailClient
+        if campaign.status in (CampaignStatus.DRAFT.value, CampaignStatus.SCHEDULED.value):
+            # First run — resolve the audience and commit to sending.
+            _resolve_recipients(campaign)
+            campaign.status = CampaignStatus.SENDING.value
+            db.session.commit()
+        elif campaign.status != CampaignStatus.SENDING.value:
+            # sent / failed — nothing to do.
+            logger.info("Campaign %d already in status %r, skipping", campaign_id, campaign.status)
+            return {"skipped": True, "reason": campaign.status}
 
-        client = GmailClient.from_db()
-    except RuntimeError as exc:
-        logger.warning("Cannot send campaign %d — Gmail not configured: %s", campaign_id, exc)
-        campaign = db.session.get(MailingCampaign, campaign_id)
-        campaign.status = CampaignStatus.FAILED.value
-        db.session.commit()
-        return {"skipped": True, "reason": "gmail_not_configured"}
+        try:
+            from app.services.gmail import GmailClient
 
-    from flask import current_app
+            client = GmailClient.from_db()
+        except RuntimeError as exc:
+            logger.warning("Cannot send campaign %d — Gmail not configured: %s", campaign_id, exc)
+            campaign = db.session.get(MailingCampaign, campaign_id)
+            campaign.status = CampaignStatus.FAILED.value
+            db.session.commit()
+            return {"skipped": True, "reason": "gmail_not_configured"}
 
-    rate_limit = current_app.config.get("MAILING_RATE_LIMIT", 100)
-    return _send_recipients(campaign_id, client, rate_limit=rate_limit)
+        from flask import current_app
+
+        rate_limit = current_app.config.get("MAILING_RATE_LIMIT", 100)
+        # rate_limit == 0 means "no throttling" (tests / unlimited): send everything
+        # in a single pass. Otherwise process a bounded batch and reschedule.
+        batch_size = (
+            current_app.config.get("MAILING_BATCH_SIZE", 10) if rate_limit > 0 else None
+        )
+
+        result = _send_recipients(campaign_id, client, batch_size=batch_size)
+    finally:
+        lock_conn.exec_driver_sql(
+            "SELECT pg_advisory_unlock(%s, %s)", (_LOCK_NAMESPACE, campaign_id)
+        )
+        lock_conn.close()
+
+    if result.get("remaining", 0) > 0:
+        delay = 3600.0 / rate_limit if rate_limit > 0 else 0
+        countdown = (batch_size or 0) * delay
+        logger.info(
+            "Campaign %d: batch sent=%d bounced=%d, %d remaining — rescheduling in %.0fs",
+            campaign_id,
+            result["sent"],
+            result["bounced"],
+            result["remaining"],
+            countdown,
+        )
+        send_campaign.apply_async((campaign_id,), countdown=countdown)
+
+    return result
 
 
 def _resolve_recipients(campaign: MailingCampaign) -> None:
@@ -217,16 +275,21 @@ def _resolve_recipients(campaign: MailingCampaign) -> None:
                 )
 
 
-def _send_recipients(campaign_id: int, client, *, rate_limit: int = 100) -> dict:
-    """Send individual emails for all pending recipients.
+def _send_recipients(campaign_id: int, client, *, batch_size: int | None = None) -> dict:
+    """Send emails for up to ``batch_size`` pending recipients.
+
+    When no pending recipient remains after this batch, the campaign is
+    finalised: its stats are recomputed from the recipients' real statuses and
+    it is marked ``sent`` (or ``failed`` if nothing was ever sent).
 
     Args:
         campaign_id: The campaign to process.
         client: An authenticated GmailClient instance.
-        rate_limit: Maximum emails per hour; controls inter-send delay.
+        batch_size: Max recipients to process this call; ``None`` means all.
 
     Returns:
-        Dict with ``sent`` and ``bounced`` counts.
+        Dict with this batch's ``sent``/``bounced`` counts and the number of
+        still-``remaining`` pending recipients.
     """
     from app.extensions import db
     from app.models.mailing import (
@@ -238,13 +301,12 @@ def _send_recipients(campaign_id: int, client, *, rate_limit: int = 100) -> dict
 
     sent = 0
     bounced = 0
-    delay = 3600.0 / rate_limit if rate_limit > 0 else 0
 
     # 1. Fetch campaign details needed for all emails
     campaign = db.session.get(MailingCampaign, campaign_id)
     if not campaign:
         logger.error("Campaign %d not found in _send_recipients", campaign_id)
-        return {"sent": 0, "bounced": 0}
+        return {"sent": 0, "bounced": 0, "remaining": 0}
 
     subject = campaign.subject
     body_html = campaign.body_html
@@ -270,12 +332,17 @@ def _send_recipients(campaign_id: int, client, *, rate_limit: int = 100) -> dict
                 by_email[email.lower()].append(f"{num:03d}")
             tombola_numbers_by_email = {e: ", ".join(nums) for e, nums in by_email.items()}
 
-    # 2. Fetch IDs of pending recipients to process
-    recipient_ids = db.session.scalars(
+    # 2. Fetch IDs of pending recipients to process (bounded by batch_size).
+    #    Ordered by id so successive batches advance deterministically.
+    stmt = (
         db.select(MailingRecipient.id)
         .where(MailingRecipient.campaign_id == campaign_id)
         .where(MailingRecipient.status == RecipientStatus.PENDING.value)
-    ).all()
+        .order_by(MailingRecipient.id)
+    )
+    if batch_size:
+        stmt = stmt.limit(batch_size)
+    recipient_ids = db.session.scalars(stmt).all()
 
     # Commit any implicit transaction from fetching metadata
     db.session.commit()
@@ -359,22 +426,57 @@ def _send_recipients(campaign_id: int, client, *, rate_limit: int = 100) -> dict
             recipient.bounced_at = datetime.now(UTC)
             bounced += 1
 
-        # Commit after each recipient to save progress and avoid long-running transactions
+        # Commit after each recipient to save progress and avoid long-running
+        # transactions. Throttling between sends is handled by the caller
+        # rescheduling the next batch with a countdown — never by blocking here.
         db.session.commit()
 
-        if delay > 0:
-            time.sleep(delay)
+    # 3. Count still-pending recipients. If any remain, the caller reschedules;
+    #    we leave the campaign in ``sending``.
+    remaining = (
+        db.session.scalar(
+            db.select(db.func.count(MailingRecipient.id))
+            .where(MailingRecipient.campaign_id == campaign_id)
+            .where(MailingRecipient.status == RecipientStatus.PENDING.value)
+        )
+        or 0
+    )
 
-    # 3. Final update for campaign status and stats
-    campaign = db.session.get(MailingCampaign, campaign_id)
-    if campaign:
-        campaign.stats_sent = sent
-        campaign.stats_bounced = bounced
-        campaign.sent_at = datetime.now(UTC)
-        campaign.status = CampaignStatus.SENT.value if sent > 0 else CampaignStatus.FAILED.value
-        db.session.commit()
+    # 4. No pending left → finalise. Recompute stats from the recipients' real
+    #    statuses so counts are correct across all the batches that ran.
+    if remaining == 0:
+        campaign = db.session.get(MailingCampaign, campaign_id)
+        if campaign:
+            total_sent = (
+                db.session.scalar(
+                    db.select(db.func.count(MailingRecipient.id))
+                    .where(MailingRecipient.campaign_id == campaign_id)
+                    .where(MailingRecipient.status == RecipientStatus.SENT.value)
+                )
+                or 0
+            )
+            total_bounced = (
+                db.session.scalar(
+                    db.select(db.func.count(MailingRecipient.id))
+                    .where(MailingRecipient.campaign_id == campaign_id)
+                    .where(MailingRecipient.status == RecipientStatus.BOUNCED.value)
+                )
+                or 0
+            )
+            campaign.stats_sent = total_sent
+            campaign.stats_bounced = total_bounced
+            campaign.sent_at = datetime.now(UTC)
+            # FAILED only when there were recipients and every one bounced. An
+            # empty audience (0 sent, 0 bounced) is a vacuous success, not a
+            # failure.
+            campaign.status = (
+                CampaignStatus.FAILED.value
+                if total_sent == 0 and total_bounced > 0
+                else CampaignStatus.SENT.value
+            )
+            db.session.commit()
 
-    return {"sent": sent, "bounced": bounced}
+    return {"sent": sent, "bounced": bounced, "remaining": remaining}
 
 
 def _build_raw_message(to: str, subject: str, body_html: str) -> str:
