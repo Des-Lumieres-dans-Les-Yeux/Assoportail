@@ -216,11 +216,103 @@ def upload():
 # ---------------------------------------------------------------------------
 
 
+def _process_media_upload(
+    file,
+    entity_id: int | None,
+    description: str | None,
+) -> tuple[bool, str | None]:
+    """Valide et enregistre un fichier média (photo ou vidéo) uploadé par un membre.
+
+    Effectue toutes les validations (nom, extension, MIME, type photo/vidéo, taille),
+    crée le ``Document``, le lie à l'événement si ``entity_id`` est fourni, et gère
+    l'upload sur Google Drive (avec fallback disque).  Le commit DB est laissé au
+    caller.
+
+    Args:
+        file: Objet ``FileStorage`` werkzeug avec un ``filename`` non vide.
+        entity_id: Identifiant de l'événement auquel lier le document, ou ``None``.
+        description: Description libre du document, ou ``None``.
+
+    Returns:
+        ``(True, None)`` si le document a été ajouté, ``(False, message)`` sinon.
+    """
+    raw_name = file.filename
+    safe_name = secure_filename(raw_name)
+    if not safe_name:
+        return False, f"« {raw_name} » : nom invalide."
+
+    ext = os.path.splitext(safe_name)[1].lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        return False, f"« {raw_name} » : extension non autorisée."
+
+    data = file.read()
+    detected_mime = _detect_mime(data)
+    if detected_mime != _ALLOWED_EXTENSIONS[ext]:
+        return False, f"« {raw_name} » : contenu invalide (vérification MIME)."
+
+    if detected_mime not in (_PHOTO_MIMES | _VIDEO_MIMES):
+        return False, f"« {raw_name} » : seuls les photos et vidéos sont autorisés."
+
+    size_limit = _get_size_limit(detected_mime)
+    if len(data) > size_limit:
+        limit_mb = size_limit // (1024 * 1024)
+        return False, f"« {raw_name} » : dépasse la limite de {limit_mb} Mo."
+
+    doc_type = (
+        DocumentType.VIDEO.value if detected_mime in _VIDEO_MIMES else DocumentType.PHOTO.value
+    )
+    prefix = f"evt{entity_id}" if entity_id is not None else ""
+    stored_name = _make_stored_filename(safe_name, doc_type, prefix=prefix)
+
+    doc_record = Document(
+        original_filename=raw_name,
+        stored_filename=stored_name,
+        type=doc_type,
+        mime_type=detected_mime,
+        size_bytes=len(data),
+        uploaded_by_id=current_user.id,
+        description=description,
+    )
+    db.session.add(doc_record)
+    db.session.flush()
+
+    if entity_id is not None:
+        db.session.execute(
+            event_documents.insert().values(event_id=entity_id, document_id=doc_record.id)
+        )
+
+    drive_uploaded = False
+    if current_app.config.get("GOOGLE_SHARED_DRIVE_ID"):
+        try:
+            from app.services.drive import DriveService
+
+            file_id, web_link = DriveService.from_db().upload_file(
+                data, raw_name, detected_mime, doc_type, year=date.today().year
+            )
+            doc_record.drive_file_id = file_id
+            doc_record.drive_web_link = web_link
+            drive_uploaded = True
+        except Exception as exc:
+            logger.warning(
+                "Drive upload failed for media « %s », falling back to disk: %s",
+                raw_name,
+                exc,
+            )
+
+    if not drive_uploaded:
+        subdir = os.path.join(current_app.config["UPLOAD_FOLDER"], doc_record.subdir)
+        os.makedirs(subdir, exist_ok=True)
+        with open(os.path.join(subdir, stored_name), "wb") as fh:
+            fh.write(data)
+
+    return True, None
+
+
 @bp.route("/upload-media", methods=["POST"])
 @login_required
 @limiter.limit("20 per hour")
 def upload_media():
-    """Allow any member to upload a photo or video attached to an event."""
+    """Permet à tout membre d'uploader une photo ou vidéo attachée à un événement."""
     entity_id_str = request.form.get("entity_id", "")
     if not entity_id_str.isdigit():
         abort(400)
@@ -245,76 +337,11 @@ def upload_media():
     for file in files:
         if not file.filename:
             continue
-
-        raw_name = file.filename
-        safe_name = secure_filename(raw_name)
-        if not safe_name:
-            upload_errors.append(f"« {raw_name} » : nom invalide.")
-            continue
-
-        ext = os.path.splitext(safe_name)[1].lower()
-        if ext not in _ALLOWED_EXTENSIONS:
-            upload_errors.append(f"« {raw_name} » : extension non autorisée.")
-            continue
-
-        data = file.read()
-        detected_mime = _detect_mime(data)
-        if detected_mime != _ALLOWED_EXTENSIONS[ext]:
-            upload_errors.append(f"« {raw_name} » : contenu invalide (vérification MIME).")
-            continue
-
-        if detected_mime not in (_PHOTO_MIMES | _VIDEO_MIMES):
-            upload_errors.append(f"« {raw_name} » : seuls les photos et vidéos sont autorisés.")
-            continue
-
-        size_limit = _get_size_limit(detected_mime)
-        if len(data) > size_limit:
-            upload_errors.append(
-                f"« {raw_name} » : dépasse la limite de {size_limit // (1024 * 1024)} Mo."
-            )
-            continue
-
-        doc_type = (
-            DocumentType.VIDEO.value if detected_mime in _VIDEO_MIMES else DocumentType.PHOTO.value
-        )
-        stored_name = _make_stored_filename(safe_name, doc_type, prefix=f"evt{entity_id}")
-
-        doc_record = Document(
-            original_filename=raw_name,
-            stored_filename=stored_name,
-            type=doc_type,
-            mime_type=detected_mime,
-            size_bytes=len(data),
-            uploaded_by_id=current_user.id,
-            description=description,
-        )
-        db.session.add(doc_record)
-        db.session.flush()
-        db.session.execute(
-            event_documents.insert().values(event_id=entity_id, document_id=doc_record.id)
-        )
-
-        drive_uploaded = False
-        if current_app.config.get("GOOGLE_SHARED_DRIVE_ID"):
-            try:
-                from app.services.drive import DriveService
-
-                file_id, web_link = DriveService.from_db().upload_file(
-                    data, raw_name, detected_mime, doc_type, year=date.today().year
-                )
-                doc_record.drive_file_id = file_id
-                doc_record.drive_web_link = web_link
-                drive_uploaded = True
-            except Exception as exc:
-                logger.warning("Drive upload failed for media, falling back to disk: %s", exc)
-
-        if not drive_uploaded:
-            subdir = os.path.join(current_app.config["UPLOAD_FOLDER"], doc_record.subdir)
-            os.makedirs(subdir, exist_ok=True)
-            with open(os.path.join(subdir, stored_name), "wb") as fh:
-                fh.write(data)
-
-        added += 1
+        ok, err = _process_media_upload(file, entity_id, description)
+        if ok:
+            added += 1
+        else:
+            upload_errors.append(err)
 
     db.session.commit()
     if added:
@@ -323,6 +350,57 @@ def upload_media():
     for e in upload_errors:
         flash(e, "danger")
     return redirect(back_url)
+
+
+# ---------------------------------------------------------------------------
+# Gallery media upload — any member, entity_id optionnel
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/upload-gallery-media", methods=["POST"])
+@login_required
+@limiter.limit("20 per hour")
+def upload_gallery_media():
+    """Permet à tout membre d'uploader des photos/vidéos depuis la galerie.
+
+    L'association à un événement est optionnelle : si ``entity_id`` est fourni et
+    correspond à un événement existant, le document y est lié ; sinon il est créé
+    sans rattachement.
+    """
+    from app.models.event import Event
+
+    entity_id: int | None = None
+    entity_id_str = request.form.get("entity_id", "").strip()
+    if entity_id_str.isdigit():
+        candidate = int(entity_id_str)
+        if db.session.get(Event, candidate) is not None:
+            entity_id = candidate
+
+    files = request.files.getlist("file")
+    if not files or all(not f.filename for f in files):
+        flash("Aucun fichier sélectionné.", "warning")
+        return redirect(url_for("documents.gallery"))
+
+    description = request.form.get("description", "").strip() or None
+    added = 0
+    upload_errors: list[str] = []
+
+    for file in files:
+        if not file.filename:
+            continue
+        ok, err = _process_media_upload(file, entity_id, description)
+        if ok:
+            added += 1
+        else:
+            upload_errors.append(err)
+
+    db.session.commit()
+    if added:
+        msg = f"{added} média{'s' if added > 1 else ''} ajouté{'s' if added > 1 else ''}."
+        flash(msg, "success")
+    for e in upload_errors:
+        flash(e, "danger")
+    return redirect(url_for("documents.gallery"))
 
 
 # ---------------------------------------------------------------------------

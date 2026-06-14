@@ -5,11 +5,18 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h1 class="h3 mb-0">Galerie &amp; Documents</h1>
-  {% if current_user.is_bureau %}
-  <a href="{{ url_for('documents.upload') }}" class="btn btn-primary btn-sm">
-    <i class="bi bi-upload me-1" aria-hidden="true"></i>Téléverser
-  </a>
-  {% endif %}
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-success btn-sm"
+            data-bs-toggle="modal" data-bs-target="#uploadMediaModal"
+            aria-haspopup="dialog">
+      <i class="bi bi-camera me-1" aria-hidden="true"></i>Partager des photos/vidéos
+    </button>
+    {% if current_user.is_bureau %}
+    <a href="{{ url_for('documents.upload') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-upload me-1" aria-hidden="true"></i>Téléverser
+    </a>
+    {% endif %}
+  </div>
 </div>
 
 {# Type filter #}
@@ -145,4 +152,86 @@
   <small>{{ documents | length }} fichier{{ 's' if documents | length != 1 }}</small>
 </p>
 {% endif %}
+
+{# ── Modale : partager des photos/vidéos ─────────────────────────────────── #}
+<div class="modal fade" id="uploadMediaModal" tabindex="-1"
+     role="dialog" aria-modal="true"
+     aria-labelledby="uploadMediaModalLabel">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="uploadMediaModalLabel">
+          <i class="bi bi-camera me-1" aria-hidden="true"></i>Partager des photos/vidéos
+        </h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"
+                aria-label="Fermer"></button>
+      </div>
+      <form method="post"
+            action="{{ url_for('documents.upload_gallery_media') }}"
+            enctype="multipart/form-data"
+            novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body">
+
+          {# Fichiers #}
+          <div class="mb-3">
+            <label for="galleryMediaFiles" class="form-label fw-semibold">
+              Fichiers <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input type="file" class="form-control" id="galleryMediaFiles"
+                   name="file" multiple required
+                   accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm"
+                   aria-describedby="galleryMediaHint">
+            <div id="galleryMediaHint" class="form-text">
+              Photos : JPEG, PNG, GIF, WEBP (max.
+              {{ (config['MAX_UPLOAD_PHOTO'] // (1024 * 1024)) }} Mo par fichier) —
+              Vidéos : MP4, WEBM (max.
+              {{ (config['MAX_UPLOAD_VIDEO'] // (1024 * 1024)) }} Mo par fichier)
+            </div>
+          </div>
+
+          {# Description #}
+          <div class="mb-3">
+            <label for="galleryMediaDesc" class="form-label">Description
+              <span class="text-muted fw-normal">(optionnelle)</span>
+            </label>
+            <input type="text" class="form-control" id="galleryMediaDesc"
+                   name="description" maxlength="300"
+                   placeholder="Ex. : Journée d'installation 2026">
+          </div>
+
+          {# Événement (affiché uniquement si des événements existent) #}
+          {% if events %}
+          <div class="mb-3">
+            <label for="galleryMediaEvent" class="form-label">
+              Rattacher à un événement
+              <span class="text-muted fw-normal">(optionnel)</span>
+            </label>
+            <select class="form-select" id="galleryMediaEvent" name="entity_id"
+                    aria-describedby="galleryMediaEventHint">
+              <option value="">— Aucun —</option>
+              {% for event in events %}
+              <option value="{{ event.id }}">
+                {{ event.event_date.strftime('%d/%m/%Y') }} — {{ event.title }}
+              </option>
+              {% endfor %}
+            </select>
+            <div id="galleryMediaEventHint" class="form-text">
+              Le(s) fichier(s) seront visibles depuis la page de l'événement.
+            </div>
+          </div>
+          {% endif %}
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary"
+                  data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-cloud-upload me-1" aria-hidden="true"></i>Envoyer
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock %}
