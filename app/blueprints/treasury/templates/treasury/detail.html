@@ -19,7 +19,7 @@
     </span>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    {% if transaction.source == TransactionSource.DONATION.value %}
+    {% if transaction.source in (TransactionSource.DONATION.value, TransactionSource.MEMBERSHIP.value) %}
     <form method="post" action="{{ url_for('treasury.generate_cerfa', transaction_id=transaction.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-success btn-sm">
@@ -88,11 +88,16 @@
   </ul>
 </section>
 
-{% if transaction.source == TransactionSource.DONATION.value %}
+{% if transaction.source in (TransactionSource.DONATION.value, TransactionSource.MEMBERSHIP.value) %}
 <section aria-labelledby="donor-heading" class="mt-4">
-  <h2 class="h5" id="donor-heading">Donateur</h2>
+  <h2 class="h5" id="donor-heading">{{ 'Adhérent' if transaction.source == TransactionSource.MEMBERSHIP.value else 'Donateur' }}</h2>
   <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;">
-    {% if transaction.donation_type %}
+    {% if transaction.source == TransactionSource.MEMBERSHIP.value %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Type</span>
+      <span><span class="badge bg-info text-dark">Adhésion / cotisation</span></span>
+    </li>
+    {% elif transaction.donation_type %}
     <li class="list-group-item d-flex justify-content-between">
       <span class="text-muted">Type de don</span>
       <span>

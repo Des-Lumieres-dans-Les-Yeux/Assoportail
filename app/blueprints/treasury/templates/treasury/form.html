@@ -65,15 +65,15 @@
     {% endfor %}
   </div>
 
-  {# Donor fields — shown when source = donation #}
+  {# Donor fields — shown when source = donation or membership (both CERFA-eligible) #}
   <div id="donor-section"
-       class="border rounded p-3 bg-light mb-3{% if form.source.data != 'donation' %} d-none{% endif %}"
-       aria-label="Informations du donateur">
+       class="border rounded p-3 bg-light mb-3{% if form.source.data not in ('donation', 'membership') %} d-none{% endif %}"
+       aria-label="Informations du donateur ou de l'adhérent">
     <h2 class="h6 mb-3">
-      <i class="bi bi-person me-1" aria-hidden="true"></i>Informations du donateur
+      <i class="bi bi-person me-1" aria-hidden="true"></i>Informations du donateur / de l'adhérent
       <small class="text-muted fw-normal">(pour le CERFA)</small>
     </h2>
-    <div class="mb-2">
+    <div class="mb-2{% if form.source.data == 'membership' %} d-none{% endif %}" id="donation-type-wrap">
       <label class="form-label small">{{ form.donation_type.label.text }}</label>
       <div class="d-flex gap-3 flex-wrap">
         {% for value, label in form.donation_type.choices %}
@@ -164,32 +164,42 @@
   var sourceSelect = document.getElementById('{{ form.source.id }}');
   var typeSelect = document.getElementById('{{ form.type.id }}');
   var donorSection = document.getElementById('donor-section');
+  var typeWrap = document.getElementById('donation-type-wrap');
   var descWrap = document.getElementById('donor-description-wrap');
   var paymentWrap = document.getElementById('donor-payment-wrap');
   var firstnameWrap = document.getElementById('donor-firstname-wrap');
   if (!sourceSelect || !donorSection) return;
 
-  function toggleDonorSection() {
-    var isDonation = sourceSelect.value === 'donation';
-    donorSection.classList.toggle('d-none', !isDonation);
-    if (isDonation && typeSelect) {
-      typeSelect.value = 'income';
-    }
+  function isReceiptSource() {
+    return sourceSelect.value === 'donation' || sourceSelect.value === 'membership';
+  }
+
+  // A membership is always an individual cash gift (CGI art. 200) — the
+  // "type de don" picker (particulier/mécénat/nature) only applies to real dons.
+  function syncVisibility() {
+    donorSection.classList.toggle('d-none', !isReceiptSource());
+    if (typeWrap) typeWrap.classList.toggle('d-none', sourceSelect.value !== 'donation');
+    toggleDonationType();
   }
 
   function toggleDonationType() {
     var selected = document.querySelector('input[name="donation_type"]:checked');
-    var dt = selected ? selected.value : 'particulier';
+    var dt = sourceSelect.value === 'membership'
+      ? 'particulier'
+      : (selected ? selected.value : 'particulier');
     if (descWrap) descWrap.classList.toggle('d-none', dt !== 'nature');
     if (paymentWrap) paymentWrap.classList.toggle('d-none', dt === 'nature');
     if (firstnameWrap) firstnameWrap.classList.toggle('d-none', dt === 'mecena');
   }
 
-  sourceSelect.addEventListener('change', toggleDonorSection);
+  sourceSelect.addEventListener('change', function () {
+    if (isReceiptSource() && typeSelect) typeSelect.value = 'income';
+    syncVisibility();
+  });
   document.querySelectorAll('input[name="donation_type"]').forEach(function (r) {
     r.addEventListener('change', toggleDonationType);
   });
-  toggleDonationType();
+  syncVisibility();
 })();
 </script>
 {% endblock %}

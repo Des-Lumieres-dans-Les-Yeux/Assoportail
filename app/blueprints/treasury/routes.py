@@ -216,13 +216,20 @@ def delete(transaction_id: int):
 # ---------------------------------------------------------------------------
 
 
+_CERFA_SOURCES = (TransactionSource.DONATION.value, TransactionSource.MEMBERSHIP.value)
+
+
 def _donation_or_redirect(transaction_id: int):
-    """Return a donation transaction + config, or a redirect response (as 2nd item)."""
+    """Return a CERFA-eligible transaction + config, or a redirect (as 2nd item).
+
+    Eligible sources are donations and memberships (cotisations) — both give
+    rise to a tax receipt.
+    """
     transaction = db.session.get(Transaction, transaction_id)
     if transaction is None:
         abort(404)
-    if transaction.source != TransactionSource.DONATION.value:
-        flash("Le CERFA n'est disponible que pour les transactions de type Don.", "warning")
+    if transaction.source not in _CERFA_SOURCES:
+        flash("Le CERFA n'est disponible que pour les dons et les adhésions.", "warning")
         return transaction, redirect(url_for("treasury.detail", transaction_id=transaction_id))
     cfg = AssociationConfig.get()
     if not cfg.name:
@@ -591,30 +598,38 @@ def cerfa_stats():
     rows = db.session.execute(
         db.select(
             extract("year", Transaction.date).label("year"),
+            Transaction.source,
             Transaction.donation_type,
             func.count().label("count"),
             func.sum(Transaction.amount).label("total"),
         )
         .where(
-            Transaction.source == TransactionSource.DONATION.value,
+            Transaction.source.in_(_CERFA_SOURCES),
             Transaction.cerfa_generated_at.is_not(None),
         )
-        .group_by("year", Transaction.donation_type)
-        .order_by(extract("year", Transaction.date).desc(), Transaction.donation_type)
+        .group_by("year", Transaction.source, Transaction.donation_type)
+        .order_by(
+            extract("year", Transaction.date).desc(),
+            Transaction.source,
+            Transaction.donation_type,
+        )
     ).all()
 
     # Group by year
     years: dict = {}
-    for year, dtype, count, total in rows:
+    for year, source, dtype, count, total in rows:
         y = int(year)
         if y not in years:
             years[y] = {"categories": {}, "total_count": 0, "total_amount": Decimal("0")}
-        labels = {
-            "particulier": "Don de particulier",
-            "mecena": "Mécénat entreprise",
-            "nature": "Don en nature",
-        }
-        label = labels.get(dtype or "particulier", dtype or "particulier")
+        if source == TransactionSource.MEMBERSHIP.value:
+            label = "Adhésion"
+        else:
+            labels = {
+                "particulier": "Don de particulier",
+                "mecena": "Mécénat entreprise",
+                "nature": "Don en nature",
+            }
+            label = labels.get(dtype or "particulier", dtype or "particulier")
         years[y]["categories"][label] = {"count": count, "amount": total or Decimal("0")}
         years[y]["total_count"] += count
         years[y]["total_amount"] += total or Decimal("0")
@@ -671,9 +686,17 @@ def _tag_choices() -> list[tuple[int, str]]:
 
 
 def _apply_donor_fields(form: TransactionForm, transaction: Transaction) -> None:
-    """Copy donor fields from form to transaction (only relevant for donations)."""
-    if form.source.data == TransactionSource.DONATION.value:
-        transaction.donation_type = form.donation_type.data or "particulier"
+    """Copy donor fields from form to transaction (donations and memberships).
+
+    Memberships are CERFA-eligible too (cotisation sans contrepartie = don
+    numéraire de particulier, art. 200 CGI) — they always use the "particulier"
+    donation type, never "mécénat" or "nature".
+    """
+    if form.source.data in (TransactionSource.DONATION.value, TransactionSource.MEMBERSHIP.value):
+        if form.source.data == TransactionSource.MEMBERSHIP.value:
+            transaction.donation_type = "particulier"
+        else:
+            transaction.donation_type = form.donation_type.data or "particulier"
         transaction.donor_first_name = (form.donor_first_name.data or "").strip() or None
         transaction.donor_name = (form.donor_name.data or "").strip() or None
         transaction.donor_address = (form.donor_address.data or "").strip() or None
