@@ -12,6 +12,22 @@ from app.extensions import csrf, db, limiter, login_manager, migrate, talisman
 
 logger = logging.getLogger(__name__)
 
+# Relaxed CSP applied only to the Swagger UI / ReDoc documentation pages
+# (/api/docs/*). Swagger UI is a React app that injects inline styles and an
+# inline init script at runtime, which a nonce-based policy cannot cover. We
+# therefore allow 'unsafe-inline' for scripts/styles on these pages only,
+# plus the validator badge image, while the rest of the site keeps the strict
+# nonce-based CSP from TALISMAN_CSP.
+_API_DOCS_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://unpkg.com; "
+    "style-src 'self' 'unsafe-inline' https://unpkg.com; "
+    "img-src 'self' data: https://validator.swagger.io https://unpkg.com; "
+    "font-src 'self' data: https://unpkg.com; "
+    "connect-src 'self'; "
+    "worker-src 'self' blob:"
+)
+
 
 def create_app(config_name: str | None = None) -> Flask:
     """Create and configure the Flask application.
@@ -33,6 +49,17 @@ def create_app(config_name: str | None = None) -> Flask:
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config.from_object(config_obj)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+    # Registered before Talisman so it runs *after* Talisman's header is set
+    # (Flask executes after_request callbacks in reverse registration order),
+    # letting us override the CSP for the Swagger UI docs pages only.
+    @app.after_request
+    def _relax_csp_for_api_docs(response):
+        from flask import request
+
+        if request.path.startswith("/api/docs"):
+            response.headers["Content-Security-Policy"] = _API_DOCS_CSP
+        return response
 
     _init_extensions(app)
     _register_blueprints(app)
