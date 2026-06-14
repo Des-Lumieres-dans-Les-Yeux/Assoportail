@@ -38,6 +38,12 @@ def create_app(config_name: str | None = None) -> Flask:
     _register_blueprints(app)
     _register_error_handlers(app)
 
+    # Enregistre spectree après tous les blueprints pour que les routes
+    # de l'API soient visibles lors de la construction du schéma OpenAPI.
+    from app.extensions import spec as _spec
+
+    _spec.register(app)
+
     @app.route("/sw.js")
     def service_worker():
         """Serve the service worker from root scope with required headers."""
@@ -146,6 +152,54 @@ def create_app(config_name: str | None = None) -> Flask:
         click.echo(f"VAPID_PRIVATE_KEY_PEM={priv_pem}")
         click.echo("VAPID_CLAIMS_EMAIL=admin@votre-domaine.fr")
 
+    @app.cli.command("api-token")
+    @click.option("--email", required=True, help="Email de l'utilisateur propriétaire du token.")
+    @click.option(
+        "--name", default="API token", show_default=True, help="Libellé lisible du token."
+    )
+    @click.option(
+        "--expires-days",
+        default=None,
+        type=int,
+        help="Durée de validité en jours (optionnel, sans limite par défaut).",
+    )
+    def api_token(email: str, name: str, expires_days: int | None) -> None:
+        """Crée un token Bearer API pour un utilisateur existant.
+
+        Le token est affiché UNE SEULE FOIS en clair — conservez-le précieusement.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        from app.models.api_token import ApiToken
+        from app.models.user import User
+
+        user = db.session.scalars(db.select(User).where(User.email == email)).first()
+        if user is None:
+            click.echo(f"Erreur : aucun utilisateur trouvé avec l'email « {email} ».", err=True)
+            return
+
+        expires_at = None
+        if expires_days is not None:
+            expires_at = datetime.now(UTC) + timedelta(days=expires_days)
+
+        plaintext, token = ApiToken.generate(name=name, user_id=user.id, expires_at=expires_at)
+        db.session.add(token)
+        db.session.commit()
+
+        click.echo("")
+        click.echo("Token créé avec succès.")
+        click.echo(f"  Utilisateur : {user.full_name} <{user.email}>")
+        click.echo(f"  Libellé     : {name}")
+        click.echo(f"  Préfixe     : {token.token_prefix}")
+        if expires_at:
+            click.echo(f"  Expiration  : {expires_at.strftime('%Y-%m-%d %H:%M UTC')}")
+        else:
+            click.echo("  Expiration  : aucune")
+        click.echo("")
+        click.echo("⚠️  Token (affiché UNE SEULE FOIS — ne sera plus jamais visible) :")
+        click.echo(f"  {plaintext}")
+        click.echo("")
+
     @app.cli.command("seed-admin")
     def seed_admin():
         """Create the initial admin account from ADMIN_EMAIL/ADMIN_PASSWORD env vars."""
@@ -198,6 +252,7 @@ def _init_extensions(app: Flask) -> None:
     # Import models so SQLAlchemy registers them and Flask-Login can resolve users.
     with app.app_context():
         from app.audit import register_audit_listeners
+        from app.models import api_token as _api_token_module  # noqa: F401
         from app.models import center as _center_module  # noqa: F401
         from app.models import document as _document_module  # noqa: F401
         from app.models import email as _email_module  # noqa: F401
@@ -225,6 +280,7 @@ def _init_extensions(app: Flask) -> None:
 
 def _register_blueprints(app: Flask) -> None:
     """Register all application blueprints."""
+    from app.blueprints.api import bp as api_bp
     from app.blueprints.auth import bp as auth_bp
     from app.blueprints.centers import bp as centers_bp
     from app.blueprints.dashboard import bp as dashboard_bp
@@ -242,6 +298,10 @@ def _register_blueprints(app: Flask) -> None:
     from app.blueprints.tombola import bp as tombola_bp
     from app.blueprints.treasury import bp as treasury_bp
     from app.blueprints.vitrine import bp as vitrine_bp
+
+    # L'API REST est stateless (Bearer token) — exempt du cookie CSRF.
+    csrf.exempt(api_bp)
+    app.register_blueprint(api_bp)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)

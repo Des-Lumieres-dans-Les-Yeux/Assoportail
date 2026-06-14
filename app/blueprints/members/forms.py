@@ -193,3 +193,24 @@ class HelloAssoMembershipForm(FlaskForm):
 
 class DeleteMemberForm(FlaskForm):
     """CSRF-only confirmation form for member deletion."""
+
+
+class ApiTokenCreateForm(FlaskForm):
+    """Form for generating a new API token."""
+
+    name = StringField(
+        "Libellé",
+        validators=[DataRequired(message="Le libellé est obligatoire."), Length(max=100)],
+        render_kw={"placeholder": "ex. openclaw, automatisation site web"},
+    )
+    expires_days = SelectField(
+        "Expiration",
+        validators=[Optional()],
+        choices=[("", "Jamais"), ("30", "30 jours"), ("90", "90 jours"), ("365", "1 an")],
+        coerce=lambda x: int(x) if x else None,
+        default="",
+    )
+
+
+class ApiTokenRevokeForm(FlaskForm):
+    """CSRF-only confirmation form for token revocation."""

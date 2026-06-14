@@ -1,11 +1,15 @@
 """Members blueprint routes — member management and member profile."""
 
+from datetime import UTC, datetime, timedelta
+
 from flask import Response, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy.orm import selectinload
 
 from app.blueprints.members import bp
 from app.blueprints.members.forms import (
+    ApiTokenCreateForm,
+    ApiTokenRevokeForm,
     CashMembershipForm,
     DeleteMemberForm,
     HelloAssoMembershipForm,
@@ -15,6 +19,7 @@ from app.blueprints.members.forms import (
 )
 from app.decorators import bureau_required
 from app.extensions import db
+from app.models.api_token import ApiToken
 from app.models.member import Membership, MembershipSource
 from app.models.task import Task, TaskStatus
 from app.models.user import BUREAU_DEFAULT_PERMISSIONS, MEMBER_DEFAULT_PERMISSIONS, User, UserRole
@@ -874,3 +879,89 @@ def purge_inactive():
         return redirect(url_for("members.list_members"))
 
     return render_template("members/purge_inactive.html", candidates=candidates, cutoff=cutoff)
+
+
+# ---------------------------------------------------------------------------
+# API token management — bureau only
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/api-tokens")
+@bureau_required
+def api_tokens():
+    """List all API tokens belonging to the current user."""
+    tokens = (
+        ApiToken.query.filter_by(user_id=current_user.id)
+        .order_by(ApiToken.created_at.desc())
+        .all()
+    )
+    create_form = ApiTokenCreateForm()
+    revoke_form = ApiTokenRevokeForm()
+    return render_template(
+        "members/api_tokens.html",
+        tokens=tokens,
+        create_form=create_form,
+        revoke_form=revoke_form,
+        new_token=None,
+        now=datetime.now(UTC),
+    )
+
+
+@bp.route("/api-tokens", methods=["POST"])
+@bureau_required
+def create_api_token():
+    """Generate a new API token for the current user."""
+    form = ApiTokenCreateForm()
+    if form.validate_on_submit():
+        expires_days = form.expires_days.data
+        expires_at = (
+            datetime.now(UTC) + timedelta(days=expires_days)
+            if expires_days
+            else None
+        )
+        plaintext, token = ApiToken.generate(
+            name=form.name.data,
+            user_id=current_user.id,
+            expires_at=expires_at,
+        )
+        db.session.add(token)
+        db.session.commit()
+        flash(
+            f"Token « {form.name.data} » créé avec succès. "
+            "Copiez-le maintenant, il ne sera plus affiché.",
+            "success",
+        )
+        tokens = (
+            ApiToken.query.filter_by(user_id=current_user.id)
+            .order_by(ApiToken.created_at.desc())
+            .all()
+        )
+        revoke_form = ApiTokenRevokeForm()
+        return render_template(
+            "members/api_tokens.html",
+            tokens=tokens,
+            create_form=ApiTokenCreateForm(),
+            revoke_form=revoke_form,
+            new_token=plaintext,
+            now=datetime.now(UTC),
+        )
+    flash("Erreur dans le formulaire. Veuillez corriger les champs.", "danger")
+    return redirect(url_for("members.api_tokens"))
+
+
+@bp.route("/api-tokens/<int:token_id>/revoke", methods=["POST"])
+@bureau_required
+def revoke_api_token(token_id: int):
+    """Revoke an API token owned by the current user."""
+    form = ApiTokenRevokeForm()
+    if not form.validate_on_submit():
+        abort(400)
+    token = db.session.get(ApiToken, token_id)
+    if token is None:
+        abort(404)
+    if token.user_id != current_user.id:
+        abort(403)
+    token.revoked = True
+    db.session.commit()
+    flash("Token révoqué.", "success")
+    return redirect(url_for("members.api_tokens"))

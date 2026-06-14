@@ -192,6 +192,76 @@ Copier `.env.example` vers `.env` et renseigner les valeurs. Les champs obligato
 | `ADMIN_EMAIL` **\*** | Adresse email du premier compte admin |
 | `ADMIN_PASSWORD` **\*** | Mot de passe du premier compte admin |
 
+## API REST v1
+
+Le portail expose une API REST versionnée (`/api/v1`) authentifiée par token Bearer, documentée en OpenAPI 3.
+
+### Générer un token
+
+```bash
+flask api-token --email utilisateur@domaine.fr --name "GitHub Actions" --expires-days 365
+```
+
+Le token est affiché **une seule fois** en clair. Exemple de sortie :
+
+```
+Token créé avec succès.
+  Utilisateur : Alice Dupont <alice@domaine.fr>
+  Libellé     : GitHub Actions
+  Préfixe     : dldly_abc12x
+  Expiration  : 2027-06-14 12:00 UTC
+
+⚠️  Token (affiché UNE SEULE FOIS — ne sera plus jamais visible) :
+  dldly_<chaîne base64url de 32 octets>
+```
+
+### Authentification
+
+Toutes les requêtes API doivent porter l'en-tête :
+
+```
+Authorization: Bearer <token>
+```
+
+### Documentation interactive (Swagger UI)
+
+Accessible sur `/api/docs/swagger/` (CDN jsdelivr.net, déjà autorisé par la CSP).
+Le schéma JSON brut est disponible sur `/api/docs/openapi.json`.
+
+### Endpoints disponibles (v1)
+
+| Méthode | Chemin | Description |
+|---------|--------|-------------|
+| `GET`  | `/api/v1/events` | Liste paginée (filtres : `status`, `date_from`, `date_to`, `limit`, `offset`) |
+| `POST` | `/api/v1/events` | Crée un événement (avec créneaux et dates optionnels) |
+| `GET`  | `/api/v1/events/{id}` | Détail d'un événement (créneaux + bénévoles confirmés) |
+| `POST` | `/api/v1/events/{id}/slots` | Ajoute un créneau horaire |
+| `GET`  | `/api/v1/events/{id}/volunteers` | Liste des bénévoles |
+| `POST` | `/api/v1/events/{id}/volunteers` | Inscrit un bénévole (idempotent sur l'email) |
+| `PUT`  | `/api/v1/events/{id}/slots/{slot_id}/availability` | Déclare/met à jour la disponibilité d'un bénévole |
+
+Tous les endpoints exigent la permission `events`.
+
+### Exemple curl — créer un événement
+
+```bash
+curl -s -X POST https://portail.exemple.fr/api/v1/events \
+  -H "Authorization: Bearer dldly_<votre_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Journée installation flipper",
+    "event_date": "2026-10-03T09:00:00Z",
+    "end_date": "2026-10-03T18:00:00Z",
+    "status": "planned",
+    "location": "CHU de Reims",
+    "slots": [
+      {"slot_date": "2026-10-03", "start_time": "09:00", "end_time": "13:00", "label": "Matin"},
+      {"slot_date": "2026-10-03", "start_time": "14:00", "end_time": "18:00", "label": "Après-midi"}
+    ],
+    "dates": ["2026-10-03"]
+  }' | jq .
+```
+
 ## Développement
 
 ```bash

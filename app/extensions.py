@@ -12,11 +12,36 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_talisman import Talisman
 from flask_wtf.csrf import CSRFProtect
+from spectree import SecurityScheme, SecuritySchemeData, SpecTree
 
 db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
 talisman = Talisman()
+
+# OpenAPI / Swagger UI — servi sur /api/docs/swagger/ (CDN jsdelivr.net déjà autorisé par la CSP)
+# mode="strict" : seules les routes décorées @spec.validate sont incluses dans la spec,
+# ce qui empêche la fuite des 252 routes non-API vers /api/docs/openapi.json.
+spec = SpecTree(
+    "flask",
+    title="DLDLY Portal API",
+    version="v1",
+    path="api/docs",
+    mode="strict",
+    annotations=False,
+    security_schemes=[
+        SecurityScheme(
+            name="BearerAuth",
+            data=SecuritySchemeData(
+                type="http",
+                scheme="bearer",
+                bearerFormat="opaque",
+                description="Token Bearer généré via `flask api-token`.",
+            ),
+        )
+    ],
+    security={"BearerAuth": []},
+)
 
 
 def _skip_limiter_if_bureau():

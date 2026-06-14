@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Accès API — Assoportail{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <h1 class="h3 mb-0">Accès API</h1>
+</div>
+
+<p class="text-muted mb-4">
+  Les tokens API permettent à des outils externes (automatisations, scripts, intégrations)
+  d'interagir avec le portail au nom de votre compte — création d'événements, gestion des bénévoles, etc.
+  Consultez la <a href="/api/docs/swagger/">documentation interactive (Swagger)</a> pour explorer les endpoints disponibles.
+</p>
+
+{# ------------------------------------------------------------------ #}
+{# New token banner — shown only immediately after creation             #}
+{# ------------------------------------------------------------------ #}
+{% if new_token %}
+<div class="alert alert-success border-success mb-4" role="alert" aria-live="polite">
+  <h2 class="h5 alert-heading"><i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>Token créé</h2>
+  <p class="mb-2"><strong>Copiez ce token maintenant : il ne sera plus jamais affiché.</strong></p>
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <code id="new-token-value" class="flex-grow-1 p-2 bg-white border rounded" style="word-break: break-all;">{{ new_token }}</code>
+    <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+            data-copy-target="new-token-value"
+            aria-label="Copier le token dans le presse-papier">
+      <i class="bi bi-clipboard" aria-hidden="true"></i> Copier
+    </button>
+  </div>
+  <details>
+    <summary class="small text-muted" style="cursor: pointer;">Exemple curl</summary>
+    <pre class="mt-2 p-2 bg-white border rounded small"><code>curl -H "Authorization: Bearer {{ new_token }}" https://votre-domaine/api/v1/events</code></pre>
+  </details>
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------------ #}
+{# Create form                                                          #}
+{# ------------------------------------------------------------------ #}
+<section aria-labelledby="new-token-heading" class="mb-5">
+  <h2 class="h5 mb-3" id="new-token-heading">Nouveau token</h2>
+  <form method="post" action="{{ url_for('members.create_api_token') }}" novalidate style="max-width: 36rem;">
+    {{ create_form.hidden_tag() }}
+
+    <div class="mb-3">
+      <label for="{{ create_form.name.id }}" class="form-label">
+        {{ create_form.name.label.text }} <span class="text-danger" aria-hidden="true">*</span>
+      </label>
+      {{ create_form.name(
+          class="form-control" + (" is-invalid" if create_form.name.errors else ""),
+          id=create_form.name.id
+      ) }}
+      {% for error in create_form.name.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="mb-3">
+      <label for="{{ create_form.expires_days.id }}" class="form-label">
+        {{ create_form.expires_days.label.text }}
+      </label>
+      {{ create_form.expires_days(
+          class="form-select" + (" is-invalid" if create_form.expires_days.errors else ""),
+          id=create_form.expires_days.id
+      ) }}
+      {% for error in create_form.expires_days.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+      {% endfor %}
+    </div>
+
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Générer un token
+    </button>
+  </form>
+</section>
+
+{# ------------------------------------------------------------------ #}
+{# Tokens table                                                         #}
+{# ------------------------------------------------------------------ #}
+<section aria-labelledby="tokens-heading">
+  <h2 class="h5 mb-3" id="tokens-heading">Mes tokens</h2>
+
+  {% if tokens %}
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th scope="col">Libellé</th>
+          <th scope="col">Préfixe</th>
+          <th scope="col">Créé le</th>
+          <th scope="col">Dernière utilisation</th>
+          <th scope="col">Expiration</th>
+          <th scope="col">Statut</th>
+          <th scope="col" class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for token in tokens %}
+        <tr>
+          <td>{{ token.name }}</td>
+          <td><code class="small">{{ token.token_prefix }}…</code></td>
+          <td class="text-nowrap small">
+            {% if token.created_at %}
+              {{ token.created_at.strftime('%d/%m/%Y %H:%M') }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="small">
+            {% if token.last_used_at %}
+              {{ token.last_used_at.strftime('%d/%m/%Y %H:%M') }}
+            {% else %}
+              <span class="text-muted">Jamais</span>
+            {% endif %}
+          </td>
+          <td class="small">
+            {% if token.expires_at %}
+              {{ token.expires_at.strftime('%d/%m/%Y') }}
+            {% else %}
+              <span class="text-muted">Jamais</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if token.revoked %}
+              <span class="badge bg-secondary">Révoqué</span>
+            {% elif token.expires_at and token.expires_at < now %}
+              <span class="badge bg-danger">Expiré</span>
+            {% else %}
+              <span class="badge bg-success">Actif</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            {% if not token.revoked %}
+            <form method="post"
+                  action="{{ url_for('members.revoke_api_token', token_id=token.id) }}"
+                  data-confirm="Révoquer ce token ? Les outils qui l'utilisent cesseront de fonctionner.">
+              {{ revoke_form.hidden_tag() }}
+              <button type="submit" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-slash-circle me-1" aria-hidden="true"></i>Révoquer
+              </button>
+            </form>
+            {% else %}
+            <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card border-0 bg-light text-center py-5" style="max-width: 36rem;">
+    <div class="card-body">
+      <i class="bi bi-key fs-1 text-muted mb-3 d-block" aria-hidden="true"></i>
+      <p class="text-muted mb-0">Aucun token API pour l'instant.</p>
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block page_help %}
+<h3 class="h6 fw-bold mb-2">Comment utiliser un token API</h3>
+<p class="small">Ajoutez un en-tête <code>Authorization</code> à chaque requête :</p>
+<pre class="small bg-light p-2 rounded border"><code>Authorization: Bearer &lt;votre-token&gt;</code></pre>
+<p class="small mt-2">Le token hérite des permissions de votre compte. Il donne accès aux mêmes
+ressources que votre connexion habituelle.</p>
+
+<h3 class="h6 fw-bold mt-3 mb-2">Sécurité</h3>
+<ul class="small ps-3 mb-2">
+  <li>Le token n'est affiché <strong>qu'une seule fois</strong> à la création — copiez-le immédiatement.</li>
+  <li>Si vous perdez un token, révoquez-le et créez-en un nouveau.</li>
+  <li>Ne partagez jamais un token dans du code versionné ou des emails.</li>
+</ul>
+
+<a href="/api/docs/swagger/" class="small">Documentation Swagger &rarr;</a>
+{% endblock %}

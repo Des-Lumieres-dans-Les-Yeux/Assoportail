@@ -91,11 +91,15 @@ class AuditLog(db.Model):
 def _current_user_id() -> int | None:
     """Return the authenticated user's ID, or None.
 
-    Returns None when called outside a request context (Celery tasks,
-    fixtures, migrations) to avoid loading a detached User proxy.
+    Checks (in order):
+    1. Flask-Login's ``current_user`` (sessions web classiques).
+    2. ``flask.g.api_user`` (requêtes API authentifiées par token Bearer).
+
+    Returns None when called outside a request context (tâches Celery,
+    fixtures, migrations) pour éviter de charger un proxy User détaché.
     """
     try:
-        from flask import has_request_context
+        from flask import g, has_request_context
 
         if not has_request_context():
             return None
@@ -104,6 +108,11 @@ def _current_user_id() -> int | None:
 
         if current_user and current_user.is_authenticated:
             return int(current_user.id)
+
+        # Fallback : requête API avec token Bearer
+        api_user = getattr(g, "api_user", None)
+        if api_user is not None:
+            return int(api_user.id)
     except Exception:
         logger.debug("Could not resolve current user id for audit log", exc_info=True)
     return None
@@ -160,7 +169,7 @@ def register_audit_listeners() -> None:
             if history.has_changes():
                 old = history.deleted[0] if history.deleted else None
                 new = history.added[0] if history.added else None
-                if old != new and attr.key not in {"updated_at", "password_hash"}:
+                if old != new and attr.key not in {"updated_at", "password_hash", "last_used_at"}:
                     changes[attr.key] = {"old": old, "new": new}
         if not changes:
             return
