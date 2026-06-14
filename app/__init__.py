@@ -24,7 +24,8 @@ _API_DOCS_CSP = (
     "style-src 'self' 'unsafe-inline' https://unpkg.com; "
     "img-src 'self' data: https://validator.swagger.io https://unpkg.com; "
     "font-src 'self' data: https://unpkg.com; "
-    "connect-src 'self'; "
+    # unpkg autorisé pour les source maps (.css.map/.js.map) de Swagger UI
+    "connect-src 'self' https://unpkg.com; "
     "worker-src 'self' blob:"
 )
 
@@ -274,6 +275,9 @@ def _init_extensions(app: Flask) -> None:
         x_content_type_options=True,
         x_xss_protection=True,
         referrer_policy="strict-origin-when-cross-origin",
+        # Désactive le défaut Talisman ``browsing-topics=()`` : fonctionnalité
+        # dépréciée par Chrome, source d'un avertissement console inutile.
+        permissions_policy={},
     )
 
     # Import models so SQLAlchemy registers them and Flask-Login can resolve users.
