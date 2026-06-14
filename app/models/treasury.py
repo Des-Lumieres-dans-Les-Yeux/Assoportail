@@ -115,6 +115,9 @@ class Transaction(db.Model):
     donor_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     donor_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     donor_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Mode de versement d'un don numéraire — coche la case correspondante du CERFA.
+    # Valeurs : "especes" | "cheque" | "virement" (virement/prélèvement/carte bancaire).
+    donor_payment_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # Sequential per-year receipt number "DON-AAAA-NNNNN", assigned on first
     # generation and never reused.
     cerfa_number: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True)

@@ -120,6 +120,11 @@
       <div class="invalid-feedback d-block">{{ e }}</div>
       {% endfor %}
     </div>
+    <div class="mb-2" id="donor-payment-wrap">
+      <label for="{{ form.donor_payment_mode.id }}" class="form-label small">{{ form.donor_payment_mode.label.text }}</label>
+      {{ form.donor_payment_mode(class="form-select form-select-sm", id=form.donor_payment_mode.id) }}
+      <div class="form-text">Coche la case « mode de versement » sur le reçu CERFA.</div>
+    </div>
     <div id="donor-description-wrap">
       <label for="{{ form.donor_description.id }}" class="form-label small">{{ form.donor_description.label.text }}</label>
       {{ form.donor_description(class="form-control form-control-sm", id=form.donor_description.id,
@@ -160,6 +165,7 @@
   var typeSelect = document.getElementById('{{ form.type.id }}');
   var donorSection = document.getElementById('donor-section');
   var descWrap = document.getElementById('donor-description-wrap');
+  var paymentWrap = document.getElementById('donor-payment-wrap');
   var firstnameWrap = document.getElementById('donor-firstname-wrap');
   if (!sourceSelect || !donorSection) return;
 
@@ -175,6 +181,7 @@
     var selected = document.querySelector('input[name="donation_type"]:checked');
     var dt = selected ? selected.value : 'particulier';
     if (descWrap) descWrap.classList.toggle('d-none', dt !== 'nature');
+    if (paymentWrap) paymentWrap.classList.toggle('d-none', dt === 'nature');
     if (firstnameWrap) firstnameWrap.classList.toggle('d-none', dt === 'mecena');
   }
 

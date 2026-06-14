@@ -130,6 +130,17 @@
       <span>{{ transaction.donor_email }}</span>
     </li>
     {% endif %}
+    {% if transaction.donor_payment_mode %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Mode de versement</span>
+      <span>
+        {% if transaction.donor_payment_mode == 'cheque' %}Chèque
+        {% elif transaction.donor_payment_mode == 'especes' %}Espèces
+        {% elif transaction.donor_payment_mode == 'virement' %}Virement / prélèvement / CB
+        {% endif %}
+      </span>
+    </li>
+    {% endif %}
     {% if transaction.donor_description %}
     <li class="list-group-item">
       <span class="text-muted d-block mb-1">Description du don</span>

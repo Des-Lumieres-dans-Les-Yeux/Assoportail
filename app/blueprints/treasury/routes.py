@@ -681,6 +681,11 @@ def _apply_donor_fields(form: TransactionForm, transaction: Transaction) -> None
         transaction.donor_city = (form.donor_city.data or "").strip() or None
         transaction.donor_email = (form.donor_email.data or "").strip() or None
         transaction.donor_description = (form.donor_description.data or "").strip() or None
+        # Mode de versement — uniquement pour les dons numéraire (pas « en nature »).
+        if transaction.donation_type == "nature":
+            transaction.donor_payment_mode = None
+        else:
+            transaction.donor_payment_mode = (form.donor_payment_mode.data or "").strip() or None
     else:
         transaction.donation_type = None
         transaction.donor_first_name = None
@@ -690,6 +695,7 @@ def _apply_donor_fields(form: TransactionForm, transaction: Transaction) -> None
         transaction.donor_city = None
         transaction.donor_email = None
         transaction.donor_description = None
+        transaction.donor_payment_mode = None
 
 
 def _check_merge_fields(docx_bytes: bytes, required: set[str]) -> set[str]:

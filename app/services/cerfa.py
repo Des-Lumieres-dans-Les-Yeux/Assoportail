@@ -86,6 +86,15 @@ ORG_CATEGORY_FIELDS: dict[str, str] = {
 # "Le bénéficiaire certifie ... la réduction d'impôt prévue à l'article (3)"
 CGI_FIELDS = {"200": "200 du CGI", "238 bis": "238 bis du CGI", "978": "978 du CGI"}
 
+# "En cas de don en numéraire, mode de versement du don" — maps the stored
+# payment-mode key to the exact AcroForm checkbox field name. Keys must match
+# the choices of TransactionForm.donor_payment_mode.
+PAYMENT_MODE_FIELDS = {
+    "especes": "Remise despèces",
+    "cheque": "Chèque",
+    "virement": "Virement prélèvement carte bancaire",
+}
+
 # "Date et signature" box on page 2 (PDF points): (x0, y0, x1, y1).
 SIGNATURE_BOX = (372.0, 28.0, 519.0, 86.0)
 # Page index (0-based) the signature box sits on.
@@ -330,6 +339,9 @@ def build_cerfa_pdf(
     checks.append("Déclaration de don manuel")
     # Nature du don — cash (in-kind donations use the dedicated letter, not this form)
     checks.append("Numéraire")
+    # Mode de versement du don numéraire — coche espèces / chèque / virement-CB
+    if mode_field := PAYMENT_MODE_FIELDS.get(transaction.donor_payment_mode or ""):
+        checks.append(mode_field)
 
     reader = PdfReader(str(TEMPLATE_PATH))
     writer = PdfWriter()

@@ -144,6 +144,17 @@ class TransactionForm(FlaskForm):
         "Description du don (don en nature)",
         validators=[Optional(), Length(max=1000)],
     )
+    donor_payment_mode = SelectField(
+        "Mode de versement (don numéraire)",
+        choices=[
+            ("", "—"),
+            ("cheque", "Chèque"),
+            ("especes", "Espèces"),
+            ("virement", "Virement / prélèvement / carte bancaire"),
+        ],
+        default="",
+        validate_choice=False,
+    )
 
 
 class TagForm(FlaskForm):
