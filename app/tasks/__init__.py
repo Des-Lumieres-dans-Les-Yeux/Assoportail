@@ -26,6 +26,7 @@ def make_celery() -> Celery:
         backend=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
         include=[
             "app.tasks.centers",
+            "app.tasks.cerfa",
             "app.tasks.email_polling",
             "app.tasks.email_rules",
             "app.tasks.events",
