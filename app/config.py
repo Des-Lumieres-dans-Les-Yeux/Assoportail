@@ -95,7 +95,14 @@ class Config:
     WORDPRESS_URL: str = os.environ.get("WORDPRESS_URL", "")
     TALISMAN_CSP: dict = {
         "default-src": "'self'",
-        "script-src": ["'self'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
+        "script-src": [
+            "'self'",
+            "https://cdn.jsdelivr.net",
+            "https://unpkg.com",
+            # Script inline d'initialisation de Swagger UI servi par spectree
+            # (page /api/docs/swagger/). Hash stable tant que spectree==2.0.1.
+            "'sha256-0kSywEu7Zjn7qT57QKszoOA3Vbp9XgKGvPK4mm/gO4E='",
+        ],
         "style-src": [
             "'self'",
             "https://cdn.jsdelivr.net",
