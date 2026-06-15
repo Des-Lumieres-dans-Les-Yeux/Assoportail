@@ -73,6 +73,22 @@
       <i class="bi bi-person me-1" aria-hidden="true"></i>Informations du donateur / de l'adhérent
       <small class="text-muted fw-normal">(pour le CERFA)</small>
     </h2>
+    {% if known_donors %}
+    <div class="mb-3" id="donor-search-wrap">
+      <label for="donor-search" class="form-label small">
+        <i class="bi bi-search me-1" aria-hidden="true"></i>Donateur déjà connu ?
+      </label>
+      <input type="text" class="form-control form-control-sm" id="donor-search"
+             list="donor-list" autocomplete="off"
+             placeholder="Tapez un nom pour pré-remplir les coordonnées…">
+      <datalist id="donor-list">
+        {% for d in known_donors %}
+        <option value="{{ d.label }}"></option>
+        {% endfor %}
+      </datalist>
+      <div class="form-text">Sélectionnez un nom dans la liste pour remplir automatiquement les champs.</div>
+    </div>
+    {% endif %}
     <div class="mb-2{% if form.source.data == 'membership' %} d-none{% endif %}" id="donation-type-wrap">
       <label class="form-label small">{{ form.donation_type.label.text }}</label>
       <div class="d-flex gap-3 flex-wrap">
@@ -200,6 +216,23 @@
     r.addEventListener('change', toggleDonationType);
   });
   syncVisibility();
+
+  // Pre-fill donor coordinates when a known donor is picked from the datalist.
+  var donorSearch = document.getElementById('donor-search');
+  if (donorSearch) {
+    var donors = {{ known_donors | default([]) | tojson }};
+    donorSearch.addEventListener('input', function () {
+      var match = donors.find(function (d) { return d.label === donorSearch.value; });
+      if (!match) return;
+      var set = function (id, val) { var el = document.getElementById(id); if (el) el.value = val; };
+      set('{{ form.donor_first_name.id }}', match.first_name);
+      set('{{ form.donor_name.id }}', match.name);
+      set('{{ form.donor_address.id }}', match.address);
+      set('{{ form.donor_zip.id }}', match.zip);
+      set('{{ form.donor_city.id }}', match.city);
+      set('{{ form.donor_email.id }}', match.email);
+    });
+  }
 })();
 </script>
 {% endblock %}

@@ -531,13 +531,18 @@ def archive_cerfa_to_drive(transaction: Transaction, pdf_bytes: bytes, filename:
 
 
 def issue_cerfa(
-    transaction: Transaction, cfg: AssociationConfig | None = None
+    transaction: Transaction,
+    cfg: AssociationConfig | None = None,
+    defer_archive: bool = False,
 ) -> tuple[bytes, str]:
     """Issue the receipt: assign a number, generate the PDF, archive it to Drive.
 
     Idempotent — re-issuing reuses the same number and Drive file. Commits the
     resulting ``cerfa_number`` / ``cerfa_generated_at`` / Drive references.
     Returns ``(pdf_bytes, filename)``.
+
+    ``defer_archive=True`` skips the (slow, network-bound) Drive upload so the
+    caller can offload it to a background task and keep the request fast.
     """
     from app.extensions import db
 
@@ -546,6 +551,7 @@ def issue_cerfa(
     pdf_bytes, filename = generate_cerfa_pdf(transaction, cfg)
     if transaction.cerfa_generated_at is None:
         transaction.cerfa_generated_at = datetime.now(UTC)
-    archive_cerfa_to_drive(transaction, pdf_bytes, filename)
+    if not defer_archive:
+        archive_cerfa_to_drive(transaction, pdf_bytes, filename)
     db.session.commit()
     return pdf_bytes, filename

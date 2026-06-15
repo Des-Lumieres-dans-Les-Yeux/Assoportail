@@ -146,7 +146,9 @@ def create():
         flash("Transaction enregistrée.", "success")
         return redirect(url_for("treasury.detail", transaction_id=transaction.id))
 
-    return render_template("treasury/form.html", form=form, title="Nouvelle transaction")
+    return render_template(
+        "treasury/form.html", form=form, title="Nouvelle transaction", known_donors=_known_donors()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +190,11 @@ def edit(transaction_id: int):
         return redirect(url_for("treasury.detail", transaction_id=transaction.id))
 
     return render_template(
-        "treasury/form.html", form=form, title="Modifier la transaction", transaction=transaction
+        "treasury/form.html",
+        form=form,
+        title="Modifier la transaction",
+        transaction=transaction,
+        known_donors=_known_donors(),
     )
 
 
@@ -253,10 +259,8 @@ def generate_cerfa(transaction_id: int):
     if redirect_resp is not None:
         return redirect_resp
 
-    from app.services.cerfa import issue_cerfa
-
     try:
-        pdf_bytes, pdf_filename = issue_cerfa(transaction)
+        pdf_bytes, pdf_filename = _issue_cerfa(transaction)
     except Exception as exc:
         flash(f"Erreur lors de la génération du CERFA : {exc}", "danger")
         return redirect(url_for("treasury.detail", transaction_id=transaction_id))
@@ -279,10 +283,8 @@ def mark_cerfa_sent(transaction_id: int):
     if redirect_resp is not None:
         return redirect_resp
 
-    from app.services.cerfa import issue_cerfa
-
     try:
-        issue_cerfa(transaction)
+        _issue_cerfa(transaction)
     except Exception as exc:
         flash(f"Erreur lors de la génération du CERFA : {exc}", "danger")
         return redirect(url_for("treasury.detail", transaction_id=transaction_id))
@@ -296,7 +298,12 @@ def mark_cerfa_sent(transaction_id: int):
 @bp.route("/<int:transaction_id>/cerfa/send", methods=["POST"])
 @bureau_required
 def send_cerfa_email(transaction_id: int):
-    """Queue CERFA issuance + email delivery to the address from the form."""
+    """Issue the CERFA, email it, and mark it sent — synchronously.
+
+    Done in-request (like mark_cerfa_sent) so the "Reçu envoyé" status reflects
+    the result immediately and any failure surfaces, instead of disappearing
+    into a background task whose outcome the user never sees.
+    """
     transaction, redirect_resp = _donation_or_redirect(transaction_id)
     if redirect_resp is not None:
         return redirect_resp
@@ -308,10 +315,29 @@ def send_cerfa_email(transaction_id: int):
         flash("Adresse email invalide.", "danger")
         return redirect(url_for("treasury.detail", transaction_id=transaction_id))
 
-    from app.tasks.cerfa import generate_and_send_cerfa
+    from app.services.mailer import send_cerfa_receipt_email
 
-    generate_and_send_cerfa.delay(transaction_id, to_email=to_email)
-    flash(f"Génération et envoi du CERFA à {to_email} en cours…", "info")
+    try:
+        pdf_bytes, filename = _issue_cerfa(transaction)
+        donor_display = (
+            " ".join(filter(None, [transaction.donor_first_name, transaction.donor_name]))
+            or "Donateur"
+        )
+        send_cerfa_receipt_email(
+            to_email=to_email,
+            donor_name=donor_display,
+            amount=f"{transaction.amount:.2f} €",
+            receipt_filename=filename,
+            docx_bytes=pdf_bytes,
+        )
+    except Exception as exc:
+        logger.exception("CERFA email send failed for transaction %d", transaction_id)
+        flash(f"Échec de l'envoi du CERFA : {exc}", "danger")
+        return redirect(url_for("treasury.detail", transaction_id=transaction_id))
+
+    transaction.cerfa_sent_at = datetime.now(UTC)
+    db.session.commit()
+    flash(f"CERFA envoyé à {to_email} et marqué comme envoyé.", "success")
     return redirect(url_for("treasury.detail", transaction_id=transaction_id))
 
 
@@ -683,6 +709,61 @@ def _tag_choices() -> list[tuple[int, str]]:
     """Return (id, label) for all tags, sorted alphabetically."""
     tags = db.session.scalars(db.select(Tag).order_by(Tag.label)).all()
     return [(t.id, t.label) for t in tags]
+
+
+def _issue_cerfa(transaction: Transaction) -> tuple[bytes, str]:
+    """Issue the receipt synchronously, deferring the slow Drive upload to a task.
+
+    The PDF is generated in-request (fast); the network-bound Drive archival is
+    enqueued and runs in the background. Enqueue failures are best-effort — Drive
+    archival is non-critical, so a missing worker must not break the receipt.
+    """
+    from app.services.cerfa import issue_cerfa
+
+    pdf_bytes, filename = issue_cerfa(transaction, defer_archive=True)
+    if not transaction.cerfa_drive_file_id:
+        try:
+            from app.tasks.cerfa import archive_cerfa_to_drive_task
+
+            archive_cerfa_to_drive_task.delay(transaction.id)
+        except Exception:
+            logger.warning(
+                "Could not enqueue Drive archival for transaction %d", transaction.id, exc_info=True
+            )
+    return pdf_bytes, filename
+
+
+def _known_donors() -> list[dict]:
+    """Distinct donors from past donation/membership transactions, latest first.
+
+    The "carnet d'adresses" builds itself: each saved don/adhésion already
+    stores the donor's coordinates, so we just dedupe them by name.
+    """
+    rows = db.session.scalars(
+        db.select(Transaction)
+        .where(
+            Transaction.source.in_(
+                [TransactionSource.DONATION.value, TransactionSource.MEMBERSHIP.value]
+            ),
+            Transaction.donor_name.isnot(None),
+        )
+        .order_by(Transaction.date.desc(), Transaction.created_at.desc())
+    ).all()
+    donors: dict[str, dict] = {}
+    for t in rows:
+        key = f"{(t.donor_first_name or '').strip().lower()}|{(t.donor_name or '').strip().lower()}"
+        if key in donors:  # keep the most recent (rows are date-desc)
+            continue
+        donors[key] = {
+            "label": " ".join(filter(None, [t.donor_first_name, t.donor_name])),
+            "first_name": t.donor_first_name or "",
+            "name": t.donor_name or "",
+            "address": t.donor_address or "",
+            "zip": t.donor_zip or "",
+            "city": t.donor_city or "",
+            "email": t.donor_email or "",
+        }
+    return list(donors.values())
 
 
 def _apply_donor_fields(form: TransactionForm, transaction: Transaction) -> None:

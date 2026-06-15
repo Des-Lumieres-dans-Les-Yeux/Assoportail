@@ -219,13 +219,16 @@ def send_cerfa_receipt_email(
     docx_bytes: bytes,
 ) -> None:
     """Send a filled CERFA DOCX receipt to a donor as an email attachment."""
+    from app.models.config import AssociationConfig
+
+    asso_name = AssociationConfig.get().name or "l'association"
     subject = f"Votre reçu fiscal — {amount}"
     body = (
         f"Bonjour {donor_name},\n\n"
         f"Veuillez trouver ci-joint votre reçu fiscal pour votre don de {amount}.\n\n"
         f"Conservez ce document pour votre déclaration de revenus.\n\n"
         f"Cordialement,\n"
-        f"L'équipe Assoportail"
+        f"L'équipe {asso_name}"
     )
     _deliver_with_attachment(to_email, subject, body, receipt_filename, docx_bytes)
 
