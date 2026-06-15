@@ -121,6 +121,73 @@
   {% endif %}
 </section>
 
+{# QR codes stuck on the machine — bureau only #}
+{% if current_user.is_bureau %}
+<section aria-labelledby="qr-heading" class="mb-4">
+  <h2 class="h5" id="qr-heading">QR codes à coller sur la machine</h2>
+  <p class="text-muted small mb-3" style="max-width: 42rem;">
+    Ces deux QR codes sont <strong>permanents</strong> : ils restent valables même si la machine
+    change de centre. Le centre actuel est résolu automatiquement au moment du scan.
+  </p>
+
+  {% if machine.public_token %}
+  <a href="{{ url_for('machines.carte_pdf', machine_id=machine.id) }}"
+     class="btn btn-primary btn-sm mb-3" target="_blank">
+    <i class="bi bi-card-heading me-1" aria-hidden="true"></i>Carte à imprimer (PDF)
+  </a>
+  <div class="row g-3" style="max-width: 42rem;">
+    {# Breakdown QR #}
+    <div class="col-12 col-md-6">
+      <div class="border rounded p-3 bg-light h-100">
+        <h3 class="h6 mb-2"><i class="bi bi-tools me-1" aria-hidden="true"></i>Signaler une panne</h3>
+        <p class="mb-2">
+          <code class="user-select-all small" id="machine-breakdown-url">{{ url_for('machines.public_machine_breakdown', token=machine.public_token, _external=True) }}</code>
+          <button type="button"
+                  class="btn btn-outline-secondary btn-sm ms-1 align-text-bottom"
+                  data-copy-target="machine-breakdown-url"
+                  title="Copier le lien">
+            <i class="bi bi-clipboard" aria-hidden="true"></i>
+          </button>
+        </p>
+        <a href="{{ url_for('machines.breakdown_qr_svg', machine_id=machine.id) }}"
+           class="btn btn-outline-warning btn-sm" target="_blank"
+           title="Télécharger le QR code (SVG)">
+          <i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR code panne
+        </a>
+      </div>
+    </div>
+    {# Guestbook QR #}
+    <div class="col-12 col-md-6">
+      <div class="border rounded p-3 bg-light h-100">
+        <h3 class="h6 mb-2"><i class="bi bi-chat-left-heart me-1" aria-hidden="true"></i>Livre d'or</h3>
+        <p class="mb-2">
+          <code class="user-select-all small" id="machine-feedback-url">{{ url_for('machines.public_machine_feedback', token=machine.public_token, _external=True) }}</code>
+          <button type="button"
+                  class="btn btn-outline-secondary btn-sm ms-1 align-text-bottom"
+                  data-copy-target="machine-feedback-url"
+                  title="Copier le lien">
+            <i class="bi bi-clipboard" aria-hidden="true"></i>
+          </button>
+        </p>
+        <a href="{{ url_for('machines.feedback_qr_svg', machine_id=machine.id) }}"
+           class="btn btn-outline-primary btn-sm" target="_blank"
+           title="Télécharger le QR code (SVG)">
+          <i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR code livre d'or
+        </a>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <form method="post" action="{{ url_for('machines.generate_public_links', machine_id=machine.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Générer les QR codes
+    </button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
 {# Current installation + install form #}
 {% if current_user.is_bureau %}
 <section aria-labelledby="install-heading" class="mb-4">

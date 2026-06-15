@@ -13,7 +13,7 @@ from app.extensions import db
 
 if TYPE_CHECKING:
     from app.models.document import Document
-    from app.models.machine import MachineInstallation, MaintenanceRecord
+    from app.models.machine import Machine, MachineInstallation, MaintenanceRecord
     from app.models.user import User
 
 
@@ -160,11 +160,18 @@ class CenterContact(db.Model):
 
 
 class CenterFeedback(db.Model):
-    """A guestbook entry submitted by a center contact via signed URL.
+    """A guestbook entry submitted via signed URL.
+
+    Usually attached to a Center, but ``center_id`` may be null when the entry
+    was left through a machine QR code while the machine is not installed in any
+    center (e.g. during an event). In that case ``machine_id`` records which
+    machine the testimonial came from and the entry is labelled "Durant un
+    événement".
 
     Attributes:
         id: Primary key.
-        center_id: FK to the Center.
+        center_id: FK to the Center (nullable — null for an event entry).
+        machine_id: FK to the Machine the entry was left on (nullable).
         submitted_by: Free-text name of the person who submitted.
         submitted_at: Submission timestamp (UTC).
         content: Testimonial text.
@@ -178,8 +185,11 @@ class CenterFeedback(db.Model):
     __auditable__ = True
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    center_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("centers.id", ondelete="CASCADE"), nullable=False, index=True
+    center_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("centers.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    machine_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("machines.id", ondelete="SET NULL"), nullable=True, index=True
     )
     submitted_by: Mapped[str] = mapped_column(String(100), nullable=False)
     submitted_at: Mapped[datetime] = mapped_column(
@@ -193,7 +203,8 @@ class CenterFeedback(db.Model):
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    center: Mapped[Center] = relationship("Center", back_populates="feedbacks")
+    center: Mapped[Center | None] = relationship("Center", back_populates="feedbacks")
+    machine: Mapped[Machine | None] = relationship("Machine", foreign_keys=[machine_id])
     published_by: Mapped[User | None] = relationship("User", foreign_keys=[published_by_id])
     documents: Mapped[list[Document]] = relationship(
         "Document", secondary="center_feedback_documents"

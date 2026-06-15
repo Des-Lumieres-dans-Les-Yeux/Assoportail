@@ -1,5 +1,8 @@
 """Machines blueprint routes — inventory, installations, maintenance."""
 
+import base64
+import logging
+import secrets
 from datetime import date
 
 from flask import Response, abort, flash, redirect, render_template, request, session, url_for
@@ -13,12 +16,14 @@ from app.blueprints.machines.forms import (
     MachineForm,
     MaintenanceRecordForm,
     PublicBreakdownForm,
+    PublicMachineBreakdownForm,
     RemoveInstallationForm,
     ResolveMaintenanceForm,
 )
+from app.blueprints.centers.forms import FeedbackForm
 from app.decorators import bureau_required
 from app.extensions import db, limiter
-from app.models.center import Center, CenterStatus
+from app.models.center import Center, CenterFeedback, CenterStatus
 from app.models.document import Document, DocumentType, machine_documents
 from app.models.event import EventMachine
 from app.models.machine import (
@@ -31,6 +36,8 @@ from app.models.machine import (
 from app.models.task import Task
 from app.models.user import User
 from app.services.csv_io import export_machines_csv, parse_machines_csv
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # List and detail
@@ -1051,19 +1058,228 @@ def machine_public(machine_id: int):
     )
     if machine is None:
         abort(404)
-    # Expose the center's feedback URL if the machine is currently installed
+    # Link to the machine guestbook (resolves the current center, or "during an
+    # event" when the machine is not installed anywhere).
     feedback_url = None
-    inst = machine.current_installation
-    if inst and inst.center.feedback_token:
+    if machine.public_token:
         feedback_url = url_for(
-            "centers.submit_feedback",
-            token=inst.center.feedback_token,
+            "machines.public_machine_feedback",
+            token=machine.public_token,
             _external=True,
         )
     return render_template(
         "machines/public.html",
         machine=machine,
         feedback_url=feedback_url,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Machine QR codes — breakdown + guestbook stuck physically on the machine
+# ---------------------------------------------------------------------------
+
+
+def _ensure_public_token(machine: Machine) -> str:
+    """Return the machine's permanent public token, generating it once if absent.
+
+    The token is immutable: it encodes only the machine (never the center), so
+    the printed QR sticker stays valid when the machine moves between centers.
+    """
+    if not machine.public_token:
+        machine.public_token = secrets.token_urlsafe(32)
+        db.session.commit()
+    return machine.public_token
+
+
+def _machine_by_public_token(token: str) -> Machine:
+    """Look up a machine by its public token or abort 404."""
+    machine = db.session.execute(
+        db.select(Machine).where(Machine.public_token == token)
+    ).scalar_one_or_none()
+    if machine is None:
+        abort(404)
+    return machine
+
+
+@bp.route("/<int:machine_id>/public-links", methods=["POST"])
+@bureau_required
+def generate_public_links(machine_id: int):
+    """Create the permanent public token for a machine's QR codes (idempotent)."""
+    machine = db.session.get(Machine, machine_id)
+    if machine is None:
+        abort(404)
+    _ensure_public_token(machine)
+    flash("QR codes de la machine générés.", "success")
+    return redirect(url_for("machines.detail", machine_id=machine_id))
+
+
+@bp.route("/<int:machine_id>/breakdown-qr.svg")
+@login_required
+def breakdown_qr_svg(machine_id: int):
+    """QR code pointing to the machine's public breakdown form."""
+    machine = db.session.get(Machine, machine_id)
+    if machine is None:
+        abort(404)
+    token = _ensure_public_token(machine)
+    url = url_for("machines.public_machine_breakdown", token=token, _external=True)
+    return Response(_make_qr_svg(url), mimetype="image/svg+xml")
+
+
+@bp.route("/<int:machine_id>/feedback-qr.svg")
+@login_required
+def feedback_qr_svg(machine_id: int):
+    """QR code pointing to the machine's public guestbook form."""
+    machine = db.session.get(Machine, machine_id)
+    if machine is None:
+        abort(404)
+    token = _ensure_public_token(machine)
+    url = url_for("machines.public_machine_feedback", token=token, _external=True)
+    return Response(_make_qr_svg(url), mimetype="image/svg+xml")
+
+
+_DEFAULT_CARD_MESSAGE = (
+    "Un souci avec ce flipper ? Une expérience à partager ? "
+    "Scannez le QR code correspondant."
+)
+
+
+@bp.route("/<int:machine_id>/carte.pdf")
+@bureau_required
+def carte_pdf(machine_id: int):
+    """Generate the printable QR card to slip inside the pinball machine.
+
+    The card bears both QR codes (breakdown + guestbook) and the configurable
+    intro message. The QR codes encode only the machine token, so the printed
+    card stays valid when the machine moves between centers.
+    """
+    from app.models.config import AssociationConfig
+
+    machine = db.session.get(Machine, machine_id)
+    if machine is None:
+        abort(404)
+    token = _ensure_public_token(machine)
+    cfg = AssociationConfig.get()
+
+    breakdown_url = url_for("machines.public_machine_breakdown", token=token, _external=True)
+    feedback_url = url_for("machines.public_machine_feedback", token=token, _external=True)
+    html = render_template(
+        "machines/carte.html",
+        machine=machine,
+        cfg=cfg,
+        message=(cfg.flipper_card_message or "").strip() or _DEFAULT_CARD_MESSAGE,
+        breakdown_qr=base64.b64encode(_make_qr_svg(breakdown_url)).decode("ascii"),
+        feedback_qr=base64.b64encode(_make_qr_svg(feedback_url)).decode("ascii"),
+        logo_data=base64.b64encode(cfg.logo).decode("ascii") if cfg.logo else None,
+    )
+    try:
+        from weasyprint import HTML as WP
+
+        pdf = WP(string=html).write_pdf()
+    except Exception:
+        return Response(html, mimetype="text/html")
+    safe = machine.display_name.replace(" ", "_").replace("/", "-")[:40]
+    return Response(
+        pdf,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="carte_{safe}.pdf"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public machine pages — no auth, token-protected
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/m/<token>/panne", methods=["GET", "POST"])
+@limiter.limit(
+    "5 per hour",
+    methods=["POST"],
+    key_func=lambda: f"{request.remote_addr}:{request.view_args.get('token', '')}",
+)
+def public_machine_breakdown(token: str):
+    """Public breakdown form for one machine, identified by its permanent token.
+
+    The current center (if any) is resolved at request time from the machine's
+    active installation — the QR code itself never encodes the center.
+    """
+    machine = _machine_by_public_token(token)
+    inst = machine.current_installation
+    center = inst.center if inst else None
+
+    form = PublicMachineBreakdownForm()
+    if form.validate_on_submit():
+        record = MaintenanceRecord(
+            machine_id=machine.id,
+            center_id=center.id if center else None,
+            date=date.today(),
+            description=form.description.data.strip(),
+            maintainer_name=form.reporter_name.data.strip(),
+            status=MaintenanceStatus.OPEN,
+        )
+        if machine.status != MachineStatus.RETIRED:
+            machine.status = MachineStatus.MAINTENANCE
+        db.session.add(record)
+        db.session.commit()
+        return render_template(
+            "machines/public_machine_breakdown.html",
+            machine=machine,
+            center=center,
+            submitted=True,
+        )
+
+    return render_template(
+        "machines/public_machine_breakdown.html",
+        machine=machine,
+        center=center,
+        form=form,
+    )
+
+
+@bp.route("/m/<token>/livre-or", methods=["GET", "POST"])
+@limiter.limit(
+    "5 per hour",
+    methods=["POST"],
+    key_func=lambda: f"{request.remote_addr}:{request.view_args.get('token', '')}",
+)
+def public_machine_feedback(token: str):
+    """Public guestbook form for one machine, identified by its permanent token.
+
+    The testimonial is attached to the center currently hosting the machine. If
+    the machine is not installed anywhere (e.g. during an event), the entry is
+    stored without a center and labelled "Durant un événement".
+    """
+    machine = _machine_by_public_token(token)
+    inst = machine.current_installation
+    center = inst.center if inst else None
+
+    form = FeedbackForm()
+    if request.method == "POST":
+        # Honeypot — silently accept but discard if filled
+        if form.website.data:
+            logger.warning("Honeypot triggered on machine feedback machine=%d", machine.id)
+            flash("Merci pour votre témoignage !", "success")
+            return redirect(url_for("centers.feedback_thanks"))
+        if form.validate_on_submit():
+            rating_raw = form.rating.data
+            rating = int(rating_raw) if rating_raw else None
+            feedback = CenterFeedback(
+                center_id=center.id if center else None,
+                machine_id=machine.id,
+                submitted_by=form.submitted_by.data.strip(),
+                content=form.content.data.strip(),
+                rating=rating,
+            )
+            db.session.add(feedback)
+            db.session.commit()
+            flash("Merci pour votre témoignage ! Il sera publié après modération.", "success")
+            return redirect(url_for("centers.feedback_thanks"))
+
+    return render_template(
+        "machines/public_machine_feedback.html",
+        machine=machine,
+        center=center,
+        during_event=center is None,
+        form=form,
     )
 
 

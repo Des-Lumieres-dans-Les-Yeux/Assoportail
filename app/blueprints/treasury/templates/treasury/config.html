@@ -87,6 +87,17 @@
     {% for e in form.km_rate.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
   </div>
 
+  <h2 class="h5 mb-3">Carte QR des flippers</h2>
+
+  <div class="mb-4" style="max-width: 40rem;">
+    <label for="{{ form.flipper_card_message.id }}" class="form-label">{{ form.flipper_card_message.label.text }}</label>
+    {{ form.flipper_card_message(class="form-control" + (" is-invalid" if form.flipper_card_message.errors else ""),
+                                 id=form.flipper_card_message.id, rows=3,
+                                 placeholder="Ex : Un souci avec ce flipper ? Une expérience à partager ? Scannez !") }}
+    <div class="form-text">Texte imprimé sur la carte à glisser dans le flipper (au-dessus des deux QR codes).</div>
+    {% for e in form.flipper_card_message.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+  </div>
+
   <h2 class="h5 mb-3">Représentant légal &amp; CERFA</h2>
 
   <div class="row g-3 mb-3">

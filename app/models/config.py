@@ -51,6 +51,9 @@ class AssociationConfig(db.Model):
     representative_title: Mapped[str | None] = mapped_column(String(100), nullable=True)
     km_rate: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True, default=0.603)
 
+    # Intro message printed on the QR cards placed inside the pinball machines.
+    flipper_card_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Association logo (PNG/JPG) for certificates and official documents
     logo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 

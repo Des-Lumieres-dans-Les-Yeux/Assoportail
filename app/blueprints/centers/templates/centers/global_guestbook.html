@@ -43,7 +43,11 @@
               <div>
                 <h2 class="h6 fw-bold mb-0">{{ fb.submitted_by }}</h2>
                 <small class="text-muted">
+                  {% if fb.center %}
                   dans <a href="{{ url_for('centers.detail', center_id=fb.center.id) }}" class="text-decoration-none fw-semibold">{{ fb.center.name }}</a>
+                  {% else %}
+                  <span class="fst-italic">Durant un événement</span>{% if fb.machine %} — {{ fb.machine.display_name }}{% endif %}
+                  {% endif %}
                 </small>
               </div>
               <small class="text-muted">
@@ -61,7 +65,7 @@
           </div>
           {% if current_user.is_bureau %}
           <div class="card-footer bg-white border-0 pt-0 d-flex justify-content-end gap-2">
-            <form method="post" action="{{ url_for('centers.unpublish_feedback', center_id=fb.center_id, fb_id=fb.id) }}" class="d-inline">
+            <form method="post" action="{{ url_for('centers.unpublish_feedback_global', fb_id=fb.id) }}" class="d-inline">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-eye-slash me-1"></i>Retirer
@@ -98,7 +102,11 @@
             <div>
               <strong>{{ fb.submitted_by }}</strong>
               <span class="text-muted ms-2">
+                {% if fb.center %}
                 pour <a href="{{ url_for('centers.detail', center_id=fb.center.id) }}" class="text-decoration-none">{{ fb.center.name }}</a>
+                {% else %}
+                <span class="fst-italic">Durant un événement</span>{% if fb.machine %} — {{ fb.machine.display_name }}{% endif %}
+                {% endif %}
               </span>
             </div>
             <small class="text-muted">Reçu le {{ fb.submitted_at.strftime('%d/%m/%Y à %H:%M') }}</small>
@@ -119,7 +127,7 @@
                 <i class="bi bi-trash me-1"></i>Supprimer
               </button>
             </form>
-            <form method="post" action="{{ url_for('centers.publish_feedback', center_id=fb.center_id, fb_id=fb.id) }}" class="d-inline">
+            <form method="post" action="{{ url_for('centers.publish_feedback_global', fb_id=fb.id) }}" class="d-inline">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-success btn-sm">
                 <i class="bi bi-check-lg me-1"></i>Approuver & Publier

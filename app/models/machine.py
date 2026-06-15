@@ -47,6 +47,9 @@ class Machine(db.Model):
         status: Operational state.
         last_checked_at: Date of last operational check (reset by "machine OK" button).
         notes: Internal notes (nullable).
+        public_token: Permanent secret used by the QR codes stuck on the machine
+            (breakdown + guestbook). Immutable so the printed sticker never has to
+            be reissued when the machine moves between centers.
         created_at: Record creation timestamp (UTC).
     """
 
@@ -71,6 +74,7 @@ class Machine(db.Model):
     estimated_value: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     last_checked_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    public_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Carte QR — {{ machine.display_name }}</title>
+<style>
+  /* Apron card format — slips into the pinball machine card holder. */
+  @page { size: 114mm 62mm; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 114mm; height: 62mm;
+    font-family: "Helvetica", "Arial", sans-serif;
+    color: #1f2937;
+    padding: 4mm 5mm;
+    position: relative;
+  }
+  .head { display: flex; align-items: center; gap: 2.5mm; margin-bottom: 1.5mm; }
+  .head img { height: 9mm; width: auto; }
+  .assoc { font-size: 9.5pt; font-weight: 700; line-height: 1.1; }
+  .message { font-size: 7.5pt; line-height: 1.3; margin: 0 0 2.5mm; color: #374151; }
+  .qr-row { display: flex; gap: 5mm; }
+  .qr-col { flex: 1; text-align: center; }
+  .qr-col .box {
+    border: 0.3mm solid #e5e7eb; border-radius: 1.5mm; padding: 1.2mm;
+    display: inline-block;
+  }
+  .qr-col img { width: 22mm; height: 22mm; display: block; }
+  .qr-col .label { font-size: 7.5pt; font-weight: 700; margin-top: 1.2mm; }
+  .qr-col .sub { font-size: 6pt; color: #6b7280; line-height: 1.2; }
+  .machine {
+    position: absolute; bottom: 2mm; right: 5mm;
+    font-size: 5.5pt; color: #9ca3af;
+  }
+</style>
+</head>
+<body>
+  <div class="head">
+    {% if logo_data %}<img src="data:image/png;base64,{{ logo_data }}" alt="">{% endif %}
+    <div class="assoc">{{ cfg.name or "Des Lumières Dans Les Yeux" }}</div>
+  </div>
+
+  <p class="message">{{ message }}</p>
+
+  <div class="qr-row">
+    <div class="qr-col">
+      <span class="box"><img src="data:image/svg+xml;base64,{{ breakdown_qr }}" alt=""></span>
+      <div class="label">Signaler une panne</div>
+      <div class="sub">Ce flipper ne fonctionne pas&nbsp;?</div>
+    </div>
+    <div class="qr-col">
+      <span class="box"><img src="data:image/svg+xml;base64,{{ feedback_qr }}" alt=""></span>
+      <div class="label">Livre d'or</div>
+      <div class="sub">Laissez-nous un petit mot&nbsp;!</div>
+    </div>
+  </div>
+
+  <div class="machine">
+    {{ machine.display_name }}{% if machine.internal_number %} · n°{{ machine.internal_number }}{% endif %}
+  </div>
+</body>
+</html>

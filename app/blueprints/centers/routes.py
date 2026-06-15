@@ -1479,8 +1479,12 @@ def _notify_bureau_signing_completed(
 @bp.route("/guestbook")
 @login_required
 def global_guestbook():
-    """Show guestbook entries across all centers, with moderation for bureau."""
-    stmt = db.select(CenterFeedback).join(CenterFeedback.center)
+    """Show guestbook entries across all centers, with moderation for bureau.
+
+    Uses an outer join so that center-less entries (left via a machine QR during
+    an event) are included too.
+    """
+    stmt = db.select(CenterFeedback).outerjoin(CenterFeedback.center)
 
     if not current_user.is_bureau:
         stmt = stmt.where(CenterFeedback.is_published.is_(True))
@@ -1488,6 +1492,36 @@ def global_guestbook():
     feedbacks = db.session.scalars(stmt.order_by(CenterFeedback.submitted_at.desc())).all()
 
     return render_template("centers/global_guestbook.html", feedbacks=feedbacks)
+
+
+@bp.route("/feedbacks/<int:fb_id>/publish", methods=["POST"])
+@bureau_required
+def publish_feedback_global(fb_id: int):
+    """Publish a feedback entry by id (works for center-less event entries too)."""
+    fb = db.session.get(CenterFeedback, fb_id)
+    if fb is None:
+        abort(404)
+    fb.is_published = True
+    fb.published_by_id = current_user.id
+    fb.published_at = datetime.now(UTC)
+    db.session.commit()
+    flash("Témoignage publié.", "success")
+    return redirect(request.referrer or url_for("centers.global_guestbook"))
+
+
+@bp.route("/feedbacks/<int:fb_id>/unpublish", methods=["POST"])
+@bureau_required
+def unpublish_feedback_global(fb_id: int):
+    """Unpublish a feedback entry by id (works for center-less event entries too)."""
+    fb = db.session.get(CenterFeedback, fb_id)
+    if fb is None:
+        abort(404)
+    fb.is_published = False
+    fb.published_by_id = None
+    fb.published_at = None
+    db.session.commit()
+    flash("Témoignage retiré de la publication.", "success")
+    return redirect(request.referrer or url_for("centers.global_guestbook"))
 
 
 @bp.route("/feedbacks/<int:fb_id>/delete", methods=["POST"])

@@ -171,3 +171,26 @@ class PublicBreakdownForm(FlaskForm):
         ],
     )
     machine_id = SelectField("Machine concernée", coerce=int, validators=[DataRequired()])
+
+
+class PublicMachineBreakdownForm(FlaskForm):
+    """Public form to report a breakdown on a specific machine (machine QR code).
+
+    The machine is identified by the token in the URL, so there is no machine
+    selector here.
+    """
+
+    class Meta:
+        csrf = False  # Public form — protected by token in URL
+
+    reporter_name = StringField(
+        "Votre nom",
+        validators=[DataRequired(message="Le nom est requis."), Length(max=100)],
+    )
+    description = TextAreaField(
+        "Description du problème",
+        validators=[
+            DataRequired(message="La description est obligatoire."),
+            Length(max=2000),
+        ],
+    )

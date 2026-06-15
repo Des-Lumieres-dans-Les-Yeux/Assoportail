@@ -240,3 +240,7 @@ class AssociationConfigForm(FlaskForm):
         ],
         default=0.603,
     )
+    flipper_card_message = TextAreaField(
+        "Message des cartes QR (flippers)",
+        validators=[Optional(), Length(max=600)],
+    )
