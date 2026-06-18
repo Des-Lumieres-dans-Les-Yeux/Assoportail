@@ -971,7 +971,7 @@ def fiche_pdf(machine_id: int):
         pdf = WP(string=html).write_pdf()
     except Exception:
         return Response(html, mimetype="text/html")
-    safe = machine.display_name.replace(" ", "_").replace("/", "-")[:40]
+    safe = _make_safe_filename(machine.display_name)
     return Response(
         pdf,
         mimetype="application/pdf",
@@ -1013,7 +1013,7 @@ def convention_pdf(machine_id: int):
         pdf = WP(string=html).write_pdf()
     except Exception:
         return Response(html, mimetype="text/html")
-    safe = machine.display_name.replace(" ", "_").replace("/", "-")[:40]
+    safe = _make_safe_filename(machine.display_name)
     return Response(
         pdf,
         mimetype="application/pdf",
@@ -1176,7 +1176,7 @@ def carte_pdf(machine_id: int):
         pdf = WP(string=html).write_pdf()
     except Exception:
         return Response(html, mimetype="text/html")
-    safe = machine.display_name.replace(" ", "_").replace("/", "-")[:40]
+    safe = _make_safe_filename(machine.display_name)
     return Response(
         pdf,
         mimetype="application/pdf",
@@ -1297,6 +1297,17 @@ def _make_qr_svg(url: str) -> bytes:
     buf = __import__("io").BytesIO()
     img.save(buf)
     return buf.getvalue()
+
+
+def _make_safe_filename(name: str, max_len: int = 40) -> str:
+    """Sanitize a machine name for use in HTTP Content-Disposition headers."""
+    return (
+        name.encode("ascii", "ignore")
+        .decode("ascii")
+        .replace(" ", "_")
+        .replace("/", "-")
+        .replace("_", "-")[:max_len]
+    )
 
 
 def _active_center_choices() -> list[tuple[int, str]]:
