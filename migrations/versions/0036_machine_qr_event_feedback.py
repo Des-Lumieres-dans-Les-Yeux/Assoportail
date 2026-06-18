@@ -28,9 +28,7 @@ depends_on = None
 
 def upgrade() -> None:
     # --- machines.public_token --------------------------------------------
-    op.execute(
-        sa.text("ALTER TABLE machines ADD COLUMN IF NOT EXISTS public_token VARCHAR(64)")
-    )
+    op.execute(sa.text("ALTER TABLE machines ADD COLUMN IF NOT EXISTS public_token VARCHAR(64)"))
     # Backfill existing rows with a unique random token (32 hex chars).
     # md5()/random() are available on every PostgreSQL version; mixing in the row
     # id guarantees uniqueness even if random() collides.
@@ -43,8 +41,7 @@ def upgrade() -> None:
     )
     op.execute(
         sa.text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_machines_public_token "
-            "ON machines (public_token)"
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_machines_public_token ON machines (public_token)"
         )
     )
 
@@ -52,9 +49,7 @@ def upgrade() -> None:
     op.execute(sa.text("ALTER TABLE center_feedbacks ALTER COLUMN center_id DROP NOT NULL"))
 
     # --- center_feedbacks.machine_id --------------------------------------
-    op.execute(
-        sa.text("ALTER TABLE center_feedbacks ADD COLUMN IF NOT EXISTS machine_id INTEGER")
-    )
+    op.execute(sa.text("ALTER TABLE center_feedbacks ADD COLUMN IF NOT EXISTS machine_id INTEGER"))
     op.execute(
         sa.text(
             "DO $$ BEGIN "
@@ -77,8 +72,7 @@ def downgrade() -> None:
     op.execute(sa.text("DROP INDEX IF EXISTS ix_center_feedbacks_machine_id"))
     op.execute(
         sa.text(
-            "ALTER TABLE center_feedbacks DROP CONSTRAINT IF EXISTS "
-            "fk_center_feedbacks_machine_id"
+            "ALTER TABLE center_feedbacks DROP CONSTRAINT IF EXISTS fk_center_feedbacks_machine_id"
         )
     )
     op.execute(sa.text("ALTER TABLE center_feedbacks DROP COLUMN IF EXISTS machine_id"))

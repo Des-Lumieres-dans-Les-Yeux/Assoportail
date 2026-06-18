@@ -19,14 +19,9 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute(
-        sa.text(
-            "ALTER TABLE association_config "
-            "ADD COLUMN IF NOT EXISTS flipper_card_message TEXT"
-        )
+        sa.text("ALTER TABLE association_config ADD COLUMN IF NOT EXISTS flipper_card_message TEXT")
     )
 
 
 def downgrade() -> None:
-    op.execute(
-        sa.text("ALTER TABLE association_config DROP COLUMN IF EXISTS flipper_card_message")
-    )
+    op.execute(sa.text("ALTER TABLE association_config DROP COLUMN IF EXISTS flipper_card_message"))

@@ -126,9 +126,7 @@ class TestAuthentication:
         # Révoquer le token
         with app.app_context():
             tok = _db.session.scalars(
-                _db.select(ApiToken).where(
-                    ApiToken.token_hash == ApiToken.hash_token(plaintext)
-                )
+                _db.select(ApiToken).where(ApiToken.token_hash == ApiToken.hash_token(plaintext))
             ).first()
             assert tok is not None
             tok.revoked = True
@@ -164,9 +162,7 @@ class TestPermissions:
         assert data["error"] == "forbidden"
 
     def test_bureau_user_always_has_access(self, app: Flask, client: FlaskClient) -> None:
-        bureau_id = _create_user_with_perms(
-            app, "api_bureau@test.com", [], role=UserRole.BUREAU
-        )
+        bureau_id = _create_user_with_perms(app, "api_bureau@test.com", [], role=UserRole.BUREAU)
         plaintext = _create_token(app, bureau_id)
         resp = client.get("/api/v1/events", headers=_bearer(plaintext))
         assert resp.status_code == 200
@@ -223,9 +219,7 @@ class TestCreateEvent:
         assert len(data["slots"]) == 1
         assert data["slots"][0]["label"] == "Matin"
 
-    def test_create_event_invalid_status(
-        self, client: FlaskClient, events_token: str
-    ) -> None:
+    def test_create_event_invalid_status(self, client: FlaskClient, events_token: str) -> None:
         resp = client.post(
             "/api/v1/events",
             json={"title": "Test", "event_date": "2026-10-01T09:00:00", "status": "invalid"},
@@ -532,7 +526,8 @@ class TestOpenAPISpec:
         assert resp.status_code == 200
         paths = resp.get_json().get("paths", {})
         leaked = [
-            p for p in paths
+            p
+            for p in paths
             if any(
                 p.startswith(prefix)
                 for prefix in ("/mailbox", "/treasury", "/members", "/auth", "/dashboard")

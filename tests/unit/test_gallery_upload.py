@@ -262,9 +262,7 @@ class TestGalleryUploadRejection:
         self, app: Flask, auth_client: FlaskClient
     ) -> None:
         """entity_id non numérique → ignoré, upload réussit sans lien événement."""
-        resp = _post_gallery(
-            auth_client, [(_JPEG_MAGIC, "ghost.jpg")], entity_id="not-a-number"
-        )
+        resp = _post_gallery(auth_client, [(_JPEG_MAGIC, "ghost.jpg")], entity_id="not-a-number")
         assert resp.status_code in {301, 302}
 
         with app.app_context():
@@ -281,9 +279,7 @@ class TestGalleryUploadRejection:
         self, app: Flask, auth_client: FlaskClient
     ) -> None:
         """entity_id numérique mais événement inexistant → upload sans lien, pas d'erreur 400."""
-        resp = _post_gallery(
-            auth_client, [(_JPEG_MAGIC, "nowhere.jpg")], entity_id="99999"
-        )
+        resp = _post_gallery(auth_client, [(_JPEG_MAGIC, "nowhere.jpg")], entity_id="99999")
         assert resp.status_code in {301, 302}
 
         with app.app_context():
@@ -335,9 +331,7 @@ class TestUploadMediaNonRegression:
             ).one_or_none()
             assert row is not None
 
-    def test_upload_media_missing_entity_id_returns_400(
-        self, auth_client: FlaskClient
-    ) -> None:
+    def test_upload_media_missing_entity_id_returns_400(self, auth_client: FlaskClient) -> None:
         """Route /upload-media sans entity_id → 400 (comportement inchangé)."""
         resp = auth_client.post(
             "/documents/upload-media",
@@ -347,9 +341,7 @@ class TestUploadMediaNonRegression:
         )
         assert resp.status_code == 400
 
-    def test_upload_media_nonexistent_event_returns_404(
-        self, auth_client: FlaskClient
-    ) -> None:
+    def test_upload_media_nonexistent_event_returns_404(self, auth_client: FlaskClient) -> None:
         """Route /upload-media avec event inexistant → 404 (comportement inchangé)."""
         resp = auth_client.post(
             "/documents/upload-media",

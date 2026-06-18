@@ -38,17 +38,9 @@ def upgrade() -> None:
         """)
     )
     op.execute(
-        sa.text(
-            "CREATE INDEX IF NOT EXISTS ix_api_tokens_token_hash "
-            "ON api_tokens (token_hash)"
-        )
+        sa.text("CREATE INDEX IF NOT EXISTS ix_api_tokens_token_hash ON api_tokens (token_hash)")
     )
-    op.execute(
-        sa.text(
-            "CREATE INDEX IF NOT EXISTS ix_api_tokens_user_id "
-            "ON api_tokens (user_id)"
-        )
-    )
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_api_tokens_user_id ON api_tokens (user_id)"))
 
 
 def downgrade() -> None:

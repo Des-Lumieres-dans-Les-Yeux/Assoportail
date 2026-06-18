@@ -173,9 +173,7 @@ class TestCreateToken:
         # No token should have been created
         with app.app_context():
             count = _db.session.scalar(
-                _db.select(_db.func.count(ApiToken.id)).where(
-                    ApiToken.user_id == bureau_user.id
-                )
+                _db.select(_db.func.count(ApiToken.id)).where(ApiToken.user_id == bureau_user.id)
             )
             assert count == 0
             _db.session.remove()
