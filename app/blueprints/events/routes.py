@@ -219,7 +219,8 @@ def slots_json(event_id: int):
         options=[
             selectinload(Event.slots)
             .selectinload(EventSlot.availabilities)
-            .selectinload(SlotAvailability.user)
+            .selectinload(SlotAvailability.user),
+            selectinload(Event.slots)
             .selectinload(EventSlot.volunteer_availabilities)
             .selectinload(VolunteerSlotAvailability.volunteer),
         ],
