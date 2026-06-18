@@ -51,9 +51,7 @@ def detail(campaign_id: int):
     )
     if campaign is None:
         abort(404)
-    pending_count = sum(
-        1 for r in campaign.recipients if r.status == RecipientStatus.PENDING.value
-    )
+    pending_count = sum(1 for r in campaign.recipients if r.status == RecipientStatus.PENDING.value)
     return render_template(
         "mailing/detail.html",
         campaign=campaign,

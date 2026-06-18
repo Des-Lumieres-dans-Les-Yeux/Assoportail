@@ -91,9 +91,7 @@ def gallery():
     if type_filter in {e.value for e in DocumentType}:
         stmt = stmt.where(Document.type == type_filter)
     documents = db.session.scalars(stmt).all()
-    events = db.session.scalars(
-        db.select(Event).order_by(Event.event_date.desc()).limit(100)
-    ).all()
+    events = db.session.scalars(db.select(Event).order_by(Event.event_date.desc()).limit(100)).all()
     return render_template(
         "documents/gallery.html",
         documents=documents,

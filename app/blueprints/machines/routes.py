@@ -10,6 +10,7 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
+from app.blueprints.centers.forms import FeedbackForm
 from app.blueprints.machines import bp
 from app.blueprints.machines.forms import (
     InstallMachineForm,
@@ -20,7 +21,6 @@ from app.blueprints.machines.forms import (
     RemoveInstallationForm,
     ResolveMaintenanceForm,
 )
-from app.blueprints.centers.forms import FeedbackForm
 from app.decorators import bureau_required
 from app.extensions import db, limiter
 from app.models.center import Center, CenterFeedback, CenterStatus
@@ -1138,8 +1138,7 @@ def feedback_qr_svg(machine_id: int):
 
 
 _DEFAULT_CARD_MESSAGE = (
-    "Un souci avec ce flipper ? Une expérience à partager ? "
-    "Scannez le QR code correspondant."
+    "Un souci avec ce flipper ? Une expérience à partager ? Scannez le QR code correspondant."
 )
 
 

@@ -282,11 +282,7 @@ def list_events():
         )
         stmt = stmt.where(Event.event_date >= dt_from)
     if query.date_to:
-        dt_to = (
-            query.date_to.replace(tzinfo=UTC)
-            if query.date_to.tzinfo is None
-            else query.date_to
-        )
+        dt_to = query.date_to.replace(tzinfo=UTC) if query.date_to.tzinfo is None else query.date_to
         stmt = stmt.where(Event.event_date <= dt_to)
 
     total = db.session.scalar(db.select(db.func.count()).select_from(stmt.subquery()))
@@ -425,13 +421,10 @@ def list_volunteers(event_id: int):
 def list_members():
     """Liste les membres actifs de l'association (pour affecter sur des créneaux)."""
     members = db.session.scalars(
-        db.select(User).where(User.is_active.is_(True)).order_by(
-            User.last_name, User.first_name
-        )
+        db.select(User).where(User.is_active.is_(True)).order_by(User.last_name, User.first_name)
     ).all()
     out = [
-        MemberOut(id=m.id, name=m.full_name, email=m.email).model_dump(mode="json")
-        for m in members
+        MemberOut(id=m.id, name=m.full_name, email=m.email).model_dump(mode="json") for m in members
     ]
     return jsonify(out), 200
 
@@ -545,9 +538,7 @@ def register_volunteer(event_id: int):
 # ---------------------------------------------------------------------------
 
 
-@bp.route(
-    "/events/<int:event_id>/slots/<int:slot_id>/availability", methods=["PUT"]
-)
+@bp.route("/events/<int:event_id>/slots/<int:slot_id>/availability", methods=["PUT"])
 @limiter.limit("120 per hour")
 @api_permission_required(_EVENTS_PERM)
 @spec.validate(
@@ -577,25 +568,19 @@ def set_availability(event_id: int, slot_id: int):
     # Affectation d'un membre (réservée au bureau) — table SlotAvailability.
     if payload.user_id is not None:
         if not g.api_user.is_bureau:
-            return _json_error(
-                "Affecter un membre est réservé au bureau.", 403, "forbidden"
-            )
+            return _json_error("Affecter un membre est réservé au bureau.", 403, "forbidden")
         member = db.session.get(User, payload.user_id)
         if member is None or not member.is_active:
             return _json_error("Membre introuvable.", 404, "not_found")
 
         avail = db.session.get(SlotAvailability, (slot_id, member.id))
         if avail is None:
-            db.session.add(
-                SlotAvailability(slot_id=slot_id, user_id=member.id, status=status)
-            )
+            db.session.add(SlotAvailability(slot_id=slot_id, user_id=member.id, status=status))
         else:
             avail.status = status
         db.session.commit()
         return (
-            jsonify(
-                {"slot_id": slot_id, "user_id": member.id, "status": status.value}
-            ),
+            jsonify({"slot_id": slot_id, "user_id": member.id, "status": status.value}),
             200,
         )
 
@@ -616,9 +601,7 @@ def set_availability(event_id: int, slot_id: int):
         if volunteer is None:
             return _json_error("Bénévole introuvable pour cet email.", 404, "not_found")
     else:
-        return _json_error(
-            "user_id, volunteer_id ou email requis.", 422, "validation_error"
-        )
+        return _json_error("user_id, volunteer_id ou email requis.", 422, "validation_error")
 
     avail = db.session.execute(
         db.select(VolunteerSlotAvailability).where(

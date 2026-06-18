@@ -891,9 +891,7 @@ def purge_inactive():
 def api_tokens():
     """List all API tokens belonging to the current user."""
     tokens = (
-        ApiToken.query.filter_by(user_id=current_user.id)
-        .order_by(ApiToken.created_at.desc())
-        .all()
+        ApiToken.query.filter_by(user_id=current_user.id).order_by(ApiToken.created_at.desc()).all()
     )
     create_form = ApiTokenCreateForm()
     revoke_form = ApiTokenRevokeForm()
@@ -914,11 +912,7 @@ def create_api_token():
     form = ApiTokenCreateForm()
     if form.validate_on_submit():
         expires_days = form.expires_days.data
-        expires_at = (
-            datetime.now(UTC) + timedelta(days=expires_days)
-            if expires_days
-            else None
-        )
+        expires_at = datetime.now(UTC) + timedelta(days=expires_days) if expires_days else None
         plaintext, token = ApiToken.generate(
             name=form.name.data,
             user_id=current_user.id,

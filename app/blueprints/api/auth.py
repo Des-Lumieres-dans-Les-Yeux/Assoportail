@@ -40,7 +40,7 @@ def api_token_required(f: Callable) -> Callable:
         if not auth_header.startswith("Bearer "):
             return _token_error("En-tête Authorization manquant ou mal formé.")
 
-        plaintext = auth_header[len("Bearer "):]
+        plaintext = auth_header[len("Bearer ") :]
         if not plaintext:
             return _token_error("Token vide.")
 
@@ -92,9 +92,7 @@ def api_permission_required(permission: str) -> Callable:
             if not user.is_active:
                 return _token_error("Compte désactivé.", 403)
             if not user.has_permission(permission):
-                return _token_error(
-                    f"Permission « {permission} » requise.", 403
-                )
+                return _token_error(f"Permission « {permission} » requise.", 403)
             return f(*args, **kwargs)
 
         return decorated

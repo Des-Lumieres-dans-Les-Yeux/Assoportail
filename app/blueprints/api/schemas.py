@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 # Shared config
 # ---------------------------------------------------------------------------
 
+
 class _Base(BaseModel):
     """Modèle de base commun à tous les schémas API."""
 
@@ -20,6 +21,7 @@ class _Base(BaseModel):
 # ---------------------------------------------------------------------------
 # Event schemas
 # ---------------------------------------------------------------------------
+
 
 class SlotIn(_Base):
     """Créneaux horaires à créer avec l'événement ou à ajouter après."""
@@ -129,6 +131,7 @@ class EventListOut(_Base):
 # Volunteer schemas
 # ---------------------------------------------------------------------------
 
+
 class VolunteerIn(_Base):
     """Corps de la requête POST /events/{id}/volunteers."""
 
@@ -154,6 +157,7 @@ class VolunteerCreateOut(_Base):
 # ---------------------------------------------------------------------------
 # Availability schemas
 # ---------------------------------------------------------------------------
+
 
 class MemberOut(_Base):
     """Représentation d'un membre (utilisateur) de l'association."""
