@@ -231,7 +231,6 @@
       <span>{{ inst.installed_at.strftime('%d/%m/%Y') }}</span>
     </li>
   </ul>
-  {% if machine.status.value != "maintenance" %}
   <form method="post"
         action="{{ url_for('machines.remove_installation', machine_id=machine.id, inst_id=inst.id) }}"
         class="d-flex flex-wrap align-items-end gap-2">
