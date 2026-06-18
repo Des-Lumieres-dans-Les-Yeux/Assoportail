@@ -600,6 +600,11 @@ def set_availability(event_id: int, slot_id: int):
         ).first()
         if volunteer is None:
             return _json_error("Bénévole introuvable pour cet email.", 404, "not_found")
+    elif payload.id is not None:
+        # Fallback : essayer comme volunteer_id
+        volunteer = db.session.get(EventVolunteer, payload.id)
+        if volunteer is None or volunteer.event_id != event_id:
+            return _json_error("Bénévole introuvable.", 404, "not_found")
     else:
         return _json_error("user_id, volunteer_id ou email requis.", 422, "validation_error")
 

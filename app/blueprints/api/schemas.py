@@ -170,8 +170,8 @@ class MemberOut(_Base):
 class AvailabilityIn(_Base):
     """Corps de la requête PUT /events/{id}/slots/{slot_id}/availability.
 
-    Cible soit un membre (``user_id``, réservé au bureau), soit un bénévole
-    externe (``volunteer_id`` ou ``email``). ``user_id`` est prioritaire.
+    Cible soit un membre (``user_id`` ou ``id``), soit un bénévole externe
+    (``volunteer_id`` ou ``email``). ``user_id`` / ``id`` est prioritaire.
     """
 
     status: str = Field(..., description="present | maybe | absent")
@@ -181,6 +181,9 @@ class AvailabilityIn(_Base):
     volunteer_id: int | None = Field(None, description="ID du bénévole")
     email: str | None = Field(
         None, description="Email du bénévole (utilisé si volunteer_id absent)"
+    )
+    id: int | None = Field(
+        None, description="ID générique (membre ou bénévole, utilisé si user_id absent)"
     )
 
     @field_validator("status")
