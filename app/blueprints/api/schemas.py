@@ -167,36 +167,18 @@ class MemberOut(_Base):
     email: str
 
 
-class AvailabilityIn(_Base):
-    """Corps de la requête PUT /events/{id}/slots/{slot_id}/availability.
-
-    Cible soit un membre (``user_id``), soit un bénévole externe
-    (``volunteer_id`` ou ``email``). ``user_id`` est prioritaire.
-    ``id`` est un alias générique : si ``user_id`` est absent, l'API
-    essaie d'abord comme ``volunteer_id``, puis comme ``user_id``.
-    """
+class MemberAvailabilityIn(_Base):
+    """Corps de la requête PUT /events/{id}/slots/{slot_id}/availability — membre."""
 
     status: str = Field(..., description="present | maybe | absent")
-    user_id: int | None = Field(
-        None, description="ID du membre de l'association (réservé au bureau, prioritaire)"
-    )
+    user_id: int = Field(..., description="ID du membre de l'association")
+
+
+class VolunteerAvailabilityIn(_Base):
+    """Corps de la requête PUT /events/{id}/slots/{slot_id}/availability — bénévole."""
+
+    status: str = Field(..., description="present | maybe | absent")
     volunteer_id: int | None = Field(None, description="ID du bénévole externe")
     email: str | None = Field(
         None, description="Email du bénévole (utilisé si volunteer_id absent)"
     )
-    id: int | None = Field(
-        None,
-        description=(
-            "ID générique. Si user_id est absent, l'API essaie d'abord "
-            "comme volunteer_id, puis comme user_id."
-        ),
-    )
-
-    @field_validator("status")
-    @classmethod
-    def validate_status(cls, v: str) -> str:
-        allowed = {"present", "maybe", "absent"}
-        if v not in allowed:
-            msg = f"Statut invalide : {v!r}. Valeurs acceptées : {sorted(allowed)}"
-            raise ValueError(msg)
-        return v

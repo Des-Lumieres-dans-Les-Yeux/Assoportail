@@ -13,14 +13,15 @@ from sqlalchemy.orm import selectinload
 from app.blueprints.api import bp
 from app.blueprints.api.auth import api_permission_required
 from app.blueprints.api.schemas import (
-    AvailabilityIn,
     EventCreateIn,
     EventListOut,
     EventListQuery,
     EventOut,
+    MemberAvailabilityIn,
     MemberOut,
     SlotIn,
     SlotOut,
+    VolunteerAvailabilityIn,
     VolunteerCreateOut,
     VolunteerIn,
     VolunteerOut,
@@ -534,7 +535,7 @@ def register_volunteer(event_id: int):
 
 
 # ---------------------------------------------------------------------------
-# PUT /api/v1/events/<id>/slots/<slot_id>/availability
+# PUT /api/v1/events/<id>/slots/<slot_id>/availability — membre
 # ---------------------------------------------------------------------------
 
 
@@ -542,14 +543,14 @@ def register_volunteer(event_id: int):
 @limiter.limit("120 per hour")
 @api_permission_required(_EVENTS_PERM)
 @spec.validate(
-    json=AvailabilityIn,
+    json=MemberAvailabilityIn,
     resp=Response(HTTP_200=None, HTTP_400=None, HTTP_404=None, HTTP_422=None),
     tags=["events"],
     security={"BearerAuth": []},
     skip_validation=True,
 )
 def set_availability(event_id: int, slot_id: int):
-    """Déclare ou met à jour la disponibilité d'un bénévole sur un créneau."""
+    """Déclare ou met à jour la disponibilité d'un membre de l'association sur un créneau."""
     slot = db.session.get(EventSlot, slot_id)
     if slot is None or slot.event_id != event_id:
         return _json_error("Créneau introuvable.", 404, "not_found")
@@ -559,52 +560,68 @@ def set_availability(event_id: int, slot_id: int):
         return _json_error("Corps JSON attendu.", 400, "bad_request")
 
     try:
-        payload = AvailabilityIn.model_validate(raw)
+        payload = MemberAvailabilityIn.model_validate(raw)
+    except Exception as exc:
+        return _json_error(str(exc), 422, "validation_error")
+
+    if not g.api_user.is_bureau:
+        return _json_error("Affecter un membre est réservé au bureau.", 403, "forbidden")
+
+    member = db.session.get(User, payload.user_id)
+    if member is None or not member.is_active:
+        return _json_error("Membre introuvable.", 404, "not_found")
+
+    status = SlotAvailabilityStatus(payload.status)
+    avail = db.session.get(SlotAvailability, (slot_id, member.id))
+    if avail is None:
+        db.session.add(SlotAvailability(slot_id=slot_id, user_id=member.id, status=status))
+    else:
+        avail.status = status
+    db.session.commit()
+    return (
+        jsonify({"slot_id": slot_id, "user_id": member.id, "status": status.value}),
+        200,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/v1/events/<id>/slots/<slot_id>/volunteer-availability — bénévole
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/events/<int:event_id>/slots/<int:slot_id>/volunteer-availability", methods=["PUT"])
+@limiter.limit("120 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    json=VolunteerAvailabilityIn,
+    resp=Response(HTTP_200=None, HTTP_400=None, HTTP_404=None, HTTP_422=None),
+    tags=["events"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def set_volunteer_availability(event_id: int, slot_id: int):
+    """Déclare ou met à jour la disponibilité d'un bénévole externe sur un créneau."""
+    slot = db.session.get(EventSlot, slot_id)
+    if slot is None or slot.event_id != event_id:
+        return _json_error("Créneau introuvable.", 404, "not_found")
+
+    raw = request.get_json(silent=True)
+    if raw is None:
+        return _json_error("Corps JSON attendu.", 400, "bad_request")
+
+    try:
+        payload = VolunteerAvailabilityIn.model_validate(raw)
     except Exception as exc:
         return _json_error(str(exc), 422, "validation_error")
 
     status = SlotAvailabilityStatus(payload.status)
-
-    # Affectation d'un membre (réservée au bureau) — table SlotAvailability.
-    if payload.user_id is not None:
-        if not g.api_user.is_bureau:
-            return _json_error("Affecter un membre est réservé au bureau.", 403, "forbidden")
-        member = db.session.get(User, payload.user_id)
-        if member is None or not member.is_active:
-            return _json_error("Membre introuvable.", 404, "not_found")
-
-        avail = db.session.get(SlotAvailability, (slot_id, member.id))
-        if avail is None:
-            db.session.add(SlotAvailability(slot_id=slot_id, user_id=member.id, status=status))
-        else:
-            avail.status = status
-        db.session.commit()
-        return (
-            jsonify({"slot_id": slot_id, "user_id": member.id, "status": status.value}),
-            200,
-        )
 
     # Résolution du bénévole
     volunteer: EventVolunteer | None = None
     if payload.volunteer_id is not None:
         volunteer = db.session.get(EventVolunteer, payload.volunteer_id)
         if volunteer is None or volunteer.event_id != event_id:
-            # Fallback : essayer comme membre
-            member = db.session.get(User, payload.volunteer_id)
-            if member is None or not member.is_active:
-                return _json_error("Bénévole introuvable.", 404, "not_found")
-            if not g.api_user.is_bureau:
-                return _json_error("Affecter un membre est réservé au bureau.", 403, "forbidden")
-            avail = db.session.get(SlotAvailability, (slot_id, member.id))
-            if avail is None:
-                db.session.add(SlotAvailability(slot_id=slot_id, user_id=member.id, status=status))
-            else:
-                avail.status = status
-            db.session.commit()
-            return (
-                jsonify({"slot_id": slot_id, "user_id": member.id, "status": status.value}),
-                200,
-            )
+            return _json_error("Bénévole introuvable.", 404, "not_found")
     elif payload.email:
         email = payload.email.strip().lower()
         volunteer = db.session.scalars(
@@ -615,30 +632,8 @@ def set_availability(event_id: int, slot_id: int):
         ).first()
         if volunteer is None:
             return _json_error("Bénévole introuvable pour cet email.", 404, "not_found")
-    elif payload.id is not None:
-        # Tenter d'abord comme bénévole
-        volunteer = db.session.get(EventVolunteer, payload.id)
-        if volunteer is not None and volunteer.event_id == event_id:
-            pass  # trouvé
-        else:
-            # Fallback : essayer comme membre
-            member = db.session.get(User, payload.id)
-            if member is None or not member.is_active:
-                return _json_error("Bénévole introuvable.", 404, "not_found")
-            if not g.api_user.is_bureau:
-                return _json_error("Affecter un membre est réservé au bureau.", 403, "forbidden")
-            avail = db.session.get(SlotAvailability, (slot_id, member.id))
-            if avail is None:
-                db.session.add(SlotAvailability(slot_id=slot_id, user_id=member.id, status=status))
-            else:
-                avail.status = status
-            db.session.commit()
-            return (
-                jsonify({"slot_id": slot_id, "user_id": member.id, "status": status.value}),
-                200,
-            )
     else:
-        return _json_error("user_id, volunteer_id ou email requis.", 422, "validation_error")
+        return _json_error("volunteer_id ou email requis.", 422, "validation_error")
 
     avail = db.session.execute(
         db.select(VolunteerSlotAvailability).where(
