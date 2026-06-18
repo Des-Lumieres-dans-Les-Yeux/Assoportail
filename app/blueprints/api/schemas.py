@@ -143,11 +143,26 @@ class VolunteerCreateOut(_Base):
 # Availability schemas
 # ---------------------------------------------------------------------------
 
+class MemberOut(_Base):
+    """Représentation d'un membre (utilisateur) de l'association."""
+
+    id: int
+    name: str
+    email: str
+
+
 class AvailabilityIn(_Base):
-    """Corps de la requête PUT /events/{id}/slots/{slot_id}/availability."""
+    """Corps de la requête PUT /events/{id}/slots/{slot_id}/availability.
+
+    Cible soit un membre (``user_id``, réservé au bureau), soit un bénévole
+    externe (``volunteer_id`` ou ``email``). ``user_id`` est prioritaire.
+    """
 
     status: str = Field(..., description="present | maybe | absent")
-    volunteer_id: int | None = Field(None, description="ID du bénévole (prioritaire)")
+    user_id: int | None = Field(
+        None, description="ID du membre à affecter (réservé au bureau, prioritaire)"
+    )
+    volunteer_id: int | None = Field(None, description="ID du bénévole")
     email: str | None = Field(
         None, description="Email du bénévole (utilisé si volunteer_id absent)"
     )

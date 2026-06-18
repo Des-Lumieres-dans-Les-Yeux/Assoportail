@@ -18,6 +18,7 @@ from app.blueprints.api.schemas import (
     EventListOut,
     EventListQuery,
     EventOut,
+    MemberOut,
     SlotIn,
     SlotOut,
     VolunteerCreateOut,
@@ -30,10 +31,11 @@ from app.models.event import (
     EventDate,
     EventSlot,
     EventVolunteer,
+    SlotAvailability,
     SlotAvailabilityStatus,
     VolunteerSlotAvailability,
 )
-from app.models.user import UserPermission
+from app.models.user import User, UserPermission
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +52,15 @@ def _parse_date(value: str) -> date:
 
 
 def _parse_time(value: str | None) -> time | None:
-    """Parse 'HH:MM' → datetime.time, ou None."""
+    """Parse 'HH:MM' ou 'HH:MM:SS' → datetime.time, ou None."""
     if not value:
         return None
-    return datetime.strptime(value, "%H:%M").time()
+    for fmt in ("%H:%M:%S", "%H:%M"):
+        try:
+            return datetime.strptime(value, fmt).time()
+        except ValueError:
+            continue
+    raise ValueError(f"Format d'heure invalide : {value!r} (attendu HH:MM ou HH:MM:SS)")
 
 
 def _sync_event_dates(event: Event, raw_dates: list[str]) -> None:
@@ -388,6 +395,34 @@ def list_volunteers(event_id: int):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/members
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/members", methods=["GET"])
+@limiter.limit("200 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    resp=Response(HTTP_200=None),
+    tags=["events"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def list_members():
+    """Liste les membres actifs de l'association (pour affecter sur des créneaux)."""
+    members = db.session.scalars(
+        db.select(User).where(User.is_active.is_(True)).order_by(
+            User.last_name, User.first_name
+        )
+    ).all()
+    out = [
+        MemberOut(id=m.id, name=m.full_name, email=m.email).model_dump(mode="json")
+        for m in members
+    ]
+    return jsonify(out), 200
+
+
+# ---------------------------------------------------------------------------
 # POST /api/v1/events/<id>/volunteers
 # ---------------------------------------------------------------------------
 
@@ -523,6 +558,33 @@ def set_availability(event_id: int, slot_id: int):
     except Exception as exc:
         return _json_error(str(exc), 422, "validation_error")
 
+    status = SlotAvailabilityStatus(payload.status)
+
+    # Affectation d'un membre (réservée au bureau) — table SlotAvailability.
+    if payload.user_id is not None:
+        if not g.api_user.is_bureau:
+            return _json_error(
+                "Affecter un membre est réservé au bureau.", 403, "forbidden"
+            )
+        member = db.session.get(User, payload.user_id)
+        if member is None or not member.is_active:
+            return _json_error("Membre introuvable.", 404, "not_found")
+
+        avail = db.session.get(SlotAvailability, (slot_id, member.id))
+        if avail is None:
+            db.session.add(
+                SlotAvailability(slot_id=slot_id, user_id=member.id, status=status)
+            )
+        else:
+            avail.status = status
+        db.session.commit()
+        return (
+            jsonify(
+                {"slot_id": slot_id, "user_id": member.id, "status": status.value}
+            ),
+            200,
+        )
+
     # Résolution du bénévole
     volunteer: EventVolunteer | None = None
     if payload.volunteer_id is not None:
@@ -541,10 +603,8 @@ def set_availability(event_id: int, slot_id: int):
             return _json_error("Bénévole introuvable pour cet email.", 404, "not_found")
     else:
         return _json_error(
-            "volunteer_id ou email requis.", 422, "validation_error"
+            "user_id, volunteer_id ou email requis.", 422, "validation_error"
         )
-
-    status = SlotAvailabilityStatus(payload.status)
 
     avail = db.session.execute(
         db.select(VolunteerSlotAvailability).where(
