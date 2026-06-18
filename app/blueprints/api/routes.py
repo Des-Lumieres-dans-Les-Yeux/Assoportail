@@ -119,6 +119,15 @@ def _event_to_out(event: Event) -> EventOut:
             start_time=s.start_time,
             end_time=s.end_time,
             label=s.label,
+            volunteer_availabilities=[
+                VolunteerSlotAvailabilityOut(
+                    slot_id=va.slot_id,
+                    volunteer_id=va.volunteer_id,
+                    status=va.status.value,
+                    updated_at=va.updated_at,
+                )
+                for va in s.volunteer_availabilities
+            ],
         )
         for s in event.slots
     ]
@@ -151,12 +160,14 @@ def _event_to_out(event: Event) -> EventOut:
 
 
 def _load_event_full(event_id: int) -> Event | None:
-    """Charge un Event avec ses slots et bénévoles."""
+    """Charge un Event avec ses slots, bénévoles et disponibilités des bénévoles."""
     return db.session.get(
         Event,
         event_id,
         options=[
-            selectinload(Event.slots),
+            selectinload(Event.slots)
+            .selectinload(EventSlot.volunteer_availabilities)
+            .selectinload(VolunteerSlotAvailability.volunteer),
             selectinload(Event.volunteers),
             selectinload(Event.dates),
         ],
@@ -253,7 +264,9 @@ def list_events():
         return _json_error(str(exc), 422, "validation_error")
 
     stmt = db.select(Event).options(
-        selectinload(Event.slots),
+        selectinload(Event.slots)
+        .selectinload(EventSlot.volunteer_availabilities)
+        .selectinload(VolunteerSlotAvailability.volunteer),
         selectinload(Event.volunteers),
         selectinload(Event.dates),
     )

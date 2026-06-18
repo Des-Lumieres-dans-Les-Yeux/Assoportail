@@ -30,6 +30,15 @@ class SlotIn(_Base):
     label: str | None = Field(None, max_length=100, description="Libellé du créneau")
 
 
+class VolunteerSlotAvailabilityOut(_Base):
+    """Représentation de la disponibilité d'un bénévole sur un créneau."""
+
+    slot_id: int
+    volunteer_id: int
+    status: str
+    updated_at: datetime
+
+
 class SlotOut(_Base):
     """Représentation d'un créneau horaire."""
 
@@ -38,6 +47,9 @@ class SlotOut(_Base):
     start_time: Any | None = None  # time
     end_time: Any | None = None  # time
     label: str | None = None
+    volunteer_availabilities: list[VolunteerSlotAvailabilityOut] = Field(
+        default_factory=list, description="Disponibilités des bénévoles pour ce créneau"
+    )
 
 
 class VolunteerOut(_Base):
