@@ -24,6 +24,7 @@ from app.blueprints.api.schemas import (
     VolunteerCreateOut,
     VolunteerIn,
     VolunteerOut,
+    VolunteerSlotAvailabilityOut,
 )
 from app.extensions import db, limiter, spec
 from app.models.event import (
