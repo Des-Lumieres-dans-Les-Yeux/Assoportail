@@ -170,20 +170,26 @@ class MemberOut(_Base):
 class AvailabilityIn(_Base):
     """Corps de la requête PUT /events/{id}/slots/{slot_id}/availability.
 
-    Cible soit un membre (``user_id`` ou ``id``), soit un bénévole externe
-    (``volunteer_id`` ou ``email``). ``user_id`` / ``id`` est prioritaire.
+    Cible soit un membre (``user_id``), soit un bénévole externe
+    (``volunteer_id`` ou ``email``). ``user_id`` est prioritaire.
+    ``id`` est un alias générique : si ``user_id`` est absent, l'API
+    essaie d'abord comme ``volunteer_id``, puis comme ``user_id``.
     """
 
     status: str = Field(..., description="present | maybe | absent")
     user_id: int | None = Field(
-        None, description="ID du membre à affecter (réservé au bureau, prioritaire)"
+        None, description="ID du membre de l'association (réservé au bureau, prioritaire)"
     )
-    volunteer_id: int | None = Field(None, description="ID du bénévole")
+    volunteer_id: int | None = Field(None, description="ID du bénévole externe")
     email: str | None = Field(
         None, description="Email du bénévole (utilisé si volunteer_id absent)"
     )
     id: int | None = Field(
-        None, description="ID générique (membre ou bénévole, utilisé si user_id absent)"
+        None,
+        description=(
+            "ID générique. Si user_id est absent, l'API essaie d'abord "
+            "comme volunteer_id, puis comme user_id."
+        ),
     )
 
     @field_validator("status")
