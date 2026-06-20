@@ -420,7 +420,14 @@ def list_volunteers(event_id: int):
     skip_validation=True,
 )
 def list_members():
-    """Liste les membres actifs de l'association (pour affecter sur des créneaux)."""
+    """Liste les membres actifs de l'association (pour affecter sur des créneaux).
+
+    Vérifie que l'utilisateur a les permissions administratives.
+    """
+    # IDOR/Auth check: ensure only authorized users can list members
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
     members = db.session.scalars(
         db.select(User).where(User.is_active.is_(True)).order_by(User.last_name, User.first_name)
     ).all()
