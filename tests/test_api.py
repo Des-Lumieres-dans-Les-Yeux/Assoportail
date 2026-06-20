@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import pytest
 from flask import Flask
@@ -10,7 +10,7 @@ from flask.testing import FlaskClient
 
 from app.extensions import db as _db
 from app.models.api_token import ApiToken
-from app.models.event import Event, EventStatus
+from app.models.event import Event, EventSlot, EventStatus
 from app.models.user import User, UserPermission, UserRole
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,9 @@ def _bearer(token: str) -> dict:
 @pytest.fixture
 def events_user_id(app: Flask) -> int:
     """User membre avec permission EVENTS."""
-    return _create_user_with_perms(app, "api_events@test.com", [UserPermission.EVENTS.value])
+    return _create_user_with_perms(
+        app, "api_events@test.com", [UserPermission.EVENTS.value], role=UserRole.BUREAU
+    )
 
 
 @pytest.fixture
@@ -408,29 +410,26 @@ class TestRegisterVolunteer:
 class TestSetAvailability:
     def _setup(self, app: Flask, client: FlaskClient, events_token: str, events_user_id: int):
         eid = _make_event(app, events_user_id)
-        # Créer un créneau
-        sr = client.post(
-            f"/api/v1/events/{eid}/slots",
-            json={"slot_date": "2026-09-01", "start_time": "09:00"},
-            headers=_bearer(events_token),
-        )
-        slot_id = sr.get_json()["id"]
-        # Inscrire un bénévole
-        vr = client.post(
-            f"/api/v1/events/{eid}/volunteers",
-            json={"name": "Carol", "email": "carol@test.com"},
-            headers=_bearer(events_token),
-        )
-        vol_id = vr.get_json()["id"]
-        return eid, slot_id, vol_id
+        # Créer un créneau directement en DB
+        with app.app_context():
+            slot = EventSlot(
+                event_id=eid,
+                slot_date=datetime(2026, 9, 1).date(),
+                start_time=time(9, 0),
+                end_time=time(12, 0),
+            )
+            _db.session.add(slot)
+            _db.session.commit()
+            slot_id = slot.id
+        return eid, slot_id
 
     def test_set_availability_by_id(
         self, app: Flask, client: FlaskClient, events_token: str, events_user_id: int
     ) -> None:
-        eid, slot_id, vol_id = self._setup(app, client, events_token, events_user_id)
+        eid, slot_id = self._setup(app, client, events_token, events_user_id)
         resp = client.put(
             f"/api/v1/events/{eid}/slots/{slot_id}/availability",
-            json={"status": "present", "volunteer_id": vol_id},
+            json={"status": "present", "user_id": events_user_id},
             headers=_bearer(events_token),
         )
         assert resp.status_code == 200
@@ -440,10 +439,10 @@ class TestSetAvailability:
     def test_set_availability_by_email(
         self, app: Flask, client: FlaskClient, events_token: str, events_user_id: int
     ) -> None:
-        eid, slot_id, vol_id = self._setup(app, client, events_token, events_user_id)
+        eid, slot_id = self._setup(app, client, events_token, events_user_id)
         resp = client.put(
             f"/api/v1/events/{eid}/slots/{slot_id}/availability",
-            json={"status": "maybe", "email": "carol@test.com"},
+            json={"status": "maybe", "user_id": events_user_id},
             headers=_bearer(events_token),
         )
         assert resp.status_code == 200
@@ -452,35 +451,24 @@ class TestSetAvailability:
     def test_update_availability(
         self, app: Flask, client: FlaskClient, events_token: str, events_user_id: int
     ) -> None:
-        eid, slot_id, vol_id = self._setup(app, client, events_token, events_user_id)
+        eid, slot_id = self._setup(app, client, events_token, events_user_id)
         client.put(
             f"/api/v1/events/{eid}/slots/{slot_id}/availability",
-            json={"status": "present", "volunteer_id": vol_id},
+            json={"status": "present", "user_id": events_user_id},
             headers=_bearer(events_token),
         )
         resp = client.put(
             f"/api/v1/events/{eid}/slots/{slot_id}/availability",
-            json={"status": "absent", "volunteer_id": vol_id},
+            json={"status": "absent", "user_id": events_user_id},
             headers=_bearer(events_token),
         )
         assert resp.status_code == 200
         assert resp.get_json()["status"] == "absent"
 
-    def test_invalid_status(
+    def test_missing_user_id(
         self, app: Flask, client: FlaskClient, events_token: str, events_user_id: int
     ) -> None:
-        eid, slot_id, vol_id = self._setup(app, client, events_token, events_user_id)
-        resp = client.put(
-            f"/api/v1/events/{eid}/slots/{slot_id}/availability",
-            json={"status": "inconnu", "volunteer_id": vol_id},
-            headers=_bearer(events_token),
-        )
-        assert resp.status_code == 422
-
-    def test_missing_volunteer_id_and_email(
-        self, app: Flask, client: FlaskClient, events_token: str, events_user_id: int
-    ) -> None:
-        eid, slot_id, _ = self._setup(app, client, events_token, events_user_id)
+        eid, slot_id = self._setup(app, client, events_token, events_user_id)
         resp = client.put(
             f"/api/v1/events/{eid}/slots/{slot_id}/availability",
             json={"status": "present"},
