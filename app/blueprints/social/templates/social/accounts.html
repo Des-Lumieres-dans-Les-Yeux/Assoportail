@@ -126,9 +126,10 @@
 {% endif %}
 
 {% set connected_platforms = accounts | map(attribute='platform') | list %}
-{% if 'facebook' not in connected_platforms %}
+{% if 'facebook' not in connected_platforms or 'linkedin' not in connected_platforms %}
 <div class="mt-4">
   <h2 class="h5">Connexion rapide via OAuth</h2>
+  {% if 'facebook' not in connected_platforms %}
   <a href="{{ url_for('social.fb_oauth_start') }}" class="btn btn-outline-primary btn-sm">
     <i class="bi bi-facebook me-1" aria-hidden="true"></i>Connecter Facebook + Instagram
   </a>
@@ -136,6 +137,16 @@
     Connecte automatiquement votre page Facebook et le compte Instagram lié.
     Si vous gérez plusieurs pages, un écran de sélection s'affichera.
   </p>
+  {% endif %}
+  {% if 'linkedin' not in connected_platforms %}
+  <a href="{{ url_for('social.linkedin_oauth_start') }}" class="btn btn-outline-info btn-sm">
+    <i class="bi bi-linkedin me-1" aria-hidden="true"></i>Connecter LinkedIn
+  </a>
+  <p class="text-muted small mt-2">
+    Connecte la page LinkedIn dont vous êtes administrateur.
+    Le token expire après 2 mois&nbsp;: relancez cette connexion pour le renouveler.
+  </p>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

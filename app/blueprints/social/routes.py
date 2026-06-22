@@ -7,6 +7,7 @@ import logging
 import os
 import secrets
 from datetime import UTC, date, datetime
+from urllib.parse import quote
 
 from flask import abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -783,6 +784,158 @@ def fb_select_page():
 
 
 # ---------------------------------------------------------------------------
+# LinkedIn OAuth
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/accounts/linkedin/oauth/start")
+@bureau_required
+def linkedin_oauth_start():
+    """Redirect to LinkedIn OAuth consent page."""
+    from flask import session
+
+    client_id = current_app.config.get("LINKEDIN_CLIENT_ID")
+    if not client_id:
+        flash("LINKEDIN_CLIENT_ID non configuré dans .env.", "danger")
+        return redirect(url_for("social.list_accounts"))
+
+    state = secrets.token_urlsafe(32)
+    session["linkedin_oauth_state"] = state
+
+    redirect_uri = url_for("social.linkedin_oauth_callback", _external=True)
+    # Community Management scopes: post + read on org, list admined orgs.
+    scopes = "w_organization_social r_organization_social rw_organization_admin"
+    auth_url = (
+        "https://www.linkedin.com/oauth/v2/authorization"
+        f"?response_type=code&client_id={client_id}"
+        f"&redirect_uri={quote(redirect_uri, safe='')}"
+        f"&state={state}&scope={quote(scopes)}"
+    )
+    return redirect(auth_url)
+
+
+@bp.route("/accounts/linkedin/oauth/callback")
+@bureau_required
+def linkedin_oauth_callback():
+    """Exchange the code for a token, find the admined org, and store credentials."""
+    import httpx
+    from flask import session
+
+    state = session.pop("linkedin_oauth_state", None)
+    if not state or state != request.args.get("state"):
+        flash("Session OAuth invalide. Recommencez.", "danger")
+        return redirect(url_for("social.list_accounts"))
+
+    code = request.args.get("code")
+    if not code:
+        flash(
+            f"Erreur LinkedIn : {request.args.get('error_description', 'inconnue')}",
+            "danger",
+        )
+        return redirect(url_for("social.list_accounts"))
+
+    redirect_uri = url_for("social.linkedin_oauth_callback", _external=True)
+    try:
+        r = httpx.post(
+            "https://www.linkedin.com/oauth/v2/accessToken",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": current_app.config["LINKEDIN_CLIENT_ID"],
+                "client_secret": current_app.config["LINKEDIN_CLIENT_SECRET"],
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        token_data = r.json()
+        access_token = token_data["access_token"]
+        # refresh_token only present if the app has the refresh-token feature enabled.
+        refresh_token = token_data.get("refresh_token")
+
+        # Find the organization the user administers.
+        r2 = httpx.get(
+            "https://api.linkedin.com/rest/organizationAcls",
+            params={"q": "roleAssignee", "role": "ADMINISTRATOR", "state": "APPROVED"},
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "LinkedIn-Version": "202401",
+                "X-Restli-Protocol-Version": "2.0.0",
+            },
+            timeout=10,
+        )
+        r2.raise_for_status()
+        elements = r2.json().get("elements", [])
+        if not elements:
+            flash(
+                "Aucune page LinkedIn administrée par ce compte. "
+                "Vérifiez que vous êtes administrateur de la page.",
+                "danger",
+            )
+            return redirect(url_for("social.list_accounts"))
+
+        # urn:li:organization:12345 -> 12345
+        org_urn = elements[0]["organization"]
+        org_id = org_urn.rsplit(":", 1)[-1]
+
+        # Fetch the org name for a nice display label.
+        org_name = f"Organisation {org_id}"
+        try:
+            r3 = httpx.get(
+                f"https://api.linkedin.com/rest/organizations/{org_id}",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "LinkedIn-Version": "202401",
+                },
+                timeout=10,
+            )
+            if r3.status_code == 200:
+                loc = r3.json().get("localizedName")
+                if loc:
+                    org_name = loc
+        except Exception:
+            logger.debug("LinkedIn org name fetch failed", exc_info=True)
+
+        _save_linkedin_account(org_id, access_token, refresh_token, org_name)
+    except Exception as exc:
+        logger.exception("LinkedIn OAuth failed")
+        flash(f"Erreur OAuth LinkedIn : {exc}", "danger")
+
+    return redirect(url_for("social.list_accounts"))
+
+
+def _save_linkedin_account(
+    org_id: str, access_token: str, refresh_token: str | None, org_name: str
+) -> None:
+    """Upsert the LinkedIn SocialAccount from OAuth data."""
+    from app.services.gmail import encrypt_token
+
+    creds = {
+        "access_token": access_token,
+        "organization_id": org_id,
+        "refresh_token": refresh_token,
+    }
+    account = db.session.execute(
+        db.select(SocialAccount).where(SocialAccount.platform == SocialPlatform.LINKEDIN.value)
+    ).scalar_one_or_none()
+    if account:
+        account.credentials_encrypted = encrypt_token(creds)
+        account.display_name = org_name
+        account.updated_at = datetime.now(UTC)
+    else:
+        db.session.add(
+            SocialAccount(
+                platform=SocialPlatform.LINKEDIN.value,
+                display_name=org_name,
+                credentials_encrypted=encrypt_token(creds),
+                connected_by_id=current_user.id,
+            )
+        )
+    db.session.commit()
+    flash(f"Page LinkedIn « {org_name} » connectée.", "success")
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -978,14 +1131,19 @@ def _test_platform_credentials(platform: str, creds: dict) -> tuple[bool, str]:
 
     elif platform == "linkedin":
         token = creds.get("access_token", "")
+        org_id = creds.get("organization_id", "")
         try:
+            # userinfo needs openid (not granted to this app) — ping the org instead.
             r = httpx.get(
-                "https://api.linkedin.com/v2/userinfo",
-                headers={"Authorization": f"Bearer {token}"},
+                f"https://api.linkedin.com/rest/organizations/{org_id}",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "LinkedIn-Version": "202401",
+                },
                 timeout=10,
             )
             if r.status_code == 200:
-                return True, r.json().get("name", "OK")
+                return True, r.json().get("localizedName", "OK")
             return False, f"HTTP {r.status_code}"
         except Exception as exc:
             return False, str(exc)

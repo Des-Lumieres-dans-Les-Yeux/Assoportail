@@ -41,6 +41,15 @@ class VolunteerSlotAvailabilityOut(_Base):
     updated_at: datetime
 
 
+class MemberSlotAvailabilityOut(_Base):
+    """Représentation de la disponibilité d'un membre sur un créneau."""
+
+    slot_id: int
+    user_id: int
+    status: str
+    updated_at: datetime
+
+
 class SlotOut(_Base):
     """Représentation d'un créneau horaire."""
 
@@ -51,6 +60,9 @@ class SlotOut(_Base):
     label: str | None = None
     volunteer_availabilities: list[VolunteerSlotAvailabilityOut] = Field(
         default_factory=list, description="Disponibilités des bénévoles pour ce créneau"
+    )
+    member_availabilities: list[MemberSlotAvailabilityOut] = Field(
+        default_factory=list, description="Disponibilités des membres pour ce créneau"
     )
 
 
@@ -106,6 +118,38 @@ class EventCreateIn(_Base):
             msg = f"Statut invalide : {v!r}. Valeurs acceptées : {sorted(allowed)}"
             raise ValueError(msg)
         return v
+
+
+class EventPatchIn(_Base):
+    """Corps de la requête PATCH /events/{id}."""
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None)
+    status: str | None = Field(None, description="planned | in_progress | completed | cancelled")
+    event_date: datetime | None = Field(None, description="Date/heure UTC de l'événement")
+    end_date: datetime | None = Field(None, description="Date/heure UTC de fin (optionnelle)")
+    location: str | None = Field(None, max_length=200)
+    website: str | None = Field(None, max_length=500)
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        allowed = {"planned", "in_progress", "completed", "cancelled"}
+        if v not in allowed:
+            msg = f"Statut invalide : {v!r}. Valeurs acceptées : {sorted(allowed)}"
+            raise ValueError(msg)
+        return v
+
+
+class SlotPatchIn(_Base):
+    """Corps de la requête PATCH /events/{id}/slots/{slot_id}."""
+
+    slot_date: str | None = Field(None, description="Date du créneau (YYYY-MM-DD)")
+    start_time: str | None = Field(None, description="Heure de début (HH:MM)")
+    end_time: str | None = Field(None, description="Heure de fin (HH:MM)")
+    label: str | None = Field(None, max_length=100, description="Libellé du créneau")
 
 
 class EventListQuery(_Base):

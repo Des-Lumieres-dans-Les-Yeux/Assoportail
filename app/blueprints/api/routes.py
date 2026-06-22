@@ -17,10 +17,13 @@ from app.blueprints.api.schemas import (
     EventListOut,
     EventListQuery,
     EventOut,
+    EventPatchIn,
     MemberAvailabilityIn,
     MemberOut,
+    MemberSlotAvailabilityOut,
     SlotIn,
     SlotOut,
+    SlotPatchIn,
     VolunteerAvailabilityIn,
     VolunteerCreateOut,
     VolunteerIn,
@@ -112,27 +115,38 @@ def _add_slots(event: Event, slots_data: list[SlotIn]) -> None:
         db.session.add(slot)
 
 
+def _slot_to_out(slot: EventSlot) -> SlotOut:
+    """Convertit un EventSlot en schéma SlotOut, disponibilités incluses."""
+    return SlotOut(
+        id=slot.id,
+        slot_date=slot.slot_date,
+        start_time=slot.start_time,
+        end_time=slot.end_time,
+        label=slot.label,
+        volunteer_availabilities=[
+            VolunteerSlotAvailabilityOut(
+                slot_id=va.slot_id,
+                volunteer_id=va.volunteer_id,
+                status=va.status.value,
+                updated_at=va.updated_at,
+            )
+            for va in slot.volunteer_availabilities
+        ],
+        member_availabilities=[
+            MemberSlotAvailabilityOut(
+                slot_id=ma.slot_id,
+                user_id=ma.user_id,
+                status=ma.status.value,
+                updated_at=ma.updated_at,
+            )
+            for ma in slot.availabilities
+        ],
+    )
+
+
 def _event_to_out(event: Event) -> EventOut:
     """Convertit un objet Event en schéma EventOut."""
-    slots = [
-        SlotOut(
-            id=s.id,
-            slot_date=s.slot_date,
-            start_time=s.start_time,
-            end_time=s.end_time,
-            label=s.label,
-            volunteer_availabilities=[
-                VolunteerSlotAvailabilityOut(
-                    slot_id=va.slot_id,
-                    volunteer_id=va.volunteer_id,
-                    status=va.status.value,
-                    updated_at=va.updated_at,
-                )
-                for va in s.volunteer_availabilities
-            ],
-        )
-        for s in event.slots
-    ]
+    slots = [_slot_to_out(s) for s in event.slots]
     volunteers = [
         VolunteerOut(
             id=v.id,
@@ -170,10 +184,16 @@ def _load_event_full(event_id: int) -> Event | None:
             selectinload(Event.slots)
             .selectinload(EventSlot.volunteer_availabilities)
             .selectinload(VolunteerSlotAvailability.volunteer),
+            selectinload(Event.slots).selectinload(EventSlot.availabilities),
             selectinload(Event.volunteers),
             selectinload(Event.dates),
         ],
     )
+
+
+def _to_utc(value: datetime) -> datetime:
+    """Normalise un datetime en UTC (naïf → UTC supposé, aware → converti)."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _json_error(message: str, status: int, code: str | None = None) -> tuple:
@@ -269,6 +289,7 @@ def list_events():
         selectinload(Event.slots)
         .selectinload(EventSlot.volunteer_availabilities)
         .selectinload(VolunteerSlotAvailability.volunteer),
+        selectinload(Event.slots).selectinload(EventSlot.availabilities),
         selectinload(Event.volunteers),
         selectinload(Event.dates),
     )
@@ -362,14 +383,7 @@ def add_slot(event_id: int):
     db.session.add(slot)
     db.session.commit()
 
-    out = SlotOut(
-        id=slot.id,
-        slot_date=slot.slot_date,
-        start_time=slot.start_time,
-        end_time=slot.end_time,
-        label=slot.label,
-    )
-    return jsonify(out.model_dump(mode="json")), 201
+    return jsonify(_slot_to_out(slot).model_dump(mode="json")), 201
 
 
 # ---------------------------------------------------------------------------
@@ -451,6 +465,7 @@ def list_members():
         HTTP_200=VolunteerCreateOut,
         HTTP_201=VolunteerCreateOut,
         HTTP_400=None,
+        HTTP_403=None,
         HTTP_404=None,
         HTTP_422=None,
     ),
@@ -465,6 +480,9 @@ def register_volunteer(event_id: int):
     son enregistrement existant sans créer de doublon. Si ``send_confirmation``
     est True, déclenche l'envoi de l'email de confirmation via Celery.
     """
+    if not g.api_user.is_bureau:
+        return _json_error("Ajouter un bénévole est réservé au bureau.", 403, "forbidden")
+
     event = db.session.get(Event, event_id)
     if event is None:
         return _json_error("Événement introuvable.", 404, "not_found")
@@ -671,3 +689,296 @@ def set_volunteer_availability(event_id: int, slot_id: int):
         ),
         200,
     )
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/v1/events/<id>
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/events/<int:event_id>", methods=["PATCH"])
+@limiter.limit("60 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    json=EventPatchIn,
+    resp=Response(HTTP_200=EventOut, HTTP_400=None, HTTP_404=None, HTTP_422=None),
+    tags=["events"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def update_event(event_id: int):
+    """Met à jour un événement (modification partielle)."""
+    event = db.session.get(Event, event_id)
+    if event is None:
+        return _json_error("Événement introuvable.", 404, "not_found")
+
+    raw = request.get_json(silent=True)
+    if raw is None:
+        return _json_error("Corps JSON attendu.", 400, "bad_request")
+
+    try:
+        payload = EventPatchIn.model_validate(raw)
+    except Exception as exc:
+        return _json_error(str(exc), 422, "validation_error")
+
+    # exclude_unset : distingue « champ absent » de « champ mis à null » (effacement).
+    # Les champs NOT NULL (title, status, event_date) ne sont jamais effaçables.
+    fields = payload.model_dump(exclude_unset=True)
+    if "title" in fields and fields["title"] is not None:
+        event.title = fields["title"].strip()
+    if "description" in fields:
+        event.description = (fields["description"] or "").strip() or None
+    if "status" in fields and fields["status"] is not None:
+        event.status = fields["status"]
+    if "location" in fields:
+        event.location = (fields["location"] or "").strip() or None
+    if "website" in fields:
+        event.website = (fields["website"] or "").strip() or None
+    if "event_date" in fields and fields["event_date"] is not None:
+        event.event_date = _to_utc(fields["event_date"])
+    if "end_date" in fields:
+        event.end_date = _to_utc(fields["end_date"]) if fields["end_date"] else None
+
+    db.session.commit()
+    return jsonify(_event_to_out(_load_event_full(event_id)).model_dump(mode="json")), 200
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/v1/events/<id>
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/events/<int:event_id>", methods=["DELETE"])
+@limiter.limit("60 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    resp=Response(HTTP_204=None, HTTP_404=None),
+    tags=["events"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def delete_event(event_id: int):
+    """Supprime un événement."""
+    event = db.session.get(Event, event_id)
+    if event is None:
+        return _json_error("Événement introuvable.", 404, "not_found")
+
+    db.session.delete(event)
+    db.session.commit()
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/v1/events/<id>/slots/<slot_id>
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/events/<int:event_id>/slots/<int:slot_id>", methods=["PATCH"])
+@limiter.limit("60 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    json=SlotPatchIn,
+    resp=Response(HTTP_200=SlotOut, HTTP_400=None, HTTP_404=None, HTTP_422=None),
+    tags=["events"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def update_slot(event_id: int, slot_id: int):
+    """Met à jour un créneau horaire."""
+    slot = db.session.get(EventSlot, slot_id)
+    if slot is None or slot.event_id != event_id:
+        return _json_error("Créneau introuvable.", 404, "not_found")
+
+    raw = request.get_json(silent=True)
+    if raw is None:
+        return _json_error("Corps JSON attendu.", 400, "bad_request")
+
+    try:
+        payload = SlotPatchIn.model_validate(raw)
+    except Exception as exc:
+        return _json_error(str(exc), 422, "validation_error")
+
+    # exclude_unset : distingue « champ absent » de « champ mis à null » (effacement).
+    fields = payload.model_dump(exclude_unset=True)
+    try:
+        if "slot_date" in fields and fields["slot_date"] is not None:
+            slot.slot_date = _parse_date(fields["slot_date"])
+        if "start_time" in fields:
+            slot.start_time = _parse_time(fields["start_time"])
+        if "end_time" in fields:
+            slot.end_time = _parse_time(fields["end_time"])
+    except ValueError as exc:
+        return _json_error(str(exc), 422, "validation_error")
+    if "label" in fields:
+        slot.label = fields["label"]
+
+    db.session.commit()
+    return jsonify(_slot_to_out(slot).model_dump(mode="json")), 200
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/v1/events/<id>/slots/<slot_id>
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/events/<int:event_id>/slots/<int:slot_id>", methods=["DELETE"])
+@limiter.limit("60 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    resp=Response(HTTP_204=None, HTTP_404=None),
+    tags=["events"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def delete_slot(event_id: int, slot_id: int):
+    """Supprime un créneau horaire."""
+    slot = db.session.get(EventSlot, slot_id)
+    if slot is None or slot.event_id != event_id:
+        return _json_error("Créneau introuvable.", 404, "not_found")
+
+    db.session.delete(slot)
+    db.session.commit()
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/events/<id>/slots/<slot_id>/availabilities
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/events/<int:event_id>/slots/<int:slot_id>/availabilities", methods=["GET"])
+@limiter.limit("200 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    resp=Response(HTTP_200=None, HTTP_404=None),
+    tags=["events"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def get_slot_availabilities(event_id: int, slot_id: int):
+    """Liste les disponibilités (membres et bénévoles) pour un créneau."""
+    slot = db.session.get(
+        EventSlot,
+        slot_id,
+        options=[
+            selectinload(EventSlot.availabilities),
+            selectinload(EventSlot.volunteer_availabilities),
+        ],
+    )
+    if slot is None or slot.event_id != event_id:
+        return _json_error("Créneau introuvable.", 404, "not_found")
+
+    member_avails = [
+        {
+            "slot_id": a.slot_id,
+            "user_id": a.user_id,
+            "status": a.status.value,
+            "updated_at": a.updated_at.isoformat(),
+        }
+        for a in slot.availabilities
+    ]
+
+    volunteer_avails = [
+        {
+            "slot_id": va.slot_id,
+            "volunteer_id": va.volunteer_id,
+            "status": va.status.value,
+            "updated_at": va.updated_at.isoformat(),
+        }
+        for va in slot.volunteer_availabilities
+    ]
+
+    return (
+        jsonify(
+            {"member_availabilities": member_avails, "volunteer_availabilities": volunteer_avails}
+        ),
+        200,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/v1/events/<id>/volunteers/<volunteer_id>/confirm
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/events/<int:event_id>/volunteers/<int:volunteer_id>/confirm", methods=["PATCH"])
+@limiter.limit("60 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    resp=Response(HTTP_200=VolunteerOut, HTTP_404=None),
+    tags=["events"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def confirm_volunteer(event_id: int, volunteer_id: int):
+    """Confirme l'inscription d'un bénévole manuellement (sans email)."""
+    volunteer = db.session.get(EventVolunteer, volunteer_id)
+    if volunteer is None or volunteer.event_id != event_id:
+        return _json_error("Bénévole introuvable.", 404, "not_found")
+
+    volunteer.confirmed = True
+    db.session.commit()
+
+    out = VolunteerOut(
+        id=volunteer.id,
+        name=volunteer.name,
+        email=volunteer.email,
+        confirmed=volunteer.confirmed,
+        registered_at=volunteer.registered_at,
+    )
+    return jsonify(out.model_dump(mode="json")), 200
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/v1/events/<id>/volunteers/<volunteer_id>
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/events/<int:event_id>/volunteers/<int:volunteer_id>", methods=["DELETE"])
+@limiter.limit("60 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    resp=Response(HTTP_204=None, HTTP_403=None, HTTP_404=None),
+    tags=["events"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def delete_volunteer(event_id: int, volunteer_id: int):
+    """Supprime un bénévole d'un événement."""
+    if not g.api_user.is_bureau:
+        return _json_error("Supprimer un bénévole est réservé au bureau.", 403, "forbidden")
+
+    volunteer = db.session.get(EventVolunteer, volunteer_id)
+    if volunteer is None or volunteer.event_id != event_id:
+        return _json_error("Bénévole introuvable.", 404, "not_found")
+
+    db.session.delete(volunteer)
+    db.session.commit()
+    return "", 204
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/members/<id>
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/members/<int:member_id>", methods=["GET"])
+@limiter.limit("200 per hour")
+@api_permission_required(_EVENTS_PERM)
+@spec.validate(
+    resp=Response(HTTP_200=MemberOut, HTTP_403=None, HTTP_404=None),
+    tags=["members"],
+    security={"BearerAuth": []},
+    skip_validation=True,
+)
+def get_member(member_id: int):
+    """Retourne les infos de base d'un membre actif (réservé au bureau)."""
+    # Même contrôle d'accès que list_members : seul le bureau voit les membres.
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
+    u = db.session.get(User, member_id)
+    if u is None or not u.is_active:
+        return _json_error("Membre introuvable.", 404, "not_found")
+
+    return jsonify(MemberOut(id=u.id, name=u.full_name, email=u.email).model_dump(mode="json")), 200
