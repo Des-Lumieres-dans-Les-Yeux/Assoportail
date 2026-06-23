@@ -859,7 +859,7 @@ def linkedin_oauth_callback():
             params={"q": "roleAssignee", "role": "ADMINISTRATOR", "state": "APPROVED"},
             headers={
                 "Authorization": f"Bearer {access_token}",
-                "LinkedIn-Version": "202401",
+                "LinkedIn-Version": current_app.config["LINKEDIN_API_VERSION"],
                 "X-Restli-Protocol-Version": "2.0.0",
             },
             timeout=10,
@@ -885,7 +885,7 @@ def linkedin_oauth_callback():
                 f"https://api.linkedin.com/rest/organizations/{org_id}",
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "LinkedIn-Version": "202401",
+                    "LinkedIn-Version": current_app.config["LINKEDIN_API_VERSION"],
                 },
                 timeout=10,
             )
@@ -1138,7 +1138,7 @@ def _test_platform_credentials(platform: str, creds: dict) -> tuple[bool, str]:
                 f"https://api.linkedin.com/rest/organizations/{org_id}",
                 headers={
                     "Authorization": f"Bearer {token}",
-                    "LinkedIn-Version": "202401",
+                    "LinkedIn-Version": current_app.config["LINKEDIN_API_VERSION"],
                 },
                 timeout=10,
             )

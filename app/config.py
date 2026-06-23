@@ -80,6 +80,9 @@ class Config:
     # Social Publishing — LinkedIn
     LINKEDIN_CLIENT_ID: str = os.environ.get("LINKEDIN_CLIENT_ID", "")
     LINKEDIN_CLIENT_SECRET: str = os.environ.get("LINKEDIN_CLIENT_SECRET", "")
+    # LinkedIn versions REST APIs monthly (YYYYMM) and sunsets them after ~1 year.
+    # Bump this when calls start returning 426 Upgrade Required.
+    LINKEDIN_API_VERSION: str = os.environ.get("LINKEDIN_API_VERSION", "202605")
     SOCIAL_IMAGE_QUALITY: int = int(os.environ.get("SOCIAL_IMAGE_QUALITY", 85))
     SOCIAL_MAX_IMAGES_PER_POST: int = int(os.environ.get("SOCIAL_MAX_IMAGES_PER_POST", 10))
 

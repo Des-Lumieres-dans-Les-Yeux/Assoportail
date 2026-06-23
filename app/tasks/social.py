@@ -669,6 +669,7 @@ def _publish_instagram(post_id: int) -> dict:
 def _publish_linkedin(post_id: int) -> dict:
     """Publish to LinkedIn Organization page via Marketing API."""
     import httpx
+    from flask import current_app
     from sqlalchemy.orm import selectinload
 
     from app.extensions import db
@@ -677,6 +678,7 @@ def _publish_linkedin(post_id: int) -> dict:
     creds = _get_account_creds("linkedin")
     token = creds["access_token"]
     org_id = creds.get("organization_id", "")
+    api_version = current_app.config["LINKEDIN_API_VERSION"]
 
     post = db.session.get(SocialPost, post_id, options=[selectinload(SocialPost.images)])
     text = post.body_text or post.title
@@ -701,7 +703,7 @@ def _publish_linkedin(post_id: int) -> dict:
             "https://api.linkedin.com/rest/images",
             headers={
                 "Authorization": f"Bearer {token}",
-                "LinkedIn-Version": "202401",
+                "LinkedIn-Version": api_version,
                 "Content-Type": "application/json",
             },
             json={
@@ -755,7 +757,7 @@ def _publish_linkedin(post_id: int) -> dict:
         "https://api.linkedin.com/rest/posts",
         headers={
             "Authorization": f"Bearer {token}",
-            "LinkedIn-Version": "202401",
+            "LinkedIn-Version": api_version,
             "Content-Type": "application/json",
         },
         json=payload,
