@@ -639,6 +639,10 @@ def resolve_maintenance(machine_id: int, record_id: int):
 
     db.session.commit()
     flash("Maintenance résolue, statut machine restauré.", "success")
+    next_url = request.form.get("_next", "")
+    # Reject protocol-relative URLs (//attacker.com) — only accept path-relative redirects.
+    if next_url.startswith("/") and not next_url.startswith("//"):
+        return redirect(next_url)
     return redirect(url_for("machines.detail", machine_id=machine_id))
 
 

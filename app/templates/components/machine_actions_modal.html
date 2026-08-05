@@ -37,7 +37,7 @@
                   id="{{ _ma_modal_id }}-tab-panne" data-bs-toggle="tab"
                   data-bs-target="#{{ _ma_modal_id }}-panel-panne" type="button" role="tab"
                   aria-controls="{{ _ma_modal_id }}-panel-panne" aria-selected="{{ 'true' if ma_default_tab == 'panne' else 'false' }}">
-            <i class="bi bi-tools me-1" aria-hidden="true"></i>Signaler une panne
+            <i class="bi bi-tools me-1" aria-hidden="true"></i><span id="{{ _ma_modal_id }}-panne-tab-label">Signaler une panne</span>
           </button>
         </li>
       </ul>
@@ -127,6 +127,7 @@
         <div class="tab-pane fade{{ ' show active' if ma_default_tab == 'panne' else '' }}"
              id="{{ _ma_modal_id }}-panel-panne" role="tabpanel"
              aria-labelledby="{{ _ma_modal_id }}-tab-panne">
+          <div id="{{ _ma_modal_id }}-panne-report">
           <form id="{{ _ma_modal_id }}-panne-form" method="post" action="" novalidate>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="modal-body">
@@ -189,6 +190,39 @@
               </button>
             </div>
           </form>
+          </div>
+
+          {# Sous-panneau « résoudre une panne » — montré quand la machine est en maintenance #}
+          <div id="{{ _ma_modal_id }}-panne-resolve" class="d-none">
+          <form id="{{ _ma_modal_id }}-panne-resolve-form" method="post" action="" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="_next" id="{{ _ma_modal_id }}-panne-resolve-next" value="">
+            <div class="modal-body">
+              <p class="text-muted small mb-3" id="{{ _ma_modal_id }}-panne-resolve-label"></p>
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-panne-resolve-date">
+                  Date de résolution <span class="text-danger">*</span>
+                </label>
+                <input type="date" id="{{ _ma_modal_id }}-panne-resolve-date" name="resolved_at"
+                       class="form-control" value="{{ ma_today }}" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-panne-resolve-comment">
+                  Commentaire <span class="text-muted">(optionnel)</span>
+                </label>
+                <textarea id="{{ _ma_modal_id }}-panne-resolve-comment" name="resolution_comment"
+                          class="form-control" rows="3" maxlength="2000"
+                          placeholder="Description de l'intervention effectuée…"></textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+              <button type="submit" class="btn btn-success">
+                <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Résoudre la panne
+              </button>
+            </div>
+          </form>
+          </div>
         </div>
       </div>
     </div>
@@ -205,6 +239,12 @@
   var panneMachineSel = document.getElementById('{{ _ma_modal_id }}-panne-machine');
   var moveLabel = document.getElementById('{{ _ma_modal_id }}-move-machine-label');
   var panneLabel = document.getElementById('{{ _ma_modal_id }}-panne-machine-label');
+  var reportBlock = document.getElementById('{{ _ma_modal_id }}-panne-report');
+  var resolveBlock = document.getElementById('{{ _ma_modal_id }}-panne-resolve');
+  var resolveForm = document.getElementById('{{ _ma_modal_id }}-panne-resolve-form');
+  var resolveLabel = document.getElementById('{{ _ma_modal_id }}-panne-resolve-label');
+  var resolveNext = document.getElementById('{{ _ma_modal_id }}-panne-resolve-next');
+  var panneTabLabel = document.getElementById('{{ _ma_modal_id }}-panne-tab-label');
 
   function machineIdFrom() {
     var btn = modal._maButton;
@@ -229,6 +269,25 @@
     if (panneLabel) panneLabel.textContent = name ? 'Machine : ' + name : '';
   }
 
+  function applyPanneMode(machineId, name, status, recordId) {
+    var inMaint = status === 'maintenance' && recordId;
+    if (!reportBlock || !resolveBlock) return;
+    if (inMaint) {
+      reportBlock.classList.add('d-none');
+      resolveBlock.classList.remove('d-none');
+      if (panneTabLabel) panneTabLabel.textContent = 'Résoudre la panne';
+      if (resolveLabel) resolveLabel.textContent = name ? 'Machine : ' + name : '';
+      if (resolveForm && machineId && recordId) {
+        resolveForm.action = '{{ ma_resolve_url }}'
+          .replace('/0/maintenance/0/resolve', '/' + machineId + '/maintenance/' + recordId + '/resolve');
+      }
+    } else {
+      resolveBlock.classList.add('d-none');
+      reportBlock.classList.remove('d-none');
+      if (panneTabLabel) panneTabLabel.textContent = 'Signaler une panne';
+    }
+  }
+
   modal.addEventListener('show.bs.modal', function (e) {
     modal._maButton = e.relatedTarget;
     var tab = (e.relatedTarget && e.relatedTarget.dataset.maTab) || '{{ ma_default_tab or "move" }}';
@@ -240,6 +299,9 @@
     var fixedName = {{ (ma_machine.display_name if ma_machine else "")|tojson }};
     var machineId = fixedId || machineIdFrom() || (moveMachineSel ? moveMachineSel.value : null);
     var name = fixedName || machineNameFrom();
+    var status = (e.relatedTarget && e.relatedTarget.dataset.maStatus) || null;
+    var record = (e.relatedTarget && e.relatedTarget.dataset.maRecord) || null;
+    if (resolveNext) resolveNext.value = (e.relatedTarget && e.relatedTarget.dataset.maNext) || '';
     if (moveMachineSel) {
       moveMachineSel.addEventListener('change', function () {
         var opt = moveMachineSel.options[moveMachineSel.selectedIndex];
@@ -253,6 +315,7 @@
       });
     }
     setActions(machineId, name);
+    applyPanneMode(machineId, name, status, record);
   });
 
   var locType = document.getElementById('{{ _ma_modal_id }}-loc-type');

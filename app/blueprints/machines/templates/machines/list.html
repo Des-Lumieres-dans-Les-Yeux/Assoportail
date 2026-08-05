@@ -143,8 +143,8 @@
         {% set can_machines = current_user.is_bureau or current_user.has_permission('machines') %}
         {% set can_move = current_user.is_bureau or current_user.has_permission('machines') or current_user.has_permission('centers') %}
         <div class="d-flex gap-1 justify-content-end flex-wrap">
-          {# Operational check button — permission machines #}
-          {% if machine.status.value != "retired" and can_machines %}
+          {# Operational check button — permission machines (masqué quand la machine est en maintenance) #}
+          {% if machine.status.value not in ("retired", "maintenance") and can_machines %}
           <form method="post" action="{{ url_for('machines.check_operational', machine_id=machine.id) }}" class="d-inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="_next" value="{{ url_for('machines.list_machines', q=q, status=status) }}">
@@ -173,14 +173,27 @@
             {% endif %}
           {% endif %}
           {% if machine.status.value != "retired" and can_machines %}
-          <button type="button"
-                  class="btn btn-sm {% if machine.status.value == 'maintenance' %}btn-warning{% else %}btn-outline-warning{% endif %}"
-                  data-bs-toggle="modal" data-bs-target="#machineActionsModal"
-                  data-ma-id="{{ machine.id }}"
-                  data-ma-name="{{ machine.display_name }}"
-                  data-ma-tab="panne">
-            <i class="bi bi-tools me-1" aria-hidden="true"></i>{% if machine.status.value == 'maintenance' %}En panne{% else %}Signaler panne{% endif %}
-          </button>
+            {% if machine.status.value == "maintenance" %}
+            {% set open_mr = machine.maintenance_records | selectattr('status.value', 'equalto', 'open') | first %}
+            <button type="button" class="btn btn-success btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#machineActionsModal"
+                    data-ma-id="{{ machine.id }}"
+                    data-ma-name="{{ machine.display_name }}"
+                    data-ma-tab="panne"
+                    data-ma-status="maintenance"
+                    data-ma-record="{{ open_mr.id if open_mr else '' }}"
+                    data-ma-next="{{ url_for('machines.list_machines', q=q, status=status) }}">
+              <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Résoudre la panne
+            </button>
+            {% else %}
+            <button type="button" class="btn btn-outline-warning btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#machineActionsModal"
+                    data-ma-id="{{ machine.id }}"
+                    data-ma-name="{{ machine.display_name }}"
+                    data-ma-tab="panne">
+              <i class="bi bi-tools me-1" aria-hidden="true"></i>Signaler panne
+            </button>
+            {% endif %}
           {% endif %}
         </div>
       </td>
@@ -217,6 +230,7 @@
   ma_today=today,
   ma_move_url=url_for('machines.install', machine_id=0),
   ma_panne_url=url_for('machines.add_maintenance', machine_id=0),
+  ma_resolve_url=url_for('machines.resolve_maintenance', machine_id=0, record_id=0),
   ma_default_tab='move'
 %}
   {% include "components/machine_actions_modal.html" %}
