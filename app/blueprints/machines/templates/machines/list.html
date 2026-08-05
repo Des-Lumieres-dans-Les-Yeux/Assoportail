@@ -121,13 +121,19 @@
         <span class="badge bg-secondary"><i class="bi bi-box me-1" aria-hidden="true"></i>En stock</span>
         {% elif machine.status.value == "maintenance" %}
         {% set _open = machine.maintenance_records | selectattr('status.value', 'equalto', 'open') | list %}
+        {% if _open | length > 0 %}
         <span class="badge bg-warning text-dark"
               data-bs-toggle="tooltip" data-bs-placement="top" data-bs-html="false"
               data-bs-trigger="hover focus"
-              data-bs-title="{%- for r in _open -%}{{ r.date.strftime('%d/%m/%Y') }} — {{ r.description or '' }}{% if not loop.last %}&#10;{% endif %}{%- endfor -%}">
+              data-bs-title="{%- for r in _open -%}{{ r.date.strftime('%d/%m/%Y') }} · {{ r.description or '' }}{% if not loop.last %}&#10;{% endif %}{%- endfor -%}">
           <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>Panne / Maintenance
-          {% if _open | length > 0 %}<span class="badge bg-dark ms-1">{{ _open | length }}</span>{% endif %}
+          <span class="badge bg-dark ms-1">{{ _open | length }}</span>
         </span>
+        {% else %}
+        <span class="badge bg-warning text-dark">
+          <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>Panne / Maintenance
+        </span>
+        {% endif %}
         {% elif machine.status.value == "retired" %}
         <span class="badge bg-dark"><i class="bi bi-archive me-1" aria-hidden="true"></i>Retirée</span>
         {% endif %}
@@ -242,12 +248,6 @@
 %}
   {% include "components/machine_actions_modal.html" %}
 {% endwith %}
-
-<script data-cfasync="false" nonce="{{ csp_nonce() }}">
-  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
-    new bootstrap.Tooltip(el);
-  });
-</script>
 {% endblock %}
 
 {% block page_help %}
