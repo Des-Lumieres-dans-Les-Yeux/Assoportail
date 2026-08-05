@@ -156,12 +156,12 @@
         {% set can_machines = current_user.is_bureau or current_user.has_permission('machines') %}
         {% set can_move = current_user.is_bureau or current_user.has_permission('machines') or current_user.has_permission('centers') %}
         <div class="d-flex gap-1 justify-content-end flex-wrap">
-          {# Operational check button — permission machines (masqué quand la machine est en maintenance) #}
-          {% if machine.status.value not in ("retired", "maintenance") and can_machines %}
+          {# Operational check button — permission machines (masqué quand la machine est retirée) #}
+          {% if machine.status.value != "retired" and can_machines %}
           <form method="post" action="{{ url_for('machines.check_operational', machine_id=machine.id) }}" class="d-inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="_next" value="{{ url_for('machines.list_machines', q=q, status=status) }}">
-            <button type="submit" class="btn btn-outline-success btn-sm" title="Signaler opérationnelle">
+            <button type="submit" class="btn btn-outline-success btn-sm" title="Signaler opérationnelle — clôt les pannes en cours">
               <i class="bi bi-check2-circle" aria-hidden="true"></i>
             </button>
           </form>

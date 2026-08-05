@@ -93,7 +93,7 @@
         {% if machine.status.value != "retired" and (current_user.is_bureau or current_user.has_permission('machines')) %}
         <form method="post" action="{{ url_for('machines.check_operational', machine_id=machine.id) }}" class="d-inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-outline-success btn-sm" title="Machine opérationnelle — remet le compteur à zéro">
+          <button type="submit" class="btn btn-outline-success btn-sm" title="Machine opérationnelle — remet le compteur à zéro et clôt les pannes en cours">
             <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>OK
           </button>
         </form>

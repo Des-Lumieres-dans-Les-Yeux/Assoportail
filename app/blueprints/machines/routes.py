@@ -690,19 +690,17 @@ def resolve_selected(machine_id: int):
         return redirect(url_for("machines.detail", machine_id=machine_id))
 
     record_ids = {int(v) for v in request.form.getlist("record_ids") if v.isdigit()}
-    if not record_ids:
+    open_records = [r for r in machine.maintenance_records if r.status == MaintenanceStatus.OPEN]
+
+    if not record_ids and open_records:
         flash("Aucune fiche de panne sélectionnée.", "warning")
         next_url = request.form.get("_next", "")
         if next_url.startswith("/") and not next_url.startswith("//"):
             return redirect(next_url)
         return redirect(url_for("machines.detail", machine_id=machine_id))
 
-    selected = [
-        r
-        for r in machine.maintenance_records
-        if r.status == MaintenanceStatus.OPEN and r.id in record_ids
-    ]
-    if not selected:
+    selected = [r for r in open_records if r.id in record_ids]
+    if record_ids and not selected:
         flash("Aucune fiche de panne ouverte ne correspond à la sélection.", "warning")
         next_url = request.form.get("_next", "")
         if next_url.startswith("/") and not next_url.startswith("//"):
@@ -797,13 +795,46 @@ def delete_maintenance(machine_id: int, record_id: int):
 @bp.route("/<int:machine_id>/check", methods=["POST"])
 @permission_required(UserPermission.MACHINES)
 def check_operational(machine_id: int):
-    """Mark a machine as operational, resetting the days-since-last-activity counter."""
-    machine = db.session.get(Machine, machine_id)
+    """Mark a machine as operational, resetting the days-since-last-activity counter.
+
+    If the machine is currently in maintenance, its open maintenance records are
+    resolved (today, without comment) and the status is restored.
+    """
+    machine = db.session.get(
+        Machine,
+        machine_id,
+        options=[selectinload(Machine.maintenance_records)],
+    )
     if machine is None:
         abort(404)
     machine.last_checked_at = date.today()
+    resolved = []
+
+    if machine.status == MachineStatus.MAINTENANCE:
+        resolved = []
+        for record in machine.maintenance_records:
+            if record.status == MaintenanceStatus.OPEN:
+                record.status = MaintenanceStatus.RESOLVED
+                record.resolved_at = date.today()
+                record.resolved_by_id = current_user.id
+                resolved.append(record)
+        if resolved:
+            active_install = db.session.execute(
+                db.select(MachineInstallation).where(
+                    MachineInstallation.machine_id == machine_id,
+                    MachineInstallation.removed_at.is_(None),
+                )
+            ).scalar_one_or_none()
+            machine.status = MachineStatus.INSTALLED if active_install else MachineStatus.STOCK
+
     db.session.commit()
-    flash("Machine signalée opérationnelle.", "success")
+    if resolved:
+        flash(
+            f"{len(resolved)} fiche(s) de panne résolue(s), machine signalée opérationnelle.",
+            "success",
+        )
+    else:
+        flash("Machine signalée opérationnelle.", "success")
     next_url = request.form.get("_next", "")
     if next_url.startswith("/") and not next_url.startswith("//"):
         return redirect(next_url)
