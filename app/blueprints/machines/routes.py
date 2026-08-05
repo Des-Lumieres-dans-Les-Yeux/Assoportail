@@ -91,6 +91,17 @@ def list_machines():
         stmt = stmt.where(Machine.status == status)
 
     pagination = db.paginate(stmt, page=page, per_page=25, error_out=False)
+    # Open maintenance records per machine, for the unified resolve modal.
+    open_records_map: dict[int, list[dict]] = {}
+    for m in pagination.items:
+        recs = [r for r in m.maintenance_records if r.status == MaintenanceStatus.OPEN]
+        open_records_map[m.id] = [
+            {
+                "id": r.id,
+                "label": f"{r.date.isoformat()} — {(r.description or '')[:80]}",
+            }
+            for r in recs
+        ]
     return render_template(
         "machines/list.html",
         machines=pagination.items,
@@ -103,6 +114,7 @@ def list_machines():
         centers=_active_center_choices(),
         members=_member_choices(),
         today=date.today().isoformat(),
+        open_records_map=open_records_map,
     )
 
 
@@ -638,9 +650,97 @@ def resolve_maintenance(machine_id: int, record_id: int):
         machine.last_checked_at = record.resolved_at
 
     db.session.commit()
-    flash("Maintenance résolue, statut machine restauré.", "success")
+    if still_open:
+        flash(
+            f"Maintenance résolue. {len(still_open)} fiche(s) de panne encore ouverte(s) : "
+            "la machine reste en maintenance.",
+            "warning",
+        )
+    else:
+        flash("Maintenance résolue, statut machine restauré.", "success")
     next_url = request.form.get("_next", "")
     # Reject protocol-relative URLs (//attacker.com) — only accept path-relative redirects.
+    if next_url.startswith("/") and not next_url.startswith("//"):
+        return redirect(next_url)
+    return redirect(url_for("machines.detail", machine_id=machine_id))
+
+
+@bp.route("/<int:machine_id>/maintenance/resolve-selected", methods=["POST"])
+@permission_required(UserPermission.MACHINES)
+def resolve_selected(machine_id: int):
+    """Resolve a selection of open maintenance records (quick action from the list).
+
+    Reads the ``record_ids`` list from the form (checkboxes in the unified modal),
+    resolves each selected open record, and restores the machine status when no
+    open record remains.
+    """
+    machine = db.session.get(
+        Machine,
+        machine_id,
+        options=[selectinload(Machine.maintenance_records)],
+    )
+    if machine is None:
+        abort(404)
+
+    form = ResolveMaintenanceForm()
+    if not form.validate_on_submit():
+        for errors in form.errors.values():
+            for e in errors:
+                flash(e, "danger")
+        return redirect(url_for("machines.detail", machine_id=machine_id))
+
+    record_ids = {int(v) for v in request.form.getlist("record_ids") if v.isdigit()}
+    if not record_ids:
+        flash("Aucune fiche de panne sélectionnée.", "warning")
+        next_url = request.form.get("_next", "")
+        if next_url.startswith("/") and not next_url.startswith("//"):
+            return redirect(next_url)
+        return redirect(url_for("machines.detail", machine_id=machine_id))
+
+    selected = [
+        r
+        for r in machine.maintenance_records
+        if r.status == MaintenanceStatus.OPEN and r.id in record_ids
+    ]
+    if not selected:
+        flash("Aucune fiche de panne ouverte ne correspond à la sélection.", "warning")
+        next_url = request.form.get("_next", "")
+        if next_url.startswith("/") and not next_url.startswith("//"):
+            return redirect(next_url)
+        return redirect(url_for("machines.detail", machine_id=machine_id))
+
+    selected_ids = {r.id for r in selected}
+    for record in selected:
+        record.status = MaintenanceStatus.RESOLVED
+        record.resolved_at = form.resolved_at.data
+        record.resolved_by_id = current_user.id
+        record.resolution_comment = (form.resolution_comment.data or "").strip() or None
+
+    remaining_open = [
+        r
+        for r in machine.maintenance_records
+        if r.status == MaintenanceStatus.OPEN and r.id not in selected_ids
+    ]
+    if not remaining_open:
+        active_install = db.session.execute(
+            db.select(MachineInstallation).where(
+                MachineInstallation.machine_id == machine_id,
+                MachineInstallation.removed_at.is_(None),
+            )
+        ).scalar_one_or_none()
+        machine.status = MachineStatus.INSTALLED if active_install else MachineStatus.STOCK
+        machine.last_checked_at = form.resolved_at.data
+
+    db.session.commit()
+    if remaining_open:
+        flash(
+            f"{len(selected)} fiche(s) résolue(s). {len(remaining_open)} fiche(s) encore "
+            "ouverte(s) : la machine reste en maintenance.",
+            "warning",
+        )
+    else:
+        flash(f"{len(selected)} fiche(s) résolue(s), statut machine restauré.", "success")
+    next_url = request.form.get("_next", "")
     if next_url.startswith("/") and not next_url.startswith("//"):
         return redirect(next_url)
     return redirect(url_for("machines.detail", machine_id=machine_id))

@@ -640,6 +640,8 @@
   ma_move_url=url_for('machines.install', machine_id=0),
   ma_panne_url=url_for('machines.add_maintenance', machine_id=0),
   ma_resolve_url=url_for('machines.resolve_maintenance', machine_id=0, record_id=0),
+  ma_selected_url=url_for('machines.resolve_selected', machine_id=0),
+  ma_open_records_json={},
   ma_default_tab='move'
 %}
   {% include "components/machine_actions_modal.html" %}

@@ -200,6 +200,12 @@
             <div class="modal-body">
               <p class="text-muted small mb-3" id="{{ _ma_modal_id }}-panne-resolve-label"></p>
               <div class="mb-3">
+                <label class="form-label">Fiches à résoudre</label>
+                <div id="{{ _ma_modal_id }}-panne-resolve-records" class="border rounded p-2">
+                  <p class="text-muted small mb-0">Chargement…</p>
+                </div>
+              </div>
+              <div class="mb-3">
                 <label class="form-label" for="{{ _ma_modal_id }}-panne-resolve-date">
                   Date de résolution <span class="text-danger">*</span>
                 </label>
@@ -245,6 +251,8 @@
   var resolveLabel = document.getElementById('{{ _ma_modal_id }}-panne-resolve-label');
   var resolveNext = document.getElementById('{{ _ma_modal_id }}-panne-resolve-next');
   var panneTabLabel = document.getElementById('{{ _ma_modal_id }}-panne-tab-label');
+  var recordsBox = document.getElementById('{{ _ma_modal_id }}-panne-resolve-records');
+  var openMap = {{ (ma_open_records_json or {}) | tojson }};
 
   function machineIdFrom() {
     var btn = modal._maButton;
@@ -269,18 +277,47 @@
     if (panneLabel) panneLabel.textContent = name ? 'Machine : ' + name : '';
   }
 
-  function applyPanneMode(machineId, name, status, recordId) {
-    var inMaint = status === 'maintenance' && recordId;
+  function renderResolveRecords(machineId) {
+    if (!recordsBox) return;
+    recordsBox.innerHTML = '';
+    var recs = (openMap && openMap[machineId]) || [];
+    if (!recs.length) {
+      recordsBox.innerHTML = '<p class="text-muted small mb-0">Aucune fiche ouverte à résoudre.</p>';
+      return;
+    }
+    recs.forEach(function (r) {
+      var row = document.createElement('div');
+      row.className = 'form-check';
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.className = 'form-check-input';
+      box.name = 'record_ids';
+      box.value = r.id;
+      box.checked = true;
+      box.id = 'rsel-' + r.id;
+      var lab = document.createElement('label');
+      lab.className = 'form-check-label small';
+      lab.htmlFor = 'rsel-' + r.id;
+      lab.textContent = r.label;
+      row.appendChild(box);
+      row.appendChild(lab);
+      recordsBox.appendChild(row);
+    });
+  }
+
+  function applyPanneMode(machineId, name, status) {
+    var inMaint = status === 'maintenance';
     if (!reportBlock || !resolveBlock) return;
     if (inMaint) {
       reportBlock.classList.add('d-none');
       resolveBlock.classList.remove('d-none');
-      if (panneTabLabel) panneTabLabel.textContent = 'Résoudre la panne';
+      if (panneTabLabel) panneTabLabel.textContent = 'Résoudre une panne';
       if (resolveLabel) resolveLabel.textContent = name ? 'Machine : ' + name : '';
-      if (resolveForm && machineId && recordId) {
-        resolveForm.action = '{{ ma_resolve_url }}'
-          .replace('/0/maintenance/0/resolve', '/' + machineId + '/maintenance/' + recordId + '/resolve');
+      if (resolveForm && machineId) {
+        resolveForm.action = '{{ ma_selected_url }}'
+          .replace('/0/maintenance/resolve-selected', '/' + machineId + '/maintenance/resolve-selected');
       }
+      renderResolveRecords(machineId);
     } else {
       resolveBlock.classList.add('d-none');
       reportBlock.classList.remove('d-none');
@@ -300,7 +337,6 @@
     var machineId = fixedId || machineIdFrom() || (moveMachineSel ? moveMachineSel.value : null);
     var name = fixedName || machineNameFrom();
     var status = (e.relatedTarget && e.relatedTarget.dataset.maStatus) || null;
-    var record = (e.relatedTarget && e.relatedTarget.dataset.maRecord) || null;
     if (resolveNext) resolveNext.value = (e.relatedTarget && e.relatedTarget.dataset.maNext) || '';
     if (moveMachineSel) {
       moveMachineSel.addEventListener('change', function () {
@@ -315,7 +351,7 @@
       });
     }
     setActions(machineId, name);
-    applyPanneMode(machineId, name, status, record);
+    applyPanneMode(machineId, name, status);
   });
 
   var locType = document.getElementById('{{ _ma_modal_id }}-loc-type');
