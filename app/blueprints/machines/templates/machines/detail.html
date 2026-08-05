@@ -90,7 +90,7 @@
         {% else %}
           <span class="text-muted">Aucune</span>
         {% endif %}
-        {% if machine.status.value != "retired" %}
+        {% if machine.status.value != "retired" and (current_user.is_bureau or current_user.has_permission('machines')) %}
         <form method="post" action="{{ url_for('machines.check_operational', machine_id=machine.id) }}" class="d-inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-outline-success btn-sm" title="Machine opérationnelle — remet le compteur à zéro">
@@ -188,22 +188,22 @@
 </section>
 {% endif %}
 
-{# Current installation + install form #}
-{% if current_user.is_bureau %}
+{# Current installation — actions via the unified modal #}
+{% set can_machines = current_user.is_bureau or current_user.has_permission('machines') %}
+{% set can_move = current_user.is_bureau or current_user.has_permission('machines') or current_user.has_permission('centers') %}
 <section aria-labelledby="install-heading" class="mb-4">
   <div class="d-flex justify-content-between align-items-center mb-2">
     <h2 class="h5 mb-0" id="install-heading">Installation en cours</h2>
-    {% if machine.status.value not in ("retired", "maintenance") %}
+    {% if machine.status.value not in ("retired", "maintenance") and can_move %}
     <button class="btn btn-{{ 'outline-secondary' if machine.current_installation else 'outline-primary' }} btn-sm"
             type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#install-form"
-            aria-expanded="false"
-            aria-controls="install-form">
+            data-bs-toggle="modal" data-bs-target="#machineActionsModal"
+            data-ma-id="{{ machine.id }}" data-ma-name="{{ machine.display_name }}"
+            data-ma-tab="move">
       {% if machine.current_installation %}
-      <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Déplacer
+      <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Déplacer / Retirer
       {% else %}
-      Installer
+      <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Installer
       {% endif %}
     </button>
     {% endif %}
@@ -231,122 +231,10 @@
       <span>{{ inst.installed_at.strftime('%d/%m/%Y') }}</span>
     </li>
   </ul>
-  <form method="post"
-        action="{{ url_for('machines.remove_installation', machine_id=machine.id, inst_id=inst.id) }}"
-        class="d-flex flex-wrap align-items-end gap-2">
-    {{ remove_form.hidden_tag() }}
-    <div>
-      <label for="{{ remove_form.removed_at.id }}" class="form-label form-label-sm mb-0">Retrait le</label>
-      {{ remove_form.removed_at(class="form-control form-control-sm", id=remove_form.removed_at.id, style="width: 12rem;") }}
-    </div>
-    <div>
-      <label for="detail-move-to" class="form-label form-label-sm mb-0">Déplacer chez</label>
-      {{ remove_form.move_to_member_id(class="form-select form-select-sm", id="detail-move-to", style="width: 14rem;") }}
-    </div>
-    <button type="submit" class="btn btn-outline-danger btn-sm">Récupérer</button>
-  </form>
-  {% endif %}
   {% else %}
   <p class="text-muted">Machine non installée actuellement.</p>
   {% endif %}
-
-  {# Inline install form #}
-  <div class="collapse mt-3" id="install-form">
-    <div class="border rounded p-3 bg-light">
-      <h3 class="h6 mb-3">{{ 'Déplacer la machine' if machine.current_installation else 'Installer la machine' }}</h3>
-      <form method="post"
-            action="{{ url_for('machines.install', machine_id=machine.id) }}"
-            novalidate>
-        {{ install_form.hidden_tag() }}
-        <div class="row g-2">
-          <div class="col-sm-3">
-            <label for="detail-loc-type" class="form-label">Emplacement</label>
-            {{ install_form.location_type(class="form-select", id="detail-loc-type") }}
-          </div>
-          <div class="col-sm-4" id="detail-center-group">
-            <label for="{{ install_form.center_id.id }}" class="form-label">Centre</label>
-            {{ install_form.center_id(class="form-select", id=install_form.center_id.id) }}
-          </div>
-          <div class="col-sm-4 d-none" id="detail-member-group">
-            <label for="{{ install_form.hosted_by_id.id }}" class="form-label">Membre</label>
-            {{ install_form.hosted_by_id(class="form-select", id=install_form.hosted_by_id.id) }}
-          </div>
-          <div class="col-sm-3">
-            <label for="{{ install_form.installed_at.id }}" class="form-label">Date</label>
-            {{ install_form.installed_at(class="form-control", id=install_form.installed_at.id) }}
-          </div>
-          <div class="col-sm-2 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100">Confirmer</button>
-          </div>
-        </div>
-        <div class="mt-2">
-          <label for="{{ install_form.notes.id }}" class="form-label">Notes</label>
-          {{ install_form.notes(class="form-control", id=install_form.notes.id, rows=2) }}
-        </div>
-      </form>
-    </div>
-  </div>
-  <script data-cfasync="false" nonce="{{ csp_nonce() }}">
-  (function () {
-    const locType = document.getElementById('detail-loc-type');
-    if (!locType) return;
-    const cg = document.getElementById('detail-center-group');
-    const mg = document.getElementById('detail-member-group');
-    locType.addEventListener('change', function () {
-      if (locType.value === 'member') {
-        cg.classList.add('d-none');
-        mg.classList.remove('d-none');
-      } else {
-        cg.classList.remove('d-none');
-        mg.classList.add('d-none');
-      }
-    });
-  }());
-  </script>
 </section>
-
-{% if pending_install %}
-<div class="modal fade" id="confirmMoveModal" tabindex="-1"
-     aria-labelledby="confirmMoveLabel" aria-modal="true" role="dialog">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="confirmMoveLabel">
-          <i class="bi bi-arrow-left-right me-2" aria-hidden="true"></i>Déménagement de la machine
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-      </div>
-      <form method="post" action="{{ url_for('machines.install', machine_id=machine.id) }}" novalidate>
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="confirmed_move" value="1">
-        <div class="modal-body">
-          <p class="mb-2">Cette machine est actuellement installée :</p>
-          <p class="fw-semibold mb-3">
-            <i class="bi bi-geo-alt me-1" aria-hidden="true"></i>{{ pending_install.current_loc }}
-            <span class="text-muted fw-normal">— depuis le {{ pending_install.current_since }}</span>
-          </p>
-          <p class="mb-0">
-            Confirmer l'installation <strong>{{ pending_install.label }}</strong> ?
-            L'installation actuelle sera clôturée à la date d'aujourd'hui.
-          </p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-warning">
-            <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Confirmer le déménagement
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-<script data-cfasync="false" nonce="{{ csp_nonce() }}">
-(function () {
-  var el = document.getElementById('confirmMoveModal');
-  if (el) { new bootstrap.Modal(el, {backdrop: 'static'}).show(); }
-}());
-</script>
-{% endif %}
 
 {# Installation history #}
 <section aria-labelledby="history-heading" class="mb-4">
@@ -401,53 +289,16 @@
       <span class="badge bg-warning text-dark ms-1">{{ open_records | length }} en cours</span>
       {% endif %}
     </h2>
-    {% if current_user.is_bureau and machine.status.value != "retired" %}
+    {% if can_machines and machine.status.value != "retired" %}
     <button class="btn btn-outline-warning btn-sm"
             type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#maint-form"
-            aria-expanded="false"
-            aria-controls="maint-form">
-      <i class="bi bi-tools me-1" aria-hidden="true"></i>Ouvrir une fiche
+            data-bs-toggle="modal" data-bs-target="#machineActionsModal"
+            data-ma-id="{{ machine.id }}" data-ma-name="{{ machine.display_name }}"
+            data-ma-tab="panne">
+      <i class="bi bi-tools me-1" aria-hidden="true"></i>Signaler une panne
     </button>
     {% endif %}
   </div>
-
-  {% if current_user.is_bureau %}
-  <div class="collapse mb-3" id="maint-form">
-    <div class="border rounded p-3 bg-light">
-      <h3 class="h6 mb-3">Nouvelle fiche de maintenance</h3>
-      <form method="post"
-            action="{{ url_for('machines.add_maintenance', machine_id=machine.id) }}"
-            novalidate>
-        {{ maint_form.hidden_tag() }}
-        <div class="row g-2 mb-2">
-          <div class="col-sm-3">
-            <label for="{{ maint_form.date.id }}" class="form-label">Date</label>
-            {{ maint_form.date(class="form-control", id=maint_form.date.id) }}
-          </div>
-          <div class="col-sm-5">
-            <label for="{{ maint_form.maintainer_name.id }}" class="form-label">Intervenant</label>
-            {{ maint_form.maintainer_name(class="form-control", id=maint_form.maintainer_name.id) }}
-          </div>
-          <div class="col-sm-2">
-            <label for="{{ maint_form.cost.id }}" class="form-label">Coût (€)</label>
-            {{ maint_form.cost(class="form-control", id=maint_form.cost.id, step="0.01") }}
-          </div>
-          <div class="col-sm-2">
-            <label for="{{ maint_form.source_task_id.id }}" class="form-label">Tâche #</label>
-            {{ maint_form.source_task_id(class="form-control", id=maint_form.source_task_id.id, placeholder="optionnel") }}
-          </div>
-        </div>
-        <div class="mb-2">
-          <label for="{{ maint_form.description.id }}" class="form-label">Description</label>
-          {{ maint_form.description(class="form-control", id=maint_form.description.id, rows=3) }}
-        </div>
-        <button type="submit" class="btn btn-warning">Enregistrer</button>
-      </form>
-    </div>
-  </div>
-  {% endif %}
 
   {# ---- Fiches en cours ---- #}
   {% if open_records %}
@@ -620,6 +471,20 @@
   </ul>
 </section>
 {% endif %}
+
+{# ── Modal unifié — déplacer / installer / retirer + signaler une panne ──── #}
+{% with
+  ma_machine=machine,
+  ma_machines=None,
+  ma_centers=centers_choices,
+  ma_members=members_choices,
+  ma_today=today,
+  ma_move_url=url_for('machines.install', machine_id=0),
+  ma_panne_url=url_for('machines.add_maintenance', machine_id=0),
+  ma_default_tab='move'
+%}
+  {% include "components/machine_actions_modal.html" %}
+{% endwith %}
 {% endblock %}
 
 {% block page_help %}
@@ -633,9 +498,15 @@
 </ul>
 <h3>Maintenance</h3>
 <ul>
+  <li>Les membres disposant de la permission <em>machines</em> (et le bureau) peuvent signaler une panne et résoudre une fiche.</li>
   <li>La machine reste en statut <em>Maintenance</em> tant qu'une fiche est ouverte.</li>
   <li>Plusieurs fiches peuvent être ouvertes simultanément.</li>
   <li>La résolution d'une fiche restaure le statut seulement quand toutes sont résolues.</li>
+</ul>
+<h3>Déplacement</h3>
+<ul>
+  <li><strong>Déplacer / Retirer</strong> — installer, déplacer vers un centre ou un membre, ou remettre en stock.</li>
+  <li>Le statut du centre n'est jamais modifié implicitement : cochez la case pour le passer inactif au retrait.</li>
 </ul>
 <h3>Tâches liées</h3>
 <ul>

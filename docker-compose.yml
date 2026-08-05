@@ -23,6 +23,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -50,6 +55,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -71,6 +81,11 @@ services:
     depends_on:
       redis:
         condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -88,6 +103,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -100,6 +120,11 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
     volumes:
       - redisdata:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     deploy:
       resources:
         limits:

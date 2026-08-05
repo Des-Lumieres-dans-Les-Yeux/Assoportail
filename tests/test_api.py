@@ -523,6 +523,27 @@ class TestOpenAPISpec:
         ]
         assert not leaked, f"Routes non-API exposées dans la spec OpenAPI : {leaked}"
 
+    def test_docs_blocked_for_anonymous_public_ip(self, client: FlaskClient) -> None:
+        """L'accès public (IP internet) aux docs API est refusé."""
+        resp = client.get("/api/docs/openapi.json", environ_base={"REMOTE_ADDR": "203.0.113.10"})
+        assert resp.status_code == 403
+        resp = client.get("/api/docs/swagger/", environ_base={"REMOTE_ADDR": "203.0.113.10"})
+        assert resp.status_code == 403
+
+    def test_docs_accessible_to_bureau_from_public_ip(self, bureau_client: FlaskClient) -> None:
+        """Un membre du bureau connecté peut consulter les docs, même à distance."""
+        resp = bureau_client.get(
+            "/api/docs/openapi.json", environ_base={"REMOTE_ADDR": "203.0.113.10"}
+        )
+        assert resp.status_code == 200
+
+    def test_docs_blocked_for_member_from_public_ip(self, auth_client: FlaskClient) -> None:
+        """Un simple membre connecté ne voit pas les docs depuis une IP publique."""
+        resp = auth_client.get(
+            "/api/docs/openapi.json", environ_base={"REMOTE_ADDR": "203.0.113.10"}
+        )
+        assert resp.status_code == 403
+
     def test_last_used_at_update_not_audited(
         self, app: Flask, client: FlaskClient, events_token: str, events_user_id: int
     ) -> None:

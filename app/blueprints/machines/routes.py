@@ -5,7 +5,7 @@ import logging
 import secrets
 from datetime import date
 
-from flask import Response, abort, flash, redirect, render_template, request, session, url_for
+from flask import Response, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
@@ -21,7 +21,7 @@ from app.blueprints.machines.forms import (
     RemoveInstallationForm,
     ResolveMaintenanceForm,
 )
-from app.decorators import bureau_required
+from app.decorators import any_permission_required, bureau_required, permission_required
 from app.extensions import db, limiter
 from app.models.center import Center, CenterFeedback, CenterStatus
 from app.models.document import Document, DocumentType, machine_documents
@@ -34,7 +34,7 @@ from app.models.machine import (
     MaintenanceStatus,
 )
 from app.models.task import Task
-from app.models.user import User
+from app.models.user import User, UserPermission
 from app.services.csv_io import export_machines_csv, parse_machines_csv
 
 logger = logging.getLogger(__name__)
@@ -206,30 +206,17 @@ def detail(machine_id: int):
     if machine is None:
         abort(404)
 
-    install_form = InstallMachineForm()
-    install_form.center_id.choices = [("", "— choisir —")] + _active_center_choices()
-    install_form.hosted_by_id.choices = [("", "— choisir —")] + _member_choices()
-
-    remove_form = RemoveInstallationForm()
-    remove_form.move_to_member_id.choices = [("", "— aucun —")] + _member_choices()
-
-    maint_form = MaintenanceRecordForm()
-    maint_form.maintainer_name.data = maint_form.maintainer_name.data or current_user.full_name
     resolve_form = ResolveMaintenanceForm()
-
-    pending_install = session.pop(f"pending_install_{machine_id}", None)
 
     return render_template(
         "machines/detail.html",
         machine=machine,
-        install_form=install_form,
-        remove_form=remove_form,
-        maint_form=maint_form,
         resolve_form=resolve_form,
         MachineStatus=MachineStatus,
         MaintenanceStatus=MaintenanceStatus,
         today=date.today().isoformat(),
-        pending_install=pending_install,
+        centers_choices=_active_center_choices(),
+        members_choices=_member_choices(),
     )
 
 
@@ -339,46 +326,22 @@ def edit(machine_id: int):
 
 
 @bp.route("/<int:machine_id>/install", methods=["POST"])
-@bureau_required
+@any_permission_required(UserPermission.MACHINES, UserPermission.CENTERS)
 def install(machine_id: int):
-    """Install a machine at a center or a member's home (or confirm a move)."""
+    """Install a machine at a center or a member's home (or move it directly).
+
+    If the machine already has an active installation, the move is applied
+    immediately: the current installation is closed on the new date and a new
+    one is created at the target location. This removes the previous two-step
+    "confirm move" flow.
+    """
     machine = db.session.get(Machine, machine_id)
     if machine is None:
         abort(404)
-
-    # ── Confirmed move: use data saved in session ─────────────────────────────
-    if request.form.get("confirmed_move") == "1":
-        pending = session.pop(f"pending_install_{machine_id}", None)
-        if not pending:
-            flash("Session expirée. Veuillez réessayer l'installation.", "warning")
-            return redirect(url_for("machines.detail", machine_id=machine_id))
-        active = db.session.execute(
-            db.select(MachineInstallation).where(
-                MachineInstallation.machine_id == machine_id,
-                MachineInstallation.removed_at.is_(None),
-            )
-        ).scalar_one_or_none()
-        if active:
-            active.removed_at = date.today()
-        installation = MachineInstallation(
-            machine_id=machine_id,
-            center_id=pending["center_id"],
-            hosted_by_id=pending["hosted_by_id"],
-            installed_at=date.fromisoformat(pending["installed_at"]),
-            notes=pending["notes"],
-        )
-        machine.status = MachineStatus.INSTALLED
-        db.session.add(installation)
-        try:
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            flash("Impossible de déplacer la machine.", "danger")
-        else:
-            flash(f"Machine déplacée {pending['label']}.", "success")
+    if machine.status == MachineStatus.RETIRED:
+        flash("Cette machine est retirée du parc.", "danger")
         return redirect(url_for("machines.detail", machine_id=machine_id))
 
-    # ── Standard install flow ─────────────────────────────────────────────────
     form = InstallMachineForm()
     form.center_id.choices = [("", "—")] + _active_center_choices()
     form.hosted_by_id.choices = [("", "—")] + _member_choices()
@@ -404,6 +367,33 @@ def install(machine_id: int):
             flash("Membre introuvable.", "danger")
             return redirect(url_for("machines.detail", machine_id=machine_id))
         label = f"chez {member.full_name}"
+    elif loc_type == "stock":
+        active = db.session.execute(
+            db.select(MachineInstallation)
+            .options(
+                selectinload(MachineInstallation.center),
+                selectinload(MachineInstallation.hosted_by),
+            )
+            .where(
+                MachineInstallation.machine_id == machine_id,
+                MachineInstallation.removed_at.is_(None),
+            )
+        ).scalar_one_or_none()
+        if not active:
+            flash("Cette machine n'est pas installée actuellement.", "warning")
+            return redirect(url_for("machines.detail", machine_id=machine_id))
+        active.removed_at = form.installed_at.data
+        if active.center_id and form.mark_center_inactive.data:
+            center = db.session.get(Center, active.center_id)
+            if center and center.status != CenterStatus.INACTIVE:
+                center.status = CenterStatus.INACTIVE
+        machine.status = MachineStatus.STOCK
+        db.session.commit()
+        flash("Machine récupérée et remise en stock.", "success")
+        next_url = request.form.get("_next", "")
+        if next_url.startswith("/") and not next_url.startswith("//"):
+            return redirect(next_url)
+        return redirect(url_for("machines.detail", machine_id=machine_id))
     else:
         center_id = form.center_id.data
         if not center_id:
@@ -413,9 +403,14 @@ def install(machine_id: int):
         if center is None:
             flash("Centre introuvable.", "danger")
             return redirect(url_for("machines.detail", machine_id=machine_id))
+        # Installing a machine reactivates the partnership.
+        if center.status != CenterStatus.ACTIVE:
+            center.status = CenterStatus.ACTIVE
         label = f"au centre « {center.name} »"
 
-    # Check for existing active installation
+    installed_at = form.installed_at.data
+
+    # Existing active installation → this is a direct move.
     active = db.session.execute(
         db.select(MachineInstallation)
         .options(
@@ -429,28 +424,18 @@ def install(machine_id: int):
     ).scalar_one_or_none()
 
     if active:
-        current_loc = (
-            active.center.name
-            if active.center
-            else (active.hosted_by.full_name if active.hosted_by else "lieu inconnu")
-        )
-        session[f"pending_install_{machine_id}"] = {
-            "location_type": loc_type,
-            "center_id": center_id,
-            "hosted_by_id": hosted_by_id,
-            "installed_at": str(form.installed_at.data),
-            "notes": (form.notes.data or "").strip() or None,
-            "label": label,
-            "current_loc": current_loc,
-            "current_since": active.installed_at.strftime("%d/%m/%Y"),
-        }
-        return redirect(url_for("machines.detail", machine_id=machine_id))
+        same_center = active.center_id is not None and active.center_id == center_id
+        same_member = active.hosted_by_id is not None and active.hosted_by_id == hosted_by_id
+        if same_center or same_member:
+            flash("Cette machine est déjà installée à cet emplacement.", "warning")
+            return redirect(url_for("machines.detail", machine_id=machine_id))
+        active.removed_at = installed_at
 
     installation = MachineInstallation(
         machine_id=machine_id,
         center_id=center_id,
         hosted_by_id=hosted_by_id,
-        installed_at=form.installed_at.data,
+        installed_at=installed_at,
         notes=(form.notes.data or "").strip() or None,
     )
     machine.status = MachineStatus.INSTALLED
@@ -461,7 +446,14 @@ def install(machine_id: int):
         db.session.rollback()
         flash("Cette machine est déjà installée.", "danger")
         return redirect(url_for("machines.detail", machine_id=machine_id))
-    flash(f"Machine installée {label}.", "success")
+
+    if active:
+        flash(
+            f"Machine déplacée {label} (depuis le {installed_at.strftime('%d/%m/%Y')}).",
+            "success",
+        )
+    else:
+        flash(f"Machine installée {label}.", "success")
     next_url = request.form.get("_next", "")
     if next_url.startswith("/") and not next_url.startswith("//"):
         return redirect(next_url)
@@ -469,12 +461,13 @@ def install(machine_id: int):
 
 
 @bp.route("/<int:machine_id>/installations/<int:inst_id>/remove", methods=["POST"])
-@bureau_required
+@any_permission_required(UserPermission.MACHINES, UserPermission.CENTERS)
 def remove_installation(machine_id: int, inst_id: int):
     """Mark an active installation as removed.
 
-    If the machine was at a center, the center is set to INACTIVE.
-    Optionally moves the machine directly to a member's home.
+    Optionally moves the machine directly to a member's home. The center's
+    partnership status is never changed implicitly — the caller can explicitly
+    mark it as inactive via the ``mark_center_inactive`` checkbox.
     """
     installation = db.session.get(MachineInstallation, inst_id)
     if installation is None or installation.machine_id != machine_id:
@@ -489,8 +482,8 @@ def remove_installation(machine_id: int, inst_id: int):
     if form.validate_on_submit():
         installation.removed_at = form.removed_at.data
 
-        # If retrieved from a center, set center to INACTIVE
-        if installation.center_id:
+        # Only flip the center to INACTIVE when the caller explicitly checks it.
+        if installation.center_id and form.mark_center_inactive.data:
             center = db.session.get(Center, installation.center_id)
             if center and center.status != CenterStatus.INACTIVE:
                 center.status = CenterStatus.INACTIVE
@@ -533,7 +526,7 @@ def remove_installation(machine_id: int, inst_id: int):
 
 
 @bp.route("/<int:machine_id>/maintenance", methods=["POST"])
-@bureau_required
+@permission_required(UserPermission.MACHINES)
 def add_maintenance(machine_id: int):
     """Add an open maintenance record for a machine.
 
@@ -592,7 +585,7 @@ def add_maintenance(machine_id: int):
 
 
 @bp.route("/<int:machine_id>/maintenance/<int:record_id>/resolve", methods=["POST"])
-@bureau_required
+@permission_required(UserPermission.MACHINES)
 def resolve_maintenance(machine_id: int, record_id: int):
     """Resolve an open maintenance record and restore the machine status.
 
@@ -650,7 +643,7 @@ def resolve_maintenance(machine_id: int, record_id: int):
 
 
 @bp.route("/<int:machine_id>/maintenance/<int:record_id>/delete", methods=["POST"])
-@bureau_required
+@permission_required(UserPermission.MACHINES)
 def delete_maintenance(machine_id: int, record_id: int):
     """Delete a maintenance record.
 
@@ -698,7 +691,7 @@ def delete_maintenance(machine_id: int, record_id: int):
 
 
 @bp.route("/<int:machine_id>/check", methods=["POST"])
-@login_required
+@permission_required(UserPermission.MACHINES)
 def check_operational(machine_id: int):
     """Mark a machine as operational, resetting the days-since-last-activity counter."""
     machine = db.session.get(Machine, machine_id)
@@ -1311,11 +1304,14 @@ def _make_safe_filename(name: str, max_len: int = 40) -> str:
 
 
 def _active_center_choices() -> list[tuple[int, str]]:
-    """Return (id, name) pairs for centers that can receive machines."""
+    """Return (id, name) pairs for centers that can receive machines.
+
+    All centers except ``LOST`` are selectable so a machine can be (re)installed
+    or moved at any partner center — including one whose machines were all
+    retrieved (the center's status is not implicitly changed on retrieval).
+    """
     centers = db.session.scalars(
-        db.select(Center)
-        .where(Center.status.in_([CenterStatus.ACTIVE.value, CenterStatus.PROSPECT.value]))
-        .order_by(Center.name)
+        db.select(Center).where(Center.status != CenterStatus.LOST).order_by(Center.name)
     ).all()
     return [(c.id, f"{c.name} ({c.city})") for c in centers]
 

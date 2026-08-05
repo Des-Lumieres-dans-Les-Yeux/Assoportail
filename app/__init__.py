@@ -1,5 +1,6 @@
 """Assoportail application factory."""
 
+import ipaddress
 import logging
 import os
 
@@ -11,6 +12,24 @@ from app.config import config_by_name
 from app.extensions import csrf, db, limiter, login_manager, migrate, talisman
 
 logger = logging.getLogger(__name__)
+
+
+def _is_private_ip(ip: str | None) -> bool:
+    """Return True for loopback, link-local and RFC1918 private addresses.
+
+    Used to restrict internal endpoints (/health, /api/docs) to the local
+    network. With ProxyFix, ``request.remote_addr`` is rewritten to the real
+    client IP for proxied requests, so public internet callers are rejected
+    while the container-local orchestration healthcheck still works.
+    """
+    if not ip:
+        return False
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return addr.is_loopback or addr.is_link_local or addr.is_private or addr.is_reserved
+
 
 # Relaxed CSP applied only to the Swagger UI / ReDoc documentation pages
 # (/api/docs/*). Swagger UI is a React app that injects inline styles and an
@@ -61,6 +80,24 @@ def create_app(config_name: str | None = None) -> Flask:
         if request.path.startswith("/api/docs"):
             response.headers["Content-Security-Policy"] = _API_DOCS_CSP
         return response
+
+    @app.before_request
+    def _restrict_internal_endpoints():
+        from flask import abort, request
+        from flask_login import current_user
+
+        # /health is consumed by container orchestration from localhost. Reject
+        # public internet callers (ProxyFix rewrites remote_addr to the real IP).
+        if request.path == "/health" and not _is_private_ip(request.remote_addr):
+            abort(403)
+
+        # /api/docs/* (Swagger/OpenAPI) expose the API surface. Bureau members
+        # may consult them after login; otherwise only private-network callers.
+        if request.path.startswith("/api/docs"):
+            bureau_ok = current_user.is_authenticated and getattr(current_user, "is_bureau", False)
+            if not bureau_ok and not _is_private_ip(request.remote_addr):
+                abort(403)
+        return None
 
     _init_extensions(app)
     _register_blueprints(app)

@@ -1,0 +1,280 @@
+{# Modal unifié « machine » : déplacer/installer/retirer + signaler une panne.
+   S'utilise sur les pages machines ET centres (une seule source de vérité).
+
+   Variables attendues :
+     ma_modal_id      — id du modal (par défaut "machineActionsModal")
+     ma_machine       — Machine fixe (page détail machine) ou None
+     ma_machines      — liste de Machines pour un sélecteur (page centre) ou None
+     ma_centers       — liste (id, label) des centres recevables
+     ma_members       — liste (id, label) des membres hébergeurs
+     ma_today         — date du jour ISO (yyyy-mm-dd)
+     ma_move_url      — url_for('machines.install', machine_id=0)
+     ma_panne_url     — url_for('machines.add_maintenance', machine_id=0)
+     ma_default_tab   — 'move' ou 'panne'
+   Chaque bouton d'ouverture doit porter data-ma-id (+ optionnel data-ma-tab,
+   data-ma-name). Le JS renseigne les actions des formulaires. #}
+{% set _ma_modal_id = ma_modal_id or 'machineActionsModal' %}
+<div class="modal fade" id="{{ _ma_modal_id }}" tabindex="-1"
+     aria-labelledby="{{ _ma_modal_id }}-title" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="{{ _ma_modal_id }}-title">Gestion machine</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+
+      <ul class="nav nav-tabs px-2 pt-2" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link{{ '' if ma_default_tab == 'panne' else ' active' }}"
+                  id="{{ _ma_modal_id }}-tab-move" data-bs-toggle="tab"
+                  data-bs-target="#{{ _ma_modal_id }}-panel-move" type="button" role="tab"
+                  aria-controls="{{ _ma_modal_id }}-panel-move" aria-selected="{{ 'false' if ma_default_tab == 'panne' else 'true' }}">
+            <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Déplacer / Installer / Retirer
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link{{ ' active' if ma_default_tab == 'panne' else '' }}"
+                  id="{{ _ma_modal_id }}-tab-panne" data-bs-toggle="tab"
+                  data-bs-target="#{{ _ma_modal_id }}-panel-panne" type="button" role="tab"
+                  aria-controls="{{ _ma_modal_id }}-panel-panne" aria-selected="{{ 'true' if ma_default_tab == 'panne' else 'false' }}">
+            <i class="bi bi-tools me-1" aria-hidden="true"></i>Signaler une panne
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        {# ── Onglet déplacement ─────────────────────────────────────────────── #}
+        <div class="tab-pane fade{{ '' if ma_default_tab == 'panne' else ' show active' }}"
+             id="{{ _ma_modal_id }}-panel-move" role="tabpanel"
+             aria-labelledby="{{ _ma_modal_id }}-tab-move">
+          <form id="{{ _ma_modal_id }}-move-form" method="post" action="" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-body">
+              {% if ma_machines %}
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-move-machine">
+                  Machine <span class="text-danger">*</span>
+                </label>
+                <select id="{{ _ma_modal_id }}-move-machine" name="machine_sel"
+                        class="form-select" required>
+                  <option value="">— choisir une machine —</option>
+                  {% for m in ma_machines %}
+                  <option value="{{ m.id }}" data-name="{{ m.display_name }}">{{ m.display_name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              {% endif %}
+              <p class="text-muted small mb-3" id="{{ _ma_modal_id }}-move-machine-label"></p>
+
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-loc-type">Emplacement</label>
+                <select id="{{ _ma_modal_id }}-loc-type" name="location_type" class="form-select">
+                  <option value="center" selected>Centre</option>
+                  <option value="member">Membre</option>
+                  <option value="stock">Remise en stock</option>
+                </select>
+              </div>
+              <div class="mb-3" id="{{ _ma_modal_id }}-center-group">
+                <label class="form-label" for="{{ _ma_modal_id }}-center">
+                  Centre <span class="text-danger">*</span>
+                </label>
+                <select id="{{ _ma_modal_id }}-center" name="center_id" class="form-select">
+                  <option value="">— choisir un centre —</option>
+                  {% for cid, cname in ma_centers %}
+                  <option value="{{ cid }}">{{ cname }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3 d-none" id="{{ _ma_modal_id }}-member-group">
+                <label class="form-label" for="{{ _ma_modal_id }}-member">
+                  Membre <span class="text-danger">*</span>
+                </label>
+                <select id="{{ _ma_modal_id }}-member" name="hosted_by_id" class="form-select">
+                  <option value="">— choisir un membre —</option>
+                  {% for mid, mname in ma_members %}
+                  <option value="{{ mid }}">{{ mname }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-date">Date</label>
+                <input type="date" id="{{ _ma_modal_id }}-date" name="installed_at"
+                       class="form-control" value="{{ ma_today }}" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-notes">Notes</label>
+                <textarea id="{{ _ma_modal_id }}-notes" name="notes"
+                          class="form-control" rows="2" maxlength="500"></textarea>
+              </div>
+              <div class="form-check" id="{{ _ma_modal_id }}-inactive-group">
+                <input class="form-check-input" type="checkbox" value="y"
+                       name="mark_center_inactive" id="{{ _ma_modal_id }}-inactive">
+                <label class="form-check-label" for="{{ _ma_modal_id }}-inactive">
+                  Marquer le centre actuel comme inactif (au retrait uniquement)
+                </label>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Confirmer
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {# ── Onglet panne ───────────────────────────────────────────────────── #}
+        <div class="tab-pane fade{{ ' show active' if ma_default_tab == 'panne' else '' }}"
+             id="{{ _ma_modal_id }}-panel-panne" role="tabpanel"
+             aria-labelledby="{{ _ma_modal_id }}-tab-panne">
+          <form id="{{ _ma_modal_id }}-panne-form" method="post" action="" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-body">
+              {% if ma_machines %}
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-panne-machine">
+                  Machine <span class="text-danger">*</span>
+                </label>
+                <select id="{{ _ma_modal_id }}-panne-machine" name="machine_sel"
+                        class="form-select" required>
+                  <option value="">— choisir une machine —</option>
+                  {% for m in ma_machines %}
+                  <option value="{{ m.id }}" data-name="{{ m.display_name }}">{{ m.display_name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              {% endif %}
+              <p class="text-muted small mb-3" id="{{ _ma_modal_id }}-panne-machine-label"></p>
+
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-panne-date">
+                  Date <span class="text-danger">*</span>
+                </label>
+                <input type="date" id="{{ _ma_modal_id }}-panne-date" name="date"
+                       class="form-control" value="{{ ma_today }}" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-panne-desc">
+                  Description du problème <span class="text-danger">*</span>
+                </label>
+                <textarea id="{{ _ma_modal_id }}-panne-desc" name="description"
+                          class="form-control" rows="3" required maxlength="2000"
+                          placeholder="Décrivez la panne ou l'intervention…"></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-panne-who">
+                  Signalé par <span class="text-danger">*</span>
+                </label>
+                <input type="text" id="{{ _ma_modal_id }}-panne-who" name="maintainer_name"
+                       class="form-control" value="{{ current_user.full_name }}"
+                       required maxlength="100">
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-sm-6">
+                  <label class="form-label" for="{{ _ma_modal_id }}-panne-cost">Coût (€) <span class="text-muted">(optionnel)</span></label>
+                  <input type="number" id="{{ _ma_modal_id }}-panne-cost" name="cost"
+                         class="form-control" step="0.01" min="0" placeholder="0.00">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label" for="{{ _ma_modal_id }}-panne-task">Tâche liée # <span class="text-muted">(optionnel)</span></label>
+                  <input type="number" id="{{ _ma_modal_id }}-panne-task" name="source_task_id"
+                         class="form-control" min="1" placeholder="123">
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+              <button type="submit" class="btn btn-warning">
+                <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Signaler la panne
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script data-cfasync="false" nonce="{{ csp_nonce() }}">
+(function () {
+  var modal = document.getElementById('{{ _ma_modal_id }}');
+  if (!modal) return;
+  var moveForm = document.getElementById('{{ _ma_modal_id }}-move-form');
+  var panneForm = document.getElementById('{{ _ma_modal_id }}-panne-form');
+  var moveMachineSel = document.getElementById('{{ _ma_modal_id }}-move-machine');
+  var panneMachineSel = document.getElementById('{{ _ma_modal_id }}-panne-machine');
+  var moveLabel = document.getElementById('{{ _ma_modal_id }}-move-machine-label');
+  var panneLabel = document.getElementById('{{ _ma_modal_id }}-panne-machine-label');
+
+  function machineIdFrom() {
+    var btn = modal._maButton;
+    if (btn && btn.dataset.maId) return btn.dataset.maId;
+    return null;
+  }
+
+  function machineNameFrom() {
+    var btn = modal._maButton;
+    if (btn && btn.dataset.maName) return btn.dataset.maName;
+    return null;
+  }
+
+  function setActions(machineId, name) {
+    if (moveForm && machineId) {
+      moveForm.action = '{{ ma_move_url }}'.replace('/0/install', '/' + machineId + '/install');
+    }
+    if (panneForm && machineId) {
+      panneForm.action = '{{ ma_panne_url }}'.replace('/0/maintenance', '/' + machineId + '/maintenance');
+    }
+    if (moveLabel) moveLabel.textContent = name ? 'Machine : ' + name : '';
+    if (panneLabel) panneLabel.textContent = name ? 'Machine : ' + name : '';
+  }
+
+  modal.addEventListener('show.bs.modal', function (e) {
+    modal._maButton = e.relatedTarget;
+    var tab = (e.relatedTarget && e.relatedTarget.dataset.maTab) || '{{ ma_default_tab or "move" }}';
+    var trigger = tab === 'panne' ? modal.querySelector('#{{ _ma_modal_id }}-tab-panne')
+                                  : modal.querySelector('#{{ _ma_modal_id }}-tab-move');
+    if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
+
+    var fixedId = {{ (ma_machine.id if ma_machine else "")|tojson }};
+    var fixedName = {{ (ma_machine.display_name if ma_machine else "")|tojson }};
+    var machineId = fixedId || machineIdFrom() || (moveMachineSel ? moveMachineSel.value : null);
+    var name = fixedName || machineNameFrom();
+    if (moveMachineSel) {
+      moveMachineSel.addEventListener('change', function () {
+        var opt = moveMachineSel.options[moveMachineSel.selectedIndex];
+        setActions(moveMachineSel.value, opt && opt.dataset.name);
+      });
+    }
+    if (panneMachineSel) {
+      panneMachineSel.addEventListener('change', function () {
+        var opt = panneMachineSel.options[panneMachineSel.selectedIndex];
+        setActions(panneMachineSel.value, opt && opt.dataset.name);
+      });
+    }
+    setActions(machineId, name);
+  });
+
+  var locType = document.getElementById('{{ _ma_modal_id }}-loc-type');
+  if (locType) {
+    var centerGroup = document.getElementById('{{ _ma_modal_id }}-center-group');
+    var memberGroup = document.getElementById('{{ _ma_modal_id }}-member-group');
+    var inactiveGroup = document.getElementById('{{ _ma_modal_id }}-inactive-group');
+    locType.addEventListener('change', function () {
+      if (locType.value === 'member') {
+        centerGroup.classList.add('d-none');
+        memberGroup.classList.remove('d-none');
+        inactiveGroup.classList.add('d-none');
+      } else if (locType.value === 'stock') {
+        centerGroup.classList.add('d-none');
+        memberGroup.classList.add('d-none');
+        inactiveGroup.classList.remove('d-none');
+      } else {
+        centerGroup.classList.remove('d-none');
+        memberGroup.classList.add('d-none');
+        inactiveGroup.classList.add('d-none');
+      }
+    });
+  }
+}());
+</script>

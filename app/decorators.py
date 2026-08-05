@@ -56,6 +56,30 @@ def permission_required(permission: UserPermission) -> Callable:
     return decorator
 
 
+def any_permission_required(*permissions: UserPermission) -> Callable:
+    """Restrict a view to users holding at least one of the given permissions.
+
+    Bureau members always have access. The view is allowed for any member who
+    has at least one of the requested granular permissions.
+    """
+
+    def decorator(f: Callable) -> Callable:
+        @wraps(f)
+        @login_required
+        def decorated(*args: object, **kwargs: object) -> object:
+            if not current_user.is_active:
+                abort(403)
+            if not (
+                current_user.is_bureau or any(current_user.has_permission(p) for p in permissions)
+            ):
+                abort(403)
+            return f(*args, **kwargs)
+
+        return decorated
+
+    return decorator
+
+
 def member_required(f: Callable) -> Callable:
     """Restrict a view to active, authenticated members.
 

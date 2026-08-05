@@ -3,6 +3,8 @@
 {% block title %}{{ center.name }} — Centres — Assoportail{% endblock %}
 
 {% block content %}
+{% set can_machines = current_user.is_bureau or current_user.has_permission('machines') %}
+{% set can_move = current_user.is_bureau or current_user.has_permission('machines') or current_user.has_permission('centers') %}
 <nav aria-label="Fil d'Ariane" class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{{ url_for('centers.list_centers') }}">Centres</a></li>
@@ -440,37 +442,25 @@
   <p class="text-muted">Aucune machine installée.</p>
   {% endif %}
 
-  {% if current_user.has_permission('centers') %}
-  <details class="mt-3">
-    <summary class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Installer une machine
-    </summary>
-    {% if available_machines %}
-    <form method="post" action="{{ url_for('centers.install_machine', center_id=center.id) }}"
-          class="mt-3 border rounded p-3 bg-light d-flex align-items-end gap-3 flex-wrap"
-          style="max-width: 42rem;" novalidate>
-      {{ install_form.hidden_tag() }}
-      <div class="flex-grow-1">
-        <label for="{{ install_form.machine_id.id }}" class="form-label small">
-          Machine <span class="text-danger">*</span>
-        </label>
-        {{ install_form.machine_id(class="form-select form-select-sm", id=install_form.machine_id.id) }}
-      </div>
-      <div>
-        <label for="{{ install_form.installed_at.id }}" class="form-label small">
-          Date d'installation <span class="text-danger">*</span>
-        </label>
-        {{ install_form.installed_at(class="form-control form-control-sm", id=install_form.installed_at.id,
-                                     type="date") }}
-      </div>
-      <button type="submit" class="btn btn-primary btn-sm text-nowrap">
-        <i class="bi bi-box-arrow-in-down me-1" aria-hidden="true"></i>Installer
-      </button>
-    </form>
-    {% else %}
-    <p class="text-muted mt-3 mb-0">Aucune machine disponible en stock.</p>
+  {% if can_move %}
+  <div class="mt-3">
+    <button class="btn btn-outline-primary btn-sm" type="button"
+            data-bs-toggle="modal" data-bs-target="#machineActionsModal"
+            data-ma-tab="move">
+      <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>Installer / Déplacer une machine
+    </button>
+    {% if can_machines %}
+    <button class="btn btn-outline-danger btn-sm ms-1" type="button"
+            data-bs-toggle="modal" data-bs-target="#machineActionsModal"
+            data-ma-tab="panne">
+      <i class="bi bi-tools me-1" aria-hidden="true"></i>Signaler une panne
+    </button>
     {% endif %}
-  </details>
+  </div>
+  {% elif available_machines and current_user.has_permission('centers') %}
+  <div class="mt-3">
+    <p class="text-muted mb-0 small">Aucune permission pour installer/déplacer une machine.</p>
+  </div>
   {% endif %}
 </section>
 
@@ -510,43 +500,21 @@
 </section>
 {% endif %}
 
-{# Breakdown report #}
+{# Breakdown report — via the unified modal #}
+{% if can_machines %}
 <section aria-labelledby="breakdown-heading" class="mb-4">
   <div class="d-flex justify-content-between align-items-center mb-2">
     <h2 class="h5 mb-0" id="breakdown-heading">Signaler une panne</h2>
     <button class="btn btn-outline-danger btn-sm"
             type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#breakdown-form"
-            aria-expanded="false"
-            aria-controls="breakdown-form">
-      Signaler
+            data-bs-toggle="modal" data-bs-target="#machineActionsModal"
+            data-ma-tab="panne">
+      <i class="bi bi-tools me-1" aria-hidden="true"></i>Signaler
     </button>
   </div>
-  <div class="collapse" id="breakdown-form">
-    <div class="border rounded p-3 bg-light" style="max-width: 36rem;">
-      <form method="post"
-            action="{{ url_for('centers.report_breakdown', center_id=center.id) }}"
-            novalidate>
-        {{ breakdown_form.hidden_tag() }}
-        <div class="mb-2">
-          <label for="{{ breakdown_form.description.id }}" class="form-label">
-            {{ breakdown_form.description.label.text }}
-          </label>
-          {{ breakdown_form.description(class="form-control", id=breakdown_form.description.id, rows=3) }}
-        </div>
-        <div class="mb-3">
-          <label for="{{ breakdown_form.priority.id }}" class="form-label">
-            {{ breakdown_form.priority.label.text }}
-          </label>
-          {{ breakdown_form.priority(class="form-select", id=breakdown_form.priority.id,
-                                      style="max-width: 12rem;") }}
-        </div>
-        <button type="submit" class="btn btn-danger">Envoyer le signalement</button>
-      </form>
-    </div>
-  </div>
+  <p class="text-muted mb-0">Choisissez la machine concernée dans le formulaire pour déclarer une panne.</p>
 </section>
+{% endif %}
 
 {# Guestbook & moderation (bureau) #}
 <section aria-labelledby="feedback-heading" class="mb-4">
@@ -660,6 +628,22 @@
   {% endif %}
   {% endif %}
 </section>
+
+{# ── Modal unifié — installer / déplacer + signaler une panne ─────────────── #}
+{% if can_move %}
+{% with
+  ma_machine=None,
+  ma_machines=modal_machines,
+  ma_centers=centers_choices,
+  ma_members=members_choices,
+  ma_today=today,
+  ma_move_url=url_for('machines.install', machine_id=0),
+  ma_panne_url=url_for('machines.add_maintenance', machine_id=0),
+  ma_default_tab='move'
+%}
+  {% include "components/machine_actions_modal.html" %}
+{% endwith %}
+{% endif %}
 {% endblock %}
 
 {% block page_help %}

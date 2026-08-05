@@ -3,7 +3,15 @@
 from datetime import date
 
 from flask_wtf import FlaskForm
-from wtforms import DateField, DecimalField, IntegerField, SelectField, StringField, TextAreaField
+from wtforms import (
+    BooleanField,
+    DateField,
+    DecimalField,
+    IntegerField,
+    SelectField,
+    StringField,
+    TextAreaField,
+)
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
 from app.models.machine import MachineStatus
@@ -18,6 +26,7 @@ _STATUS_CHOICES = [
 _LOCATION_TYPE_CHOICES = [
     ("center", "Centre"),
     ("member", "Membre"),
+    ("stock", "Remise en stock"),
 ]
 
 
@@ -89,6 +98,10 @@ class InstallMachineForm(FlaskForm):
         default=date.today,
     )
     notes = TextAreaField("Notes", validators=[Optional(), Length(max=500)])
+    mark_center_inactive = BooleanField(
+        "Marquer le centre comme inactif",
+        validators=[Optional()],
+    )
 
 
 class RemoveInstallationForm(FlaskForm):
@@ -102,6 +115,10 @@ class RemoveInstallationForm(FlaskForm):
     move_to_member_id = SelectField(
         "Déplacer chez un membre",
         coerce=lambda v: int(v) if v else None,
+        validators=[Optional()],
+    )
+    mark_center_inactive = BooleanField(
+        "Marquer le centre comme inactif",
         validators=[Optional()],
     )
 

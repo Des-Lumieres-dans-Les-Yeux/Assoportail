@@ -9,10 +9,35 @@ from flask.testing import FlaskClient
 from app.extensions import db as _db
 from app.models.center import Center, CenterStatus
 from app.models.machine import Machine, MachineInstallation, MachineStatus, MaintenanceRecord
+from app.models.user import User, UserRole
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _make_member_client(app: Flask, permissions: list[str] | None = None) -> FlaskClient:
+    """A logged-in member client with the given granular permissions."""
+    with app.app_context():
+        user = User(
+            email="technicien@test.com",
+            first_name="Tech",
+            last_name="Membre",
+            role=UserRole.MEMBER,
+            is_active=True,
+            must_change_password=False,
+            permissions=permissions or [],
+        )
+        user.set_password("motdepasse123")
+        _db.session.add(user)
+        _db.session.commit()
+        uid = user.id
+        _db.session.remove()
+    c = app.test_client()
+    with c.session_transaction() as sess:
+        sess["_user_id"] = str(uid)
+        sess["_fresh"] = True
+    return c
 
 
 def _make_machine(app: Flask, *, model: str = "Medieval Madness", status: str = "stock") -> int:
@@ -147,7 +172,11 @@ class TestMachineInstallation:
             machine = _db.session.get(Machine, mid)
             assert machine.status == MachineStatus.INSTALLED
 
-    def test_cannot_double_install_machine(self, app: Flask, bureau_client: FlaskClient) -> None:
+    def test_moving_installed_machine_moves_directly(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
+        """Installing an already-installed machine at another location moves it
+        directly: the current installation is closed and the new one opens."""
         mid = _make_machine(app)
         cid = _make_center(app)
         cid2 = _make_center(app, name="Clinique Sud")
@@ -163,18 +192,19 @@ class TestMachineInstallation:
             follow_redirects=True,
         )
         assert response.status_code == 200
-        # The new flow stores the conflict in session and shows a confirmation modal
-        # instead of a flash message, so we check for the modal trigger element.
-        assert "confirmMoveModal" in response.data.decode()
 
         with app.app_context():
-            count = _db.session.execute(
-                _db.select(_db.func.count(MachineInstallation.id)).where(
+            active = _db.session.execute(
+                _db.select(MachineInstallation).where(
                     MachineInstallation.machine_id == mid,
                     MachineInstallation.removed_at.is_(None),
                 )
-            ).scalar()
-            assert count == 1
+            ).scalar_one_or_none()
+            # Exactly one active installation, now at the new center.
+            assert active is not None
+            assert active.center_id == cid2
+            machine = _db.session.get(Machine, mid)
+            assert machine.status == MachineStatus.INSTALLED
 
     def test_bureau_can_remove_installation(self, app: Flask, bureau_client: FlaskClient) -> None:
         mid = _make_machine(app)
@@ -303,3 +333,124 @@ class TestMaintenanceRecords:
             },
         )
         assert response.status_code == 403
+
+    def test_member_with_machines_permission_can_add_maintenance(self, app: Flask) -> None:
+        """A member holding the MACHINES permission can open a breakdown record."""
+        mid = _make_machine(app)
+        tech_client = _make_member_client(app, permissions=["machines"])
+        response = tech_client.post(
+            f"/machines/{mid}/maintenance",
+            data={
+                "date": date.today().strftime("%Y-%m-%d"),
+                "description": "Flipper qui clignote",
+                "cost": "12.50",
+                "maintainer_name": "Tech Membre",
+                "source_task_id": "",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code in {301, 302}
+        with app.app_context():
+            record = _db.session.execute(
+                _db.select(MaintenanceRecord).where(MaintenanceRecord.machine_id == mid)
+            ).scalar_one_or_none()
+            assert record is not None
+            assert record.status.value == "open"
+            machine = _db.session.get(Machine, mid)
+            assert machine.status == MachineStatus.MAINTENANCE
+
+    def test_member_with_machines_permission_can_resolve_maintenance(self, app: Flask) -> None:
+        """A member holding the MACHINES permission can resolve a breakdown."""
+        mid = _make_machine(app)
+        with app.app_context():
+            record = MaintenanceRecord(
+                machine_id=mid,
+                date=date.today(),
+                description="Panne",
+                maintainer_name="Test",
+            )
+            _db.session.add(record)
+            _db.session.commit()
+            rid = record.id
+
+        tech_client = _make_member_client(app, permissions=["machines"])
+        response = tech_client.post(
+            f"/machines/{mid}/maintenance/{rid}/resolve",
+            data={
+                "resolved_at": date.today().strftime("%Y-%m-%d"),
+                "resolution_comment": "Carte mère remplacée",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code in {301, 302}
+        with app.app_context():
+            record = _db.session.get(MaintenanceRecord, rid)
+            assert record.status.value == "resolved"
+            assert record.resolution_comment == "Carte mère remplacée"
+
+
+class TestCenterStatusOnRemoval:
+    def test_removal_does_not_inactivate_center_by_default(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
+        """Retrieving a machine no longer flips the center to INACTIVE implicitly."""
+        mid = _make_machine(app)
+        cid = _make_center(app)
+        inst_id = _install(app, mid, cid)
+
+        bureau_client.post(
+            f"/machines/{mid}/installations/{inst_id}/remove",
+            data={"removed_at": date.today().strftime("%Y-%m-%d")},
+        )
+
+        with app.app_context():
+            center = _db.session.get(Center, cid)
+            assert center.status == CenterStatus.ACTIVE
+
+    def test_removal_can_explicitly_inactivate_center(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
+        """The explicit mark_center_inactive checkbox flips the center to INACTIVE."""
+        mid = _make_machine(app)
+        cid = _make_center(app)
+        inst_id = _install(app, mid, cid)
+
+        bureau_client.post(
+            f"/machines/{mid}/installations/{inst_id}/remove",
+            data={
+                "removed_at": date.today().strftime("%Y-%m-%d"),
+                "mark_center_inactive": "y",
+            },
+        )
+
+        with app.app_context():
+            center = _db.session.get(Center, cid)
+            assert center.status == CenterStatus.INACTIVE
+
+    def test_reinstall_at_inactive_center_reactivates_it(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
+        """A machine can be (re)installed at an INACTIVE center, reactivating it."""
+        mid = _make_machine(app)
+        cid = _make_center(app)
+        with app.app_context():
+            center = _db.session.get(Center, cid)
+            center.status = CenterStatus.INACTIVE
+            _db.session.commit()
+
+        response = bureau_client.post(
+            f"/machines/{mid}/install",
+            data={
+                "center_id": str(cid),
+                "installed_at": date.today().strftime("%Y-%m-%d"),
+                "notes": "",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code in {301, 302}
+
+        with app.app_context():
+            center = _db.session.get(Center, cid)
+            assert center.status == CenterStatus.ACTIVE
+            machine = _db.session.get(Machine, mid)
+            assert machine.status == MachineStatus.INSTALLED

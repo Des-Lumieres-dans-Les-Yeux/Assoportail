@@ -23,7 +23,7 @@ from app.blueprints.centers.forms import (
     InstallMachineForm,
 )
 from app.blueprints.documents.routes import _detect_mime
-from app.decorators import bureau_required, permission_required
+from app.decorators import any_permission_required, bureau_required, permission_required
 from app.extensions import db, limiter
 from app.models.center import (
     Center,
@@ -36,7 +36,7 @@ from app.models.center import (
 from app.models.document import Document, DocumentType, center_documents
 from app.models.machine import Machine, MachineInstallation, MachineStatus, MaintenanceRecord
 from app.models.task import Task, TaskSource, TaskStatus
-from app.models.user import UserPermission
+from app.models.user import User, UserPermission
 from app.services.csv_io import export_centers_csv, parse_centers_csv
 from app.services.geocoding import geocode_address
 
@@ -232,6 +232,28 @@ def detail(center_id: int):
         for m in available_machines
     ]
 
+    # Options for the unified machine-actions modal (move + breakdown).
+    centers_choices = [
+        (c.id, f"{c.name} ({c.city})")
+        for c in db.session.scalars(
+            db.select(Center).where(Center.status != CenterStatus.LOST).order_by(Center.name)
+        ).all()
+    ]
+    members_choices = [
+        (u.id, u.full_name)
+        for u in db.session.scalars(
+            db.select(User)
+            .where(User.is_active.is_(True))
+            .order_by(User.last_name, User.first_name)
+        ).all()
+    ]
+    all_machines = db.session.scalars(
+        db.select(Machine)
+        .options(selectinload(Machine.installations).selectinload(MachineInstallation.center))
+        .where(Machine.status != MachineStatus.RETIRED)
+        .order_by(Machine.manufacturer, Machine.model)
+    ).all()
+
     return render_template(
         "centers/detail.html",
         center=center,
@@ -239,6 +261,10 @@ def detail(center_id: int):
         contact_form=contact_form,
         install_form=install_form,
         available_machines=available_machines,
+        centers_choices=centers_choices,
+        members_choices=members_choices,
+        modal_machines=all_machines,
+        today=date.today().isoformat(),
     )
 
 
@@ -467,7 +493,7 @@ def detach_photo(center_id: int, document_id: int):
 
 
 @bp.route("/<int:center_id>/install", methods=["POST"])
-@permission_required(UserPermission.CENTERS)
+@any_permission_required(UserPermission.CENTERS, UserPermission.MACHINES)
 def install_machine(center_id: int):
     """Install an available machine into a center and activate the center."""
     center = db.session.get(Center, center_id)
