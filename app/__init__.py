@@ -14,6 +14,17 @@ from app.extensions import csrf, db, limiter, login_manager, migrate, talisman
 logger = logging.getLogger(__name__)
 
 
+# Plages de documentation (RFC 5737 IPv4, RFC 3849 IPv6) : Python les classe
+# ``is_private``, mais ce sont des adresses d'exemple non routables — elles ne
+# doivent jamais être considérées comme internes/confiantes.
+_DOCUMENTATION_NETS = (
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("2001:db8::/32"),
+)
+
+
 def _is_private_ip(ip: str | None) -> bool:
     """Return True for loopback, link-local and RFC1918 private addresses.
 
@@ -27,6 +38,8 @@ def _is_private_ip(ip: str | None) -> bool:
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
+        return False
+    if any(addr in net for net in _DOCUMENTATION_NETS):
         return False
     return addr.is_loopback or addr.is_link_local or addr.is_private or addr.is_reserved
 
