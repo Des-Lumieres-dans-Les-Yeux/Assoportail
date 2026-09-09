@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Affiche — {{ center.name }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root { --brand: #156082; }
+    @page { size: A4 landscape; margin: 0; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      width: 297mm; height: 210mm;
+      font-family: "Helvetica", "Arial", sans-serif;
+      color: #1f2937;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14mm 20mm;
+    }
+    h1 {
+      font-size: 34pt; font-weight: 700; letter-spacing: 1mm;
+      color: var(--brand); margin: 0 0 8mm;
+    }
+    .intro {
+      text-align: center; font-size: 13pt; line-height: 1.5; max-width: 200mm;
+      margin-bottom: 12mm;
+    }
+    .intro .assoc { font-weight: 700; color: var(--brand); }
+    .row {
+      display: flex; align-items: center; gap: 12mm;
+      border: 0.6mm solid var(--brand); border-radius: 4mm;
+      padding: 6mm 10mm; width: 100%; max-width: 220mm; margin-bottom: 8mm;
+    }
+    .row .qr-box { flex: none; border: 0.3mm solid #d1d5db; border-radius: 2mm; padding: 2mm; background: #fff; }
+    .row .qr-box img { width: 45mm; height: 45mm; display: block; }
+    .row .label { font-size: 18pt; font-weight: 700; color: var(--brand); }
+    .row .fallback-url { font-size: 7pt; color: #6b7280; margin-top: 2mm; word-break: break-all; }
+    /* Alternate QR side left/right so the two codes are easier to tell apart at a glance. */
+    .row.reverse { flex-direction: row-reverse; }
+    .row.reverse .label, .row.reverse .fallback-url { text-align: right; }
+  </style>
+</head>
+<body>
+
+<h1>FLIPPER</h1>
+
+<p class="intro">
+  Ce flipper a été mis à disposition gracieusement par l'association illkirchoise<br>
+  <span class="assoc">DES LUMIÈRES DANS LES YEUX</span><br>
+  http://www.deslumieresdanslesyeux.fr
+</p>
+
+<div class="row">
+  <span class="qr-box"><img src="data:image/svg+xml;base64,{{ breakdown_qr }}" alt=""></span>
+  <span>
+    <span class="label">Signaler un problème, une panne</span>
+    <div class="fallback-url">ou via ce lien : {{ breakdown_url }}</div>
+  </span>
+</div>
+
+<div class="row reverse">
+  <span class="qr-box"><img src="data:image/svg+xml;base64,{{ feedback_qr }}" alt=""></span>
+  <span>
+    <span class="label">Écrire un mot sur le Livre d'Or !</span>
+    <div class="fallback-url">ou via ce lien : {{ feedback_url }}</div>
+  </span>
+</div>
+
+</body>
+</html>

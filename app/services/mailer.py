@@ -211,6 +211,39 @@ def send_signing_completed_email(
     _deliver(to_email, subject, body)
 
 
+def send_center_documents_email(
+    to_email: str,
+    contact_name: str,
+    center_name: str,
+    doc_labels: list[str],
+    attachments: list[tuple[str, bytes]],
+) -> bool:
+    """Send selected center documents (convention/guide/affiche) as attachments.
+
+    Returns True/False reflecting actual delivery success, unlike ``_deliver``
+    which never raises — the caller needs a truthful flash message.
+    """
+    asso_name = _association_name()
+    if len(doc_labels) == 1:
+        docs_line = doc_labels[0]
+    else:
+        docs_line = ", ".join(doc_labels[:-1]) + " et " + doc_labels[-1]
+    subject = f"Documents du centre — {center_name}"
+    body = (
+        f"Bonjour {contact_name},\n\n"
+        f"Veuillez trouver ci-joint, pour le centre « {center_name} » : {docs_line}.\n\n"
+        f"Cordialement,\n"
+        f"L'équipe {asso_name}"
+    )
+    return _deliver_with_attachments(to_email, subject, body, attachments)
+
+
+def _association_name() -> str:
+    from app.models.config import AssociationConfig
+
+    return AssociationConfig.get().name or "l'association"
+
+
 def send_cerfa_receipt_email(
     to_email: str,
     donor_name: str,
@@ -219,9 +252,7 @@ def send_cerfa_receipt_email(
     docx_bytes: bytes,
 ) -> None:
     """Send a filled CERFA DOCX receipt to a donor as an email attachment."""
-    from app.models.config import AssociationConfig
-
-    asso_name = AssociationConfig.get().name or "l'association"
+    asso_name = _association_name()
     subject = f"Votre reçu fiscal — {amount}"
     body = (
         f"Bonjour {donor_name},\n\n"
@@ -340,16 +371,26 @@ def _deliver_with_attachment(
     attachment_bytes: bytes,
 ) -> None:
     """Try Gmail API with attachment; fall back to SMTP on any exception."""
+    _deliver_with_attachments(to_email, subject, body, [(attachment_filename, attachment_bytes)])
+
+
+def _deliver_with_attachments(
+    to_email: str,
+    subject: str,
+    body: str,
+    attachments: list[tuple[str, bytes]],
+) -> bool:
+    """Try Gmail API with attachments; fall back to SMTP on any exception.
+
+    Returns whether the message was actually delivered (via either channel).
+    """
     try:
-        _send_via_gmail_with_attachment(
-            to_email, subject, body, attachment_filename, attachment_bytes
-        )
-        logger.info("Email with attachment sent via Gmail API to %s", mask_email(to_email))
+        _send_via_gmail_with_attachments(to_email, subject, body, attachments)
+        logger.info("Email with attachment(s) sent via Gmail API to %s", mask_email(to_email))
+        return True
     except Exception as gmail_exc:
         logger.info("Gmail unavailable (%s) — falling back to SMTP", gmail_exc)
-        _send_via_smtp_with_attachment(
-            to_email, subject, body, attachment_filename, attachment_bytes
-        )
+        return _send_via_smtp_with_attachments(to_email, subject, body, attachments)
 
 
 def _send_via_gmail(to_email: str, subject: str, body: str) -> None:
@@ -387,47 +428,47 @@ def _send_via_smtp(to_email: str, subject: str, body: str) -> None:
         logger.exception("Failed to send email via SMTP to %s", mask_email(to_email))
 
 
-def _send_via_gmail_with_attachment(
+def _attach_files(msg: MIMEMultipart, attachments: list[tuple[str, bytes]]) -> None:
+    for filename, data in attachments:
+        safe_filename = _clean_header(filename).replace('"', "'")
+        part = MIMEApplication(data, Name=safe_filename)
+        part["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+        msg.attach(part)
+
+
+def _send_via_gmail_with_attachments(
     to_email: str,
     subject: str,
     body: str,
-    attachment_filename: str,
-    attachment_bytes: bytes,
+    attachments: list[tuple[str, bytes]],
 ) -> None:
-    """Send a multipart email with attachment via Gmail API."""
+    """Send a multipart email with attachments via Gmail API."""
     from app.services.gmail import GmailClient
 
-    safe_filename = _clean_header(attachment_filename).replace('"', "'")
     msg = MIMEMultipart()
     msg["To"] = _clean_header(to_email)
     msg["Subject"] = _clean_header(subject)
     msg.attach(MIMEText(body, "plain", "utf-8"))
-    part = MIMEApplication(attachment_bytes, Name=safe_filename)
-    part["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
-    msg.attach(part)
+    _attach_files(msg, attachments)
 
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     GmailClient.from_db().send_message(raw)
 
 
-def _send_via_smtp_with_attachment(
+def _send_via_smtp_with_attachments(
     to_email: str,
     subject: str,
     body: str,
-    attachment_filename: str,
-    attachment_bytes: bytes,
-) -> None:
-    """Send a multipart email with attachment via SMTP."""
+    attachments: list[tuple[str, bytes]],
+) -> bool:
+    """Send a multipart email with attachments via SMTP. Returns success."""
     cfg = current_app.config
-    safe_filename = _clean_header(attachment_filename).replace('"', "'")
     msg = MIMEMultipart()
     msg["Subject"] = _clean_header(subject)
     msg["From"] = _clean_header(cfg["SMTP_FROM"])
     msg["To"] = _clean_header(to_email)
     msg.attach(MIMEText(body, "plain", "utf-8"))
-    part = MIMEApplication(attachment_bytes, Name=safe_filename)
-    part["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
-    msg.attach(part)
+    _attach_files(msg, attachments)
 
     try:
         with smtplib.SMTP(
@@ -438,8 +479,10 @@ def _send_via_smtp_with_attachment(
             if cfg["SMTP_USER"]:
                 server.login(cfg["SMTP_USER"], cfg["SMTP_PASSWORD"])
             server.send_message(msg)
-        logger.info("Email with attachment sent via SMTP to %s", mask_email(to_email))
+        logger.info("Email with attachment(s) sent via SMTP to %s", mask_email(to_email))
+        return True
     except Exception:
         logger.exception(
-            "Failed to send email with attachment via SMTP to %s", mask_email(to_email)
+            "Failed to send email with attachment(s) via SMTP to %s", mask_email(to_email)
         )
+        return False

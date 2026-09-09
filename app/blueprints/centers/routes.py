@@ -1,5 +1,6 @@
 """Centers blueprint routes — management, breakdown reporting, guestbook."""
 
+import base64
 import hashlib
 import hmac as _hmac
 import logging
@@ -354,6 +355,149 @@ def convention_upload(center_id: int):
     center.convention_document_id = doc.id
     db.session.commit()
     flash("Convention téléversée.", "success")
+    return redirect(url_for("centers.detail", center_id=center_id))
+
+
+def _safe_filename(name: str, max_len: int = 40) -> str:
+    """Sanitize a name for use in an HTTP Content-Disposition header."""
+    return (
+        name.encode("ascii", "ignore")
+        .decode("ascii")
+        .replace(" ", "_")
+        .replace("/", "-")
+        .replace("_", "-")[:max_len]
+    )
+
+
+def _center_with_convention_data(center_id: int) -> Center | None:
+    """Load a center with contacts + active installations eager-loaded for the convention PDF."""
+    return db.session.get(
+        Center,
+        center_id,
+        options=[
+            selectinload(Center.contacts),
+            selectinload(Center.installations).selectinload(MachineInstallation.machine),
+        ],
+    )
+
+
+def _render_convention_html(center: Center) -> str:
+    """Render the official loan-agreement HTML for a center (pre-WeasyPrint)."""
+    from app.models.config import AssociationConfig
+
+    cfg = AssociationConfig.get()
+    machines = [inst.machine for inst in center.active_installations]
+    return render_template(
+        "centers/convention.html", center=center, cfg=cfg, machines=machines, today=date.today()
+    )
+
+
+def _render_convention_pdf(center: Center) -> bytes:
+    """Render the official loan-agreement PDF for a center.
+
+    Raises if WeasyPrint is unavailable or rendering fails — callers decide
+    whether to flash an error (download) or abort (email attachment), since a
+    silent HTML fallback would end up as a wrongly-named attachment.
+    """
+    from weasyprint import HTML as WP
+
+    return WP(string=_render_convention_html(center)).write_pdf()
+
+
+@bp.route("/<int:center_id>/convention.pdf")
+@login_required
+def convention_pdf(center_id: int):
+    """Generate and serve the center's loan agreement as PDF (not persisted)."""
+    center = _center_with_convention_data(center_id)
+    if center is None:
+        abort(404)
+    if not center.active_installations:
+        flash("Aucune machine installée — impossible de générer la convention.", "warning")
+        return redirect(url_for("centers.detail", center_id=center_id))
+    try:
+        pdf = _render_convention_pdf(center)
+    except Exception:
+        logger.exception("Failed to render convention PDF for center %d", center_id)
+        flash("Échec de la génération du PDF de convention.", "danger")
+        return redirect(url_for("centers.detail", center_id=center_id))
+    safe = _safe_filename(center.name)
+    return Response(
+        pdf,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="convention_{safe}.pdf"'},
+    )
+
+
+@bp.route("/<int:center_id>/convention/generate", methods=["POST"])
+@bureau_required
+def generate_convention(center_id: int):
+    """Generate the official convention PDF and attach it to the center as a Document."""
+    center = _center_with_convention_data(center_id)
+    if center is None:
+        abort(404)
+    if not center.active_installations:
+        flash("Aucune machine installée — impossible de générer la convention.", "warning")
+        return redirect(url_for("centers.detail", center_id=center_id))
+    try:
+        pdf = _render_convention_pdf(center)
+    except Exception:
+        logger.exception("Failed to render convention PDF for center %d", center_id)
+        flash("Échec de la génération du PDF de convention.", "danger")
+        return redirect(url_for("centers.detail", center_id=center_id))
+
+    slug = re.sub(r"[^a-z0-9]+", "-", center.name.lower()).strip("-")[:50] or "centre"
+    # Suffix with a random token: stored_filename is unique, and "Régénérer" is
+    # meant to be clicked again the same day (e.g. to fix a typo just noticed).
+    suffix = secrets.token_hex(4)
+    stored_name = f"{date.today().isoformat()}_contract_convention-{slug}-{suffix}.pdf"
+
+    doc = Document(
+        original_filename=f"convention_{slug}.pdf",
+        stored_filename=stored_name,
+        type=DocumentType.CONTRACT.value,
+        category="convention",
+        mime_type="application/pdf",
+        size_bytes=len(pdf),
+        uploaded_by_id=current_user.id,
+        description=f"Convention (générée) — {center.name}",
+    )
+    db.session.add(doc)
+    db.session.flush()
+
+    drive_uploaded = False
+    if current_app.config.get("GOOGLE_SHARED_DRIVE_ID"):
+        try:
+            from app.services.drive import DriveService
+
+            file_id, web_link = DriveService.from_db().upload_file(
+                pdf, doc.original_filename, "application/pdf", DocumentType.CONTRACT.value
+            )
+            doc.drive_file_id = file_id
+            doc.drive_web_link = web_link
+            drive_uploaded = True
+        except Exception as exc:
+            logger.warning("Drive upload failed for generated convention: %s", exc)
+
+    if not drive_uploaded:
+        subdir = os.path.join(current_app.config["UPLOAD_FOLDER"], "contracts")
+        os.makedirs(subdir, exist_ok=True)
+        with open(os.path.join(subdir, stored_name), "wb") as fh:
+            fh.write(pdf)
+
+    if (
+        center.convention_document_id
+        and center.convention_document_id != doc.id
+        and any(sr.status == SigningStatus.PENDING for sr in center.signing_requests)
+    ):
+        flash(
+            "Une demande de signature en cours pointe vers l'ancienne convention — "
+            "pensez à la renvoyer si besoin.",
+            "warning",
+        )
+
+    center.convention_document_id = doc.id
+    db.session.commit()
+    flash("Convention générée et attachée au centre.", "success")
     return redirect(url_for("centers.detail", center_id=center_id))
 
 
@@ -1012,6 +1156,162 @@ def _make_qr_svg(url: str) -> bytes:
     buf = __import__("io").BytesIO()
     img.save(buf)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Affiche (printable poster) — QR codes for breakdown + guestbook
+# ---------------------------------------------------------------------------
+
+
+def _ensure_center_feedback_token(center: Center) -> str:
+    """Return the center's permanent feedback token, generating it once if absent.
+
+    Never regenerates an existing token: that would invalidate posters already
+    printed and stuck on the machine.
+    """
+    if not center.feedback_token:
+        center.feedback_token = secrets.token_urlsafe(32)
+        db.session.commit()
+    return center.feedback_token
+
+
+def _ensure_center_breakdown_token(center: Center) -> str:
+    """Return the center's permanent breakdown token, generating it once if absent."""
+    if not center.breakdown_token:
+        center.breakdown_token = secrets.token_urlsafe(32)
+        db.session.commit()
+    return center.breakdown_token
+
+
+def _render_affiche_html(center: Center) -> str:
+    """Render the printable poster HTML for a center (ensures both tokens exist)."""
+    breakdown_url = url_for(
+        "machines.public_breakdown", token=_ensure_center_breakdown_token(center), _external=True
+    )
+    feedback_url = url_for(
+        "centers.submit_feedback", token=_ensure_center_feedback_token(center), _external=True
+    )
+    return render_template(
+        "centers/affiche.html",
+        center=center,
+        breakdown_qr=base64.b64encode(_make_qr_svg(breakdown_url)).decode("ascii"),
+        feedback_qr=base64.b64encode(_make_qr_svg(feedback_url)).decode("ascii"),
+        breakdown_url=breakdown_url,
+        feedback_url=feedback_url,
+    )
+
+
+def _render_affiche_pdf(center: Center) -> bytes:
+    """Render the printable poster PDF for a center.
+
+    Raises if WeasyPrint is unavailable — see ``_render_convention_pdf`` for why
+    no silent HTML fallback happens here.
+    """
+    from weasyprint import HTML as WP
+
+    return WP(string=_render_affiche_html(center)).write_pdf()
+
+
+@bp.route("/<int:center_id>/affiche.pdf")
+@bureau_required
+def affiche_pdf(center_id: int):
+    """Generate and serve the printable center poster as PDF."""
+    center = db.session.get(Center, center_id)
+    if center is None:
+        abort(404)
+    try:
+        pdf = _render_affiche_pdf(center)
+    except Exception:
+        logger.exception("Failed to render affiche PDF for center %d", center_id)
+        flash("Échec de la génération de l'affiche.", "danger")
+        return redirect(url_for("centers.detail", center_id=center_id))
+    safe = _safe_filename(center.name)
+    return Response(
+        pdf,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="affiche_{safe}.pdf"'},
+    )
+
+
+@bp.route("/<int:center_id>/send-documents", methods=["POST"])
+@bureau_required
+def send_documents(center_id: int):
+    """Email selected documents (convention/guide/affiche) to the center's contacts."""
+    center = _center_with_convention_data(center_id)
+    if center is None:
+        abort(404)
+
+    include_convention = request.form.get("include_convention") == "on"
+    include_guide = request.form.get("include_guide") == "on"
+    include_affiche = request.form.get("include_affiche") == "on"
+
+    if not (include_convention or include_guide or include_affiche):
+        flash("Sélectionnez au moins un document à envoyer.", "warning")
+        return redirect(url_for("centers.detail", center_id=center_id))
+
+    attachments: list[tuple[str, bytes]] = []
+    doc_labels: list[str] = []
+    safe = _safe_filename(center.name)
+
+    if include_convention:
+        if not center.active_installations:
+            flash("Convention non envoyée : aucune machine installée.", "warning")
+        else:
+            try:
+                attachments.append((f"convention_{safe}.pdf", _render_convention_pdf(center)))
+                doc_labels.append("la convention de prêt")
+            except Exception:
+                logger.exception("Failed to render convention PDF for email, center %d", center_id)
+                flash("Échec de la génération de la convention — non envoyée.", "danger")
+
+    if include_guide:
+        guide_path = os.path.join(current_app.root_path, "assets", "guide-accueil-flipper.pdf")
+        try:
+            with open(guide_path, "rb") as fh:
+                attachments.append(("guide-accueil-flipper.pdf", fh.read()))
+            doc_labels.append("le guide d'accueil")
+        except OSError:
+            logger.exception("Guide file missing at %s", guide_path)
+            flash("Guide non envoyé : fichier introuvable sur le serveur.", "danger")
+
+    if include_affiche:
+        try:
+            attachments.append((f"affiche_{safe}.pdf", _render_affiche_pdf(center)))
+            doc_labels.append("l'affiche à imprimer")
+        except Exception:
+            logger.exception("Failed to render affiche PDF for email, center %d", center_id)
+            flash("Échec de la génération de l'affiche — non envoyée.", "danger")
+
+    if not attachments:
+        flash("Aucun document n'a pu être préparé pour l'envoi.", "danger")
+        return redirect(url_for("centers.detail", center_id=center_id))
+
+    contacts_with_email = [c for c in center.contacts if c.email]
+    if not contacts_with_email:
+        flash("Aucun contact avec email pour ce centre — impossible d'envoyer.", "warning")
+        return redirect(url_for("centers.detail", center_id=center_id))
+
+    from app.services.mailer import send_center_documents_email
+
+    sent = 0
+    for contact in contacts_with_email:
+        try:
+            if send_center_documents_email(
+                to_email=contact.email,
+                contact_name=contact.name,
+                center_name=center.name,
+                doc_labels=doc_labels,
+                attachments=attachments,
+            ):
+                sent += 1
+        except Exception:
+            logger.exception("Failed to send documents email to %s", contact.email)
+
+    if sent:
+        flash(f"Documents envoyés à {sent} contact(s).", "success")
+    else:
+        flash("Échec de l'envoi — vérifiez la configuration email.", "danger")
+    return redirect(url_for("centers.detail", center_id=center_id))
 
 
 # ---------------------------------------------------------------------------

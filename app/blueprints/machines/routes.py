@@ -1107,48 +1107,6 @@ def fiche_pdf(machine_id: int):
     )
 
 
-@bp.route("/<int:machine_id>/convention.pdf")
-@bureau_required
-def convention_pdf(machine_id: int):
-    """Generate and serve the machine loan agreement as PDF."""
-    from app.models.config import AssociationConfig
-
-    machine = db.session.get(
-        Machine,
-        machine_id,
-        options=[
-            selectinload(Machine.installations)
-            .selectinload(MachineInstallation.center)
-            .selectinload(Center.contacts)
-        ],
-    )
-    if machine is None:
-        abort(404)
-    cfg = AssociationConfig.get()
-    active_inst = machine.current_installation
-    center = active_inst.center if active_inst else None
-    html = render_template(
-        "machines/convention_pret.html",
-        machine=machine,
-        cfg=cfg,
-        active_inst=active_inst,
-        center=center,
-        today=date.today(),
-    )
-    try:
-        from weasyprint import HTML as WP
-
-        pdf = WP(string=html).write_pdf()
-    except Exception:
-        return Response(html, mimetype="text/html")
-    safe = _make_safe_filename(machine.display_name)
-    return Response(
-        pdf,
-        mimetype="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="convention_{safe}.pdf"'},
-    )
-
-
 # ---------------------------------------------------------------------------
 # QR code — authenticated users
 # ---------------------------------------------------------------------------

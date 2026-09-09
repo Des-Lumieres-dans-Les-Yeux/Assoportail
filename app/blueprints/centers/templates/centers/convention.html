@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Convention de mise à disposition de matériel — {{ center.name }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #000; margin: 20mm 18mm; line-height: 1.5; }
+    h1 { font-size: 16px; text-align: center; text-transform: uppercase; letter-spacing: 0.5px;
+         border: 2px solid #000; padding: 8px; margin-bottom: 18px; }
+    h2 { font-size: 11px; font-weight: bold; text-transform: uppercase; margin: 14px 0 4px; }
+    p { margin: 4px 0; text-align: justify; }
+    ul { margin: 4px 0; padding-left: 20px; }
+    .blank { border-bottom: 1px dotted #000; }
+    .party { margin: 10px 0; }
+    .signature-area { display: flex; gap: 40px; margin-top: 30px; }
+    .sig-box { flex: 1; }
+    .sig-space { height: 50px; }
+    .annexe { page-break-before: always; }
+    .annexe h1 { border: 2px solid #000; }
+    table.materiel { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    table.materiel th, table.materiel td { border: 1px solid #666; padding: 6px 8px; text-align: left; }
+    @page { size: A4 portrait; margin: 20mm 18mm; }
+  </style>
+</head>
+<body>
+
+<h1>Convention de mise à disposition de matériel</h1>
+
+<p>ENTRE</p>
+
+<div class="party">
+  <p>
+    Le (Établissement) :
+    <span class="blank">&nbsp;{{ center.name }}&nbsp;</span>
+  </p>
+  <p>
+    dont le siège est situé
+    {% if center.address %}
+    <span class="blank">&nbsp;{{ center.address }}, {{ center.zip_code }} {{ center.city }}&nbsp;</span>
+    {% else %}
+    <span class="blank">&nbsp;{{ center.zip_code }} {{ center.city }}&nbsp;</span>
+    {% endif %}
+  </p>
+  <p>
+    représenté par
+    {% if center.contacts %}
+    <span class="blank">&nbsp;{{ center.contacts[0].name }}{% if center.contacts[0].role %}, {{ center.contacts[0].role }}{% endif %}&nbsp;</span>
+    {% else %}
+    <span class="blank">&nbsp;……………………………………………………………………&nbsp;</span>
+    {% endif %}
+    habilité(e) à signer le présent contrat,
+  </p>
+  <p>Ci-après désigné par le terme « Bénéficiaire »</p>
+</div>
+
+<p>D'une part,</p>
+<p>ET :</p>
+
+<div class="party">
+  <p>
+    L'association {{ cfg.name or "Des Lumières Dans Les Yeux" }}, à but non lucratif dont le siège est situé
+    {{ cfg.address }}{% if cfg.zip_code and cfg.city %}, {{ cfg.zip_code }} {{ cfg.city }}{% endif %}
+    représenté par son {{ cfg.representative_title or "Président" }},
+    {{ cfg.representative_name or "………………………………" }},
+  </p>
+  <p>Ci-après désigné par le terme « Prêteur »</p>
+</div>
+
+<p>D'autre part,</p>
+
+<p>
+  Dans le cadre de son action visant à améliorer les conditions d'accueil des enfants et de leurs
+  parents confrontés à la maladie, le prêteur met à la disposition du bénéficiaire un matériel
+  (ci-après dénommé le « Matériel », décrit dans l'annexe 1).
+</p>
+
+<p><strong>Ceci étant exposé, il est convenu et arrêté ce qui suit :</strong></p>
+
+<h2>Article I. Objet de la convention</h2>
+<p>
+  La présente convention a pour objet de définir les termes et conditions selon lesquels le
+  Prêteur met à la disposition du Bénéficiaire le Matériel désigné à l'Annexe 1 de la présente
+  convention.
+</p>
+
+<h2>Article II. Utilisation du matériel</h2>
+<p>
+  Le Bénéficiaire s'engage à utiliser le Matériel mis à disposition uniquement pour l'usage
+  auquel il est prévu et pour lequel il lui a été confié.
+</p>
+<p>
+  Le Bénéficiaire s'engage à ce que l'utilisation du Matériel s'effectue conformément aux
+  spécifications et recommandations du fabricant qui lui auront été communiquées par le Prêteur.
+  Elle prendra en ce sens toute disposition utile pour respecter les prescriptions édictées par la
+  ou les réglementation(s).
+</p>
+
+<h2>Article III. Engagements du Bénéficiaire</h2>
+<p>Le Bénéficiaire s'interdit :</p>
+<ul>
+  <li>de modifier le Matériel et/ou d'y apporter quelque changement que ce soit, sans l'accord préalable et écrit du Prêteur,</li>
+  <li>de vendre ou d'aliéner le Matériel et plus généralement de s'en dessaisir, de grever ou de laisser grever le Matériel de droits ou sûretés quelconques, de telle sorte qu'il ne puisse faire l'objet d'aucune saisie, ni d'aucune procédure susceptible d'entraîner son aliénation sans le consentement exprès et écrit du Prêteur.</li>
+</ul>
+<p>
+  Le Prêteur pourra à tout moment, pendant les jours et heures ouvrables, avoir accès aux locaux
+  où le Matériel est entreposé afin de vérifier s'il est utilisé conformément aux termes de la
+  présente convention et aux dispositions de la législation en vigueur.
+</p>
+
+<h2>Article IV. Engagements du Prêteur</h2>
+<p>Le Prêteur assure la livraison, l'installation, la maintenance et l'enlèvement du Matériel.</p>
+<p>
+  Le Prêteur s'engage à mettre à disposition un Matériel exempt de défauts apparents et
+  répondant à toutes les normes de conformité et de sécurité en vigueur. Le Matériel doit être en
+  parfait état de marche, d'usage et de présentation.
+</p>
+<p>
+  Le Prêteur s'engage à fournir au Bénéficiaire, au plus tard le jour de la livraison, toutes les
+  recommandations et spécifications du fabricant liées à l'utilisation du Matériel, en langue
+  française.
+</p>
+
+<h2>Article V. Conservation du matériel</h2>
+<p>
+  Le Bénéficiaire répondra des dégradations, perte et vol du Matériel qui relèveront d'une faute
+  de sa part (pour des matériels d'une valeur élevée, l'établissement pourra opter, le cas
+  échéant, s'il le souhaite, pour une assurance afin de couvrir le risque).
+</p>
+<p>
+  Le Bénéficiaire s'engage à laisser le Prêteur accéder au Matériel afin de réaliser ou de faire
+  réaliser par tout tiers de son choix la maintenance ordinaire du Matériel, pour le conserver en
+  parfait état de marche, d'usage ou de présentation.
+</p>
+<p>
+  Lorsque le Matériel aura atteint un état d'usure normal ou qu'il présentera un défaut manifeste
+  de fonctionnement, tel qu'il ne sera plus utilisable, le Bénéficiaire en informera immédiatement
+  le Prêteur, par téléphone et/ou courrier électronique, et cessera d'utiliser immédiatement le
+  Matériel.
+</p>
+<p>
+  Si le Matériel devait être déplacé au sein de l'Établissement du Bénéficiaire, le Prêteur doit
+  en être informé au préalable, notamment concernant le nouvel emplacement choisi, ainsi que les
+  moyens mis en œuvre pour le déplacement. Tout dégât occasionné durant un déplacement non
+  mentionné au Prêteur serait de la responsabilité du Bénéficiaire.
+</p>
+
+<h2>Article VI. Responsabilité</h2>
+<p>
+  Le Bénéficiaire est responsable de toute utilisation fautive du Matériel qui entraînerait un
+  dommage direct ou indirect aux personnes, aux biens ou à l'environnement.
+</p>
+<p>
+  Le Bénéficiaire est responsable de la mise en œuvre des protocoles sanitaires qu'il jugera utile
+  et en aucun cas la responsabilité du Prêteur ne pourra être engagée sur la possible dispersion
+  d'agent pathogène du fait de l'utilisation du Matériel.
+</p>
+
+<h2>Article VII. Assurance</h2>
+<p>
+  Le Bénéficiaire déclare être son propre assureur pour couvrir les conséquences financières de sa
+  responsabilité pour tout dommage résultant d'une utilisation fautive du Matériel mis à
+  disposition par le Prêteur. Par ailleurs, il conviendra au Bénéficiaire de s'assurer que les
+  biens matériels en prêt sont pris en charge pour les risques du quotidien (dégâts des eaux,
+  incendie...). Dans le cas contraire, il s'assurera de mettre en place cette couverture dès que
+  possible.
+</p>
+
+<h2>Article VIII. Durée / Restitution</h2>
+<p>
+  La présente convention entre en vigueur à compter de la signature de celle-ci par toutes les
+  parties. Elle est conclue pour une durée indéterminée.
+</p>
+<p>
+  Le Prêteur pourra à tout moment exiger la restitution du Matériel, sans conditions
+  particulières, et sans indemnités d'aucune sorte. Le Bénéficiaire sera tenu de mettre à
+  disposition le Matériel à toute personne munie d'une autorisation écrite, signée du représentant
+  du Prêteur dûment habilité. Dans ce cas, le Prêteur notifiera sa demande par écrit, en
+  respectant idéalement un préavis de quinze (15) jours ouvrés.
+</p>
+<p>
+  Le Bénéficiaire pourra à tout moment exiger le retrait du Matériel, sans conditions
+  particulières, et sans indemnités d'aucune sorte. Pour cela, le Bénéficiaire notifiera sa
+  demande par écrit, en respectant idéalement un préavis de quinze (15) jours ouvrés.
+</p>
+<p>
+  En aucun cas, le Bénéficiaire ne pourra prétendre à conserver le Matériel pour se payer de
+  toutes sommes qui pourraient éventuellement lui être dues par le Prêteur.
+</p>
+
+<h2>Article IX. Confidentialité</h2>
+<p>
+  Le Bénéficiaire s'engage à garder de manière strictement confidentielle les informations de
+  quelque nature que ce soit dont elle aurait pu avoir connaissance dans le cadre de la mise en
+  œuvre de la présente convention.
+</p>
+<p>
+  Le Bénéficiaire prendra auprès de son personnel et de ses éventuels sous-traitants les mesures
+  nécessaires au respect de la présente obligation de confidentialité.
+</p>
+
+<h2>Article X. Litiges</h2>
+<p>
+  En cas de difficultés sur l'interprétation ou l'exécution du présent contrat, les Parties
+  s'efforceront de résoudre leur différend à l'amiable. En cas de désaccord persistant,
+  attribution de juridiction est donnée aux tribunaux compétents du lieu du défendeur.
+</p>
+
+<h2>Article XI. Conditions financières</h2>
+<p>
+  La présente mise à disposition est consentie dans l'intérêt du Prêteur et du Bénéficiaire.
+  Aucune rémunération relative à l'usage du Matériel ne sera donc versée.
+</p>
+
+<div class="signature-area">
+  <div class="sig-box">
+    <p>Pour le Prêteur,</p>
+    <p>{{ cfg.representative_name or "" }}{% if cfg.representative_title %}, {{ cfg.representative_title }}{% endif %}</p>
+    <div class="sig-space"></div>
+  </div>
+  <div class="sig-box">
+    <p>Pour le Bénéficiaire,</p>
+    <p>{% if center.contacts %}{{ center.contacts[0].name }}{% endif %}</p>
+    <div class="sig-space"></div>
+  </div>
+</div>
+
+<div class="annexe">
+  <h1>Annexe 1</h1>
+  <p><strong>Matériel : Descriptif des caractéristiques techniques</strong></p>
+  <table class="materiel">
+    <thead>
+      <tr><th>Désignation</th><th>N° de série</th><th>Valeur T.T.C.</th></tr>
+    </thead>
+    <tbody>
+      {% for machine in machines %}
+      <tr>
+        <td>{{ machine.manufacturer }} {{ machine.model }}</td>
+        <td>{{ machine.serial_number or "—" }}</td>
+        <td>
+          {%- set value = machine.estimated_value or machine.purchase_price -%}
+          {% if value %}{{ "%.2f"|format(value) }} €{% else %}&nbsp;{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>

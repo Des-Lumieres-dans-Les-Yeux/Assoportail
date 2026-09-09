@@ -147,14 +147,17 @@
   </details>
 </section>
 
-{# Convention document #}
-<section aria-labelledby="convention-heading" class="mb-4">
-  <h2 class="h5" id="convention-heading">
-    <i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i>Convention
+{# Documents du centre — convention, guide, affiche, liens QR, envoi email #}
+<section aria-labelledby="documents-heading" class="mb-4">
+  <h2 class="h5" id="documents-heading">
+    <i class="bi bi-folder2-open me-1" aria-hidden="true"></i>Documents du centre
   </h2>
+
+  {# Convention #}
+  <h3 class="h6 mb-2">Convention de prêt</h3>
   {% if center.convention_document %}
   {% set doc = center.convention_document %}
-  <div class="d-flex align-items-center gap-3 border rounded p-3 bg-light" style="max-width: 36rem;">
+  <div class="d-flex align-items-center gap-3 border rounded p-3 bg-light mb-2" style="max-width: 36rem;">
     <i class="bi bi-file-earmark-text fs-3 text-secondary" aria-hidden="true"></i>
     <div class="flex-grow-1 min-w-0">
       <a href="{{ url_for('documents.download', document_id=doc.id) }}"
@@ -177,29 +180,180 @@
   </div>
   {% else %}
   <p class="text-muted mb-2">Aucune convention enregistrée.</p>
+  {% endif %}
+
   {% if current_user.is_bureau %}
-  <details>
-    <summary class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-upload me-1" aria-hidden="true"></i>Téléverser la convention
-    </summary>
-    <form method="post" action="{{ url_for('centers.convention_upload', center_id=center.id) }}"
-          enctype="multipart/form-data"
-          class="mt-3 border rounded p-3 bg-light d-flex align-items-end gap-3"
-          style="max-width: 36rem;">
+  <div class="d-flex gap-2 flex-wrap align-items-center mb-1">
+    <form method="post" action="{{ url_for('centers.generate_convention', center_id=center.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="flex-grow-1">
-        <label for="convention-file" class="form-label small">
-          Fichier PDF, DOCX ou ODT <span class="text-danger">*</span>
-        </label>
-        <input type="file" id="convention-file" name="convention_file"
-               class="form-control form-control-sm" accept=".pdf,.docx,.odt" required>
-      </div>
-      <button type="submit" class="btn btn-primary btn-sm text-nowrap">
-        <i class="bi bi-upload me-1" aria-hidden="true"></i>Envoyer
+      <button type="submit" class="btn btn-outline-primary btn-sm" {% if not center.active_installations %}disabled{% endif %}>
+        <i class="bi bi-magic me-1" aria-hidden="true"></i>
+        {% if center.convention_document %}Régénérer{% else %}Générer{% endif %} la convention
       </button>
     </form>
-  </details>
+    {% if center.active_installations %}
+    <a href="{{ url_for('centers.convention_pdf', center_id=center.id) }}"
+       class="btn btn-outline-secondary btn-sm" target="_blank">
+      <i class="bi bi-eye me-1" aria-hidden="true"></i>Aperçu PDF
+    </a>
+    {% endif %}
+    <details class="d-inline-block">
+      <summary class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-upload me-1" aria-hidden="true"></i>Téléverser un fichier existant
+      </summary>
+      <form method="post" action="{{ url_for('centers.convention_upload', center_id=center.id) }}"
+            enctype="multipart/form-data"
+            class="mt-3 border rounded p-3 bg-light d-flex align-items-end gap-3"
+            style="max-width: 36rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="flex-grow-1">
+          <label for="convention-file" class="form-label small">
+            Fichier PDF, DOCX ou ODT <span class="text-danger">*</span>
+          </label>
+          <input type="file" id="convention-file" name="convention_file"
+                 class="form-control form-control-sm" accept=".pdf,.docx,.odt" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm text-nowrap">
+          <i class="bi bi-upload me-1" aria-hidden="true"></i>Envoyer
+        </button>
+      </form>
+    </details>
+  </div>
+  {% if not center.active_installations %}
+  <p class="text-muted small mb-3">Aucune machine installée — générer/télécharger la convention nécessite une installation active.</p>
   {% endif %}
+  {% endif %}
+
+  {# Guide d'accueil #}
+  <h3 class="h6 mb-2 mt-4">Guide d'accueil</h3>
+  <p class="text-muted small mb-3">
+    <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>guide-accueil-flipper.pdf
+    <span class="text-muted">— document générique, identique pour tous les centres.</span>
+  </p>
+
+  {% if current_user.is_bureau %}
+  {# Affiche #}
+  <h3 class="h6 mb-2">Affiche à imprimer</h3>
+  <a href="{{ url_for('centers.affiche_pdf', center_id=center.id) }}"
+     class="btn btn-outline-primary btn-sm mb-3" target="_blank">
+    <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Télécharger l'affiche (PDF)
+  </a>
+
+  {# Feedback link management #}
+  <div class="border rounded p-3 bg-light mb-3" style="max-width: 42rem;">
+    <h3 class="h6 mb-2">Lien de témoignage public</h3>
+    {% if center.feedback_token %}
+    <p class="mb-2">
+      <small class="text-muted">Lien actuel (permanent) :</small><br>
+      <code class="user-select-all small" id="feedback-token-url">{{ url_for('centers.submit_feedback', token=center.feedback_token, _external=True) }}</code>
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm ms-1 align-text-bottom"
+              data-copy-target="feedback-token-url"
+              title="Copier le lien"
+              aria-label="Copier le lien de témoignage">
+        <i class="bi bi-clipboard" aria-hidden="true"></i>
+      </button>
+    </p>
+    {% else %}
+    <p class="text-muted small mb-2">Aucun lien généré.</p>
+    {% endif %}
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <form method="post" action="{{ url_for('centers.generate_feedback_link', center_id=center.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-primary btn-sm">
+          {% if center.feedback_token %}Régénérer le lien{% else %}Générer le lien{% endif %}
+        </button>
+      </form>
+      {% if center.feedback_token %}
+      <a href="{{ url_for('centers.qr_svg', center_id=center.id) }}"
+         class="btn btn-outline-secondary btn-sm" target="_blank"
+         title="Télécharger le QR code (SVG)">
+        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR code
+      </a>
+      {% endif %}
+    </div>
+    {% if center.feedback_token %}
+    <p class="text-muted small mt-2 mb-0">Régénérer invalide l'ancien lien <strong>et les affiches déjà imprimées</strong>.</p>
+    {% endif %}
+  </div>
+
+  {# Breakdown link management #}
+  <div class="border rounded p-3 bg-light mb-3" style="max-width: 42rem;">
+    <h3 class="h6 mb-2">Lien de signalement de panne</h3>
+    {% if center.breakdown_token %}
+    <p class="mb-2">
+      <small class="text-muted">Lien actuel (permanent) :</small><br>
+      <code class="user-select-all small" id="breakdown-token-url">{{ url_for('machines.public_breakdown', token=center.breakdown_token, _external=True) }}</code>
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm ms-1 align-text-bottom"
+              data-copy-target="breakdown-token-url"
+              title="Copier le lien"
+              aria-label="Copier le lien de signalement">
+        <i class="bi bi-clipboard" aria-hidden="true"></i>
+      </button>
+    </p>
+    {% else %}
+    <p class="text-muted small mb-2">Aucun lien généré.</p>
+    {% endif %}
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <form method="post" action="{{ url_for('centers.generate_breakdown_link', center_id=center.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-warning btn-sm">
+          {% if center.breakdown_token %}Régénérer le lien{% else %}Générer le lien{% endif %}
+        </button>
+      </form>
+      {% if center.breakdown_token %}
+      <a href="{{ url_for('centers.breakdown_qr_svg', center_id=center.id) }}"
+         class="btn btn-outline-secondary btn-sm" target="_blank"
+         title="Télécharger le QR code (SVG)">
+        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR code
+      </a>
+      {% endif %}
+    </div>
+    {% if center.breakdown_token %}
+    <p class="text-muted small mt-2 mb-0">
+      Ce lien permet au centre de signaler une panne sur ses machines.
+      Régénérer invalide l'ancien lien <strong>et les affiches déjà imprimées</strong>.
+    </p>
+    {% endif %}
+  </div>
+
+  {# Envoi par email #}
+  <h3 class="h6 mb-2 mt-4">Envoyer au centre</h3>
+  {% set contacts_with_email = center.contacts | selectattr('email') | list %}
+  <form method="post" action="{{ url_for('centers.send_documents', center_id=center.id) }}"
+        class="border rounded p-3 bg-light" style="max-width: 36rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="include_convention" id="send-convention"
+             {% if not center.active_installations %}disabled{% endif %}>
+      <label class="form-check-label" for="send-convention">
+        Convention de prêt
+        {% if not center.active_installations %}<span class="text-muted small">(aucune machine installée)</span>{% endif %}
+      </label>
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="include_guide" id="send-guide" checked>
+      <label class="form-check-label" for="send-guide">Guide d'accueil</label>
+    </div>
+    <div class="form-check mb-3">
+      <input class="form-check-input" type="checkbox" name="include_affiche" id="send-affiche" checked>
+      <label class="form-check-label" for="send-affiche">Affiche à imprimer</label>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">
+      <i class="bi bi-envelope me-1" aria-hidden="true"></i>Envoyer par email
+    </button>
+    {% if contacts_with_email %}
+    <p class="text-muted small mt-2 mb-0">
+      Destinataire(s) : {{ contacts_with_email | map(attribute='email') | join(', ') }}
+    </p>
+    {% else %}
+    <p class="text-danger small mt-2 mb-0">
+      <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+      Aucun contact avec email — ajoutez-en un ci-dessous avant d'envoyer.
+    </p>
+    {% endif %}
+  </form>
   {% endif %}
 </section>
 
@@ -525,82 +679,6 @@
   </div>
 
   {% if current_user.is_bureau %}
-  {# Feedback link management #}
-  <div class="border rounded p-3 bg-light mb-3" style="max-width: 42rem;">
-    <h3 class="h6 mb-2">Lien de témoignage public</h3>
-    {% if center.feedback_token %}
-    <p class="mb-2">
-      <small class="text-muted">Lien actuel (permanent) :</small><br>
-      <code class="user-select-all small" id="feedback-token-url">{{ url_for('centers.submit_feedback', token=center.feedback_token, _external=True) }}</code>
-      <button type="button"
-              class="btn btn-outline-secondary btn-sm ms-1 align-text-bottom"
-              data-copy-target="feedback-token-url"
-              title="Copier le lien"
-              aria-label="Copier le lien de témoignage">
-        <i class="bi bi-clipboard" aria-hidden="true"></i>
-      </button>
-    </p>
-    {% else %}
-    <p class="text-muted small mb-2">Aucun lien généré.</p>
-    {% endif %}
-    <div class="d-flex gap-2 align-items-center flex-wrap">
-      <form method="post" action="{{ url_for('centers.generate_feedback_link', center_id=center.id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-outline-primary btn-sm">
-          {% if center.feedback_token %}Régénérer le lien{% else %}Générer le lien{% endif %}
-        </button>
-      </form>
-      {% if center.feedback_token %}
-      <a href="{{ url_for('centers.qr_svg', center_id=center.id) }}"
-         class="btn btn-outline-secondary btn-sm" target="_blank"
-         title="Télécharger le QR code (SVG)">
-        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR code
-      </a>
-      {% endif %}
-    </div>
-    {% if center.feedback_token %}
-    <p class="text-muted small mt-2 mb-0">Régénérer invalide l'ancien lien.</p>
-    {% endif %}
-  </div>
-
-  {# Breakdown link management #}
-  <div class="border rounded p-3 bg-light mb-3" style="max-width: 42rem;">
-    <h3 class="h6 mb-2">Lien de signalement de panne</h3>
-    {% if center.breakdown_token %}
-    <p class="mb-2">
-      <small class="text-muted">Lien actuel (permanent) :</small><br>
-      <code class="user-select-all small" id="breakdown-token-url">{{ url_for('machines.public_breakdown', token=center.breakdown_token, _external=True) }}</code>
-      <button type="button"
-              class="btn btn-outline-secondary btn-sm ms-1 align-text-bottom"
-              data-copy-target="breakdown-token-url"
-              title="Copier le lien"
-              aria-label="Copier le lien de signalement">
-        <i class="bi bi-clipboard" aria-hidden="true"></i>
-      </button>
-    </p>
-    {% else %}
-    <p class="text-muted small mb-2">Aucun lien généré.</p>
-    {% endif %}
-    <div class="d-flex gap-2 align-items-center flex-wrap">
-      <form method="post" action="{{ url_for('centers.generate_breakdown_link', center_id=center.id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-outline-warning btn-sm">
-          {% if center.breakdown_token %}Régénérer le lien{% else %}Générer le lien{% endif %}
-        </button>
-      </form>
-      {% if center.breakdown_token %}
-      <a href="{{ url_for('centers.breakdown_qr_svg', center_id=center.id) }}"
-         class="btn btn-outline-secondary btn-sm" target="_blank"
-         title="Télécharger le QR code (SVG)">
-        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR code
-      </a>
-      {% endif %}
-    </div>
-    {% if center.breakdown_token %}
-    <p class="text-muted small mt-2 mb-0">Ce lien permet au centre de signaler une panne sur ses machines.</p>
-    {% endif %}
-  </div>
-
   {% set pending = center.feedbacks | rejectattr('is_published') | list %}
   {% if pending %}
   <p class="text-muted"><small>{{ pending | length }} témoignage(s) en attente de modération.</small></p>

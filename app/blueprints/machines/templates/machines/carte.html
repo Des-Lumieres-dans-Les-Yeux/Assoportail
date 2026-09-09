@@ -8,50 +8,68 @@
   @page { size: 114mm 62mm; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  :root { --brand: #156082; }
   body {
     width: 114mm; height: 62mm;
     font-family: "Helvetica", "Arial", sans-serif;
     color: #1f2937;
-    padding: 4mm 5mm;
+    display: flex;
+    flex-direction: column;
     position: relative;
+    overflow: hidden;
   }
-  .head { display: flex; align-items: center; gap: 2.5mm; margin-bottom: 1.5mm; }
+  .top-bar { height: 2.2mm; background: var(--brand); }
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 3mm 5mm 2mm;
+    gap: 2mm;
+    text-align: center;
+  }
+  .head { display: flex; align-items: center; justify-content: center; gap: 2.5mm; }
   .head img { height: 9mm; width: auto; }
-  .assoc { font-size: 9.5pt; font-weight: 700; line-height: 1.1; }
-  .message { font-size: 7.5pt; line-height: 1.3; margin: 0 0 2.5mm; color: #374151; }
-  .qr-row { display: flex; gap: 5mm; }
-  .qr-col { flex: 1; text-align: center; }
+  .assoc { font-size: 10.5pt; font-weight: 700; line-height: 1.1; color: var(--brand); }
+  .message { font-size: 7.5pt; line-height: 1.3; margin: 0; color: #374151; max-width: 95mm; }
+  .qr-row { display: flex; gap: 7mm; }
+  .qr-col { text-align: center; }
   .qr-col .box {
-    border: 0.3mm solid #e5e7eb; border-radius: 1.5mm; padding: 1.2mm;
-    display: inline-block;
+    border: 0.4mm solid var(--brand); border-radius: 2mm; padding: 1.5mm;
+    display: inline-block; background: #fff;
   }
-  .qr-col img { width: 22mm; height: 22mm; display: block; }
-  .qr-col .label { font-size: 7.5pt; font-weight: 700; margin-top: 1.2mm; }
-  .qr-col .sub { font-size: 6pt; color: #6b7280; line-height: 1.2; }
+  .qr-col img { width: 25mm; height: 25mm; display: block; }
+  .qr-col .label { font-size: 8pt; font-weight: 700; margin-top: 1.5mm; color: var(--brand); }
+  .qr-col .sub { font-size: 6.5pt; color: #6b7280; line-height: 1.2; }
   .machine {
-    position: absolute; bottom: 2mm; right: 5mm;
+    text-align: center;
     font-size: 5.5pt; color: #9ca3af;
+    padding-bottom: 1.5mm;
   }
 </style>
 </head>
 <body>
-  <div class="head">
-    {% if logo_data %}<img src="data:image/png;base64,{{ logo_data }}" alt="">{% endif %}
-    <div class="assoc">{{ cfg.name or "Des Lumières Dans Les Yeux" }}</div>
-  </div>
-
-  <p class="message">{{ message }}</p>
-
-  <div class="qr-row">
-    <div class="qr-col">
-      <span class="box"><img src="data:image/svg+xml;base64,{{ breakdown_qr }}" alt=""></span>
-      <div class="label">Signaler une panne</div>
-      <div class="sub">Ce flipper ne fonctionne pas&nbsp;?</div>
+  <div class="top-bar"></div>
+  <div class="content">
+    <div class="head">
+      {% if logo_data %}<img src="data:image/png;base64,{{ logo_data }}" alt="">{% endif %}
+      <div class="assoc">{{ cfg.name or "Des Lumières Dans Les Yeux" }}</div>
     </div>
-    <div class="qr-col">
-      <span class="box"><img src="data:image/svg+xml;base64,{{ feedback_qr }}" alt=""></span>
-      <div class="label">Livre d'or</div>
-      <div class="sub">Laissez-nous un petit mot&nbsp;!</div>
+
+    <p class="message">{{ message }}</p>
+
+    <div class="qr-row">
+      <div class="qr-col">
+        <span class="box"><img src="data:image/svg+xml;base64,{{ breakdown_qr }}" alt=""></span>
+        <div class="label">Signaler une panne</div>
+        <div class="sub">Ce flipper ne fonctionne pas&nbsp;?</div>
+      </div>
+      <div class="qr-col">
+        <span class="box"><img src="data:image/svg+xml;base64,{{ feedback_qr }}" alt=""></span>
+        <div class="label">Livre d'or</div>
+        <div class="sub">Laissez-nous un petit mot&nbsp;!</div>
+      </div>
     </div>
   </div>
 

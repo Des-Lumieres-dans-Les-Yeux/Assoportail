@@ -18,12 +18,6 @@
        class="btn btn-outline-secondary btn-sm" target="_blank">
       <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Fiche PDF
     </a>
-    {% if machine.current_installation %}
-    <a href="{{ url_for('machines.convention_pdf', machine_id=machine.id) }}"
-       class="btn btn-outline-secondary btn-sm" target="_blank">
-      <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>Convention
-    </a>
-    {% endif %}
     <a href="{{ url_for('machines.qr_svg', machine_id=machine.id) }}"
        class="btn btn-outline-secondary btn-sm" target="_blank"
        title="QR code — page publique de la machine">

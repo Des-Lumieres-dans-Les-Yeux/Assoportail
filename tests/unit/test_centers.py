@@ -1,13 +1,15 @@
 """Unit tests for centers — CRUD, breakdown reporting, feedback moderation."""
 
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
+from unittest.mock import patch
 
-from flask import Flask
+from flask import Flask, url_for
 from flask.testing import FlaskClient
 
 from app.extensions import db as _db
-from app.models.center import Center, CenterFeedback, CenterStatus
+from app.models.center import Center, CenterContact, CenterFeedback, CenterStatus
+from app.models.machine import Machine, MachineInstallation
 from app.models.task import Task, TaskSource, TaskStatus
 from tests.conftest import UserInfo
 
@@ -300,3 +302,127 @@ class TestFeedbackSubmission:
                 _db.select(_db.func.count(CenterFeedback.id)).where(CenterFeedback.center_id == cid)
             ).scalar()
             assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# Convention / affiche generation + document email
+# ---------------------------------------------------------------------------
+
+
+def _make_machine(app: Flask, *, model: str = "Twilight Zone") -> int:
+    with app.app_context():
+        m = Machine(model=model, manufacturer="Williams", status="stock")
+        _db.session.add(m)
+        _db.session.commit()
+        return m.id
+
+
+def _install(app: Flask, machine_id: int, center_id: int) -> None:
+    with app.app_context():
+        inst = MachineInstallation(
+            machine_id=machine_id,
+            center_id=center_id,
+            installed_at=date.today() - timedelta(days=10),
+        )
+        _db.session.add(inst)
+        _db.session.commit()
+
+
+def _add_contact(app: Flask, center_id: int, *, email: str = "contact@centre.fr") -> None:
+    with app.app_context():
+        contact = CenterContact(center_id=center_id, name="Responsable", email=email)
+        _db.session.add(contact)
+        _db.session.commit()
+
+
+class TestConventionGeneration:
+    def test_html_contains_center_name_and_machine_designation(self, app: Flask) -> None:
+        from app.blueprints.centers.routes import (
+            _center_with_convention_data,
+            _render_convention_html,
+        )
+
+        cid = _make_center(app, name="Clinique du Lac")
+        mid = _make_machine(app, model="Twilight Zone")
+        _install(app, mid, cid)
+
+        with app.test_request_context():
+            center = _center_with_convention_data(cid)
+            html = _render_convention_html(center)
+
+        assert "Clinique du Lac" in html
+        assert "Twilight Zone" in html
+
+    def test_generate_route_requires_active_installation(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
+        cid = _make_center(app, name="Centre Sans Machine")
+        response = bureau_client.post(f"/centers/{cid}/convention/generate", follow_redirects=True)
+        assert response.status_code == 200
+        assert "Aucune machine install" in response.data.decode()
+
+
+class TestAfficheGeneration:
+    def test_html_contains_public_breakdown_and_feedback_urls(self, app: Flask) -> None:
+        from app.blueprints.centers.routes import _render_affiche_html
+        from app.models.center import Center as CenterModel
+
+        cid = _make_center(app, name="Centre Affiche")
+
+        with app.test_request_context():
+            center = _db.session.get(CenterModel, cid)
+            html = _render_affiche_html(center)
+            breakdown_url = url_for(
+                "machines.public_breakdown", token=center.breakdown_token, _external=True
+            )
+            feedback_url = url_for(
+                "centers.submit_feedback", token=center.feedback_token, _external=True
+            )
+
+        assert breakdown_url in html
+        assert feedback_url in html
+
+    def test_ensure_token_does_not_regenerate_existing(self, app: Flask) -> None:
+        from app.blueprints.centers.routes import _ensure_center_breakdown_token
+
+        cid = _make_center(app, name="Centre Token")
+        with app.test_request_context():
+            center = _db.session.get(Center, cid)
+            first = _ensure_center_breakdown_token(center)
+            second = _ensure_center_breakdown_token(center)
+        assert first == second
+
+
+class TestSendDocuments:
+    def test_two_of_three_boxes_checked_yields_two_attachments(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
+        cid = _make_center(app, name="Centre Envoi")
+        mid = _make_machine(app)
+        _install(app, mid, cid)
+        _add_contact(app, cid)
+
+        with (
+            patch(
+                "app.blueprints.centers.routes._render_convention_pdf",
+                return_value=b"%PDF-1.4 fake-convention",
+            ),
+            patch(
+                "app.services.mailer.send_center_documents_email", return_value=True
+            ) as mock_send,
+        ):
+            response = bureau_client.post(
+                f"/centers/{cid}/send-documents",
+                data={"include_convention": "on", "include_guide": "on"},
+                follow_redirects=True,
+            )
+
+        assert response.status_code == 200
+        mock_send.assert_called_once()
+        assert len(mock_send.call_args.kwargs["attachments"]) == 2
+
+    def test_no_box_checked_sends_nothing(self, app: Flask, bureau_client: FlaskClient) -> None:
+        cid = _make_center(app, name="Centre Vide")
+        with patch("app.services.mailer.send_center_documents_email") as mock_send:
+            bureau_client.post(f"/centers/{cid}/send-documents", data={}, follow_redirects=True)
+        mock_send.assert_not_called()
