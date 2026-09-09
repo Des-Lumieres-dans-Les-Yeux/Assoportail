@@ -50,6 +50,13 @@ jobs:
       - name: pip-audit — dependency vulnerability scan
         run: pip-audit -r requirements.txt
 
+      - name: Dépendances obsolètes (informatif, ne bloque pas la CI)
+        continue-on-error: true
+        run: |
+          pip install -r requirements.txt
+          echo "## 📦 Dépendances obsolètes" >> "$GITHUB_STEP_SUMMARY"
+          pip list --outdated --format=columns | tee -a "$GITHUB_STEP_SUMMARY"
+
   test:
     name: Tests (PostgreSQL)
     runs-on: ubuntu-latest
