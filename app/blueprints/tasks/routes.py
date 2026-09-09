@@ -11,6 +11,7 @@ from app.blueprints.tasks.forms import (
     ConvertToMaintenanceForm,
     TaskClaimForm,
     TaskCommentForm,
+    TaskCompleteForm,
     TaskForm,
     TaskStatusForm,
 )
@@ -20,6 +21,7 @@ from app.models.email import InboundEmail
 from app.models.machine import Machine, MaintenanceRecord, MaintenanceStatus
 from app.models.task import Task, TaskComment, TaskPriority, TaskSource, TaskStatus
 from app.models.user import User
+from app.models.volunteer_credit import VolunteerCredit, VolunteerCreditSource
 
 # ---------------------------------------------------------------------------
 # Task list / board
@@ -120,6 +122,7 @@ def detail(task_id: int):
     from app.models.event import Event, EventStatus
 
     comment_form = TaskCommentForm()
+    complete_form = TaskCompleteForm()
     claim_form = TaskClaimForm()
     status_form = TaskStatusForm(status=task.status.value)
     convert_form = ConvertToMaintenanceForm()
@@ -136,6 +139,7 @@ def detail(task_id: int):
         "tasks/detail.html",
         task=task,
         comment_form=comment_form,
+        complete_form=complete_form,
         claim_form=claim_form,
         status_form=status_form,
         convert_form=convert_form,
@@ -344,7 +348,7 @@ def claim(task_id: int):
 @bp.route("/<int:task_id>/comments", methods=["POST"])
 @login_required
 def add_comment(task_id: int):
-    """Add a comment to a task."""
+    """Add a comment to a task. An optional time spent is credited to the author."""
     task = db.session.get(Task, task_id)
     if task is None:
         abort(404)
@@ -357,6 +361,7 @@ def add_comment(task_id: int):
             body=form.body.data.strip(),
         )
         db.session.add(comment)
+        _credit_hours_for_task(task, form.hours.data)
         db.session.commit()
         flash("Commentaire ajouté.", "success")
     else:
@@ -365,6 +370,61 @@ def add_comment(task_id: int):
                 flash(e, "danger")
 
     return redirect(url_for("tasks.detail", task_id=task_id))
+
+
+# ---------------------------------------------------------------------------
+# Close task from the comment box — any member
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/<int:task_id>/complete", methods=["POST"])
+@login_required
+def complete(task_id: int):
+    """Close a task in one step: optional comment + optional time spent.
+
+    Lets whoever did the work close their own task without going through
+    the bureau-only status dropdown.
+    """
+    task = db.session.get(Task, task_id)
+    if task is None:
+        abort(404)
+
+    form = TaskCompleteForm()
+    if form.validate_on_submit():
+        body = (form.body.data or "").strip()
+        if body:
+            db.session.add(TaskComment(task_id=task_id, author_id=current_user.id, body=body))
+        was_done = task.status == TaskStatus.DONE
+        task.status = TaskStatus.DONE
+        if not was_done:
+            task.completed_at = datetime.now(UTC)
+        _credit_hours_for_task(task, form.hours.data)
+        db.session.commit()
+        flash("Tâche terminée.", "success")
+    else:
+        for errors in form.errors.values():
+            for e in errors:
+                flash(e, "danger")
+
+    return redirect(url_for("tasks.detail", task_id=task_id))
+
+
+def _credit_hours_for_task(task: "Task", hours) -> None:
+    """Credit volunteer time to the current user for work done on a task.
+
+    No-op if ``hours`` is blank or zero. Does not commit — caller does.
+    """
+    if not hours:
+        return
+    db.session.add(
+        VolunteerCredit(
+            user_id=current_user.id,
+            hours=hours,
+            source=VolunteerCreditSource.TASK,
+            task_id=task.id,
+            created_by_id=current_user.id,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------

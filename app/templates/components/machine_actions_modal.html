@@ -113,6 +113,21 @@
                   Marquer le centre actuel comme inactif (au retrait uniquement)
                 </label>
               </div>
+              <hr>
+              <p class="text-muted small mb-2">Bénévolat (facultatif) — crédite le temps aux membres sélectionnés</p>
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-volunteers">Membres ayant participé</label>
+                <select id="{{ _ma_modal_id }}-volunteers" name="volunteer_ids" class="form-select" multiple size="4">
+                  {% for mid, mname in ma_members %}
+                  <option value="{{ mid }}">{{ mname }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3" style="max-width: 10rem;">
+                <label class="form-label" for="{{ _ma_modal_id }}-move-hours">Temps passé (h, pour chacun)</label>
+                <input type="number" id="{{ _ma_modal_id }}-move-hours" name="hours"
+                       class="form-control" step="0.25" min="0" placeholder="ex: 1.5">
+              </div>
             </div>
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>

@@ -206,6 +206,55 @@ class TestMachineInstallation:
             machine = _db.session.get(Machine, mid)
             assert machine.status == MachineStatus.INSTALLED
 
+    def test_install_credits_selected_volunteers(
+        self, app: Flask, bureau_client: FlaskClient, member_user, bureau_user
+    ) -> None:
+        from app.models.volunteer_credit import VolunteerCredit
+
+        mid = _make_machine(app)
+        cid = _make_center(app)
+
+        bureau_client.post(
+            f"/machines/{mid}/install",
+            data={
+                "center_id": str(cid),
+                "installed_at": date.today().strftime("%Y-%m-%d"),
+                "notes": "",
+                "volunteer_ids": [str(member_user.id), str(bureau_user.id)],
+                "hours": "1.5",
+            },
+        )
+        with app.app_context():
+            credits = _db.session.execute(_db.select(VolunteerCredit)).scalars().all()
+            assert len(credits) == 2
+            assert {c.user_id for c in credits} == {member_user.id, bureau_user.id}
+            assert all(float(c.hours) == 1.5 for c in credits)
+            inst = _db.session.execute(
+                _db.select(MachineInstallation).where(
+                    MachineInstallation.machine_id == mid,
+                    MachineInstallation.removed_at.is_(None),
+                )
+            ).scalar_one()
+            assert all(c.machine_installation_id == inst.id for c in credits)
+
+    def test_install_without_hours_credits_nothing(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
+        from app.models.volunteer_credit import VolunteerCredit
+
+        mid = _make_machine(app)
+        cid = _make_center(app)
+        bureau_client.post(
+            f"/machines/{mid}/install",
+            data={
+                "center_id": str(cid),
+                "installed_at": date.today().strftime("%Y-%m-%d"),
+                "notes": "",
+            },
+        )
+        with app.app_context():
+            assert _db.session.execute(_db.select(VolunteerCredit)).scalars().all() == []
+
     def test_bureau_can_remove_installation(self, app: Flask, bureau_client: FlaskClient) -> None:
         mid = _make_machine(app)
         cid = _make_center(app)

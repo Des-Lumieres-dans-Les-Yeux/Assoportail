@@ -62,6 +62,18 @@ def _member_volunteer_hours() -> dict[int, float]:
             # If no times are set, we don't add hours, but the event will still be
             # picked up by _member_event_participations for counting slots.
             pass
+
+    # Time explicitly credited (task resolution, machine installs/moves).
+    from app.models.volunteer_credit import VolunteerCredit
+
+    credit_rows = db.session.execute(
+        db.select(VolunteerCredit.user_id, db.func.sum(VolunteerCredit.hours)).group_by(
+            VolunteerCredit.user_id
+        )
+    ).all()
+    for user_id, total in credit_rows:
+        hours[user_id] = hours.get(user_id, 0.0) + float(total)
+
     return hours
 
 

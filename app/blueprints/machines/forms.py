@@ -9,6 +9,7 @@ from wtforms import (
     DecimalField,
     IntegerField,
     SelectField,
+    SelectMultipleField,
     StringField,
     TextAreaField,
 )
@@ -101,6 +102,16 @@ class InstallMachineForm(FlaskForm):
     mark_center_inactive = BooleanField(
         "Marquer le centre comme inactif",
         validators=[Optional()],
+    )
+    volunteer_ids = SelectMultipleField(
+        "Membres ayant participé",
+        coerce=int,
+        validators=[Optional()],
+    )
+    hours = DecimalField(
+        "Temps passé (h)",
+        places=2,
+        validators=[Optional(), NumberRange(min=0, max=999, message="Temps invalide.")],
     )
 
 

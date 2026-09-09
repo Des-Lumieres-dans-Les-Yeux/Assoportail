@@ -101,6 +101,12 @@
       <span>{{ task.completed_at.strftime('%d/%m/%Y') }}</span>
     </li>
     {% endif %}
+    {% if task.volunteer_credits %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span class="text-muted">Temps de bénévolat enregistré</span>
+      <span>{{ task.volunteer_credits | sum(attribute='hours') }} h</span>
+    </li>
+    {% endif %}
   </ul>
 </section>
 
@@ -280,7 +286,30 @@
       {% for e in comment_form.body.errors %}
       <div class="text-danger small mb-1">{{ e }}</div>
       {% endfor %}
-      <button type="submit" class="btn btn-primary btn-sm">Envoyer</button>
+      <div class="d-flex gap-2 align-items-center flex-wrap">
+        <div class="d-flex gap-1 align-items-center">
+          <label for="{{ comment_form.hours.id }}" class="form-label small mb-0 text-nowrap">
+            Temps passé (h)
+          </label>
+          {{ comment_form.hours(class="form-control form-control-sm", id=comment_form.hours.id,
+                                style="width: 6rem;", step="0.25", min="0",
+                                placeholder="ex: 1.5") }}
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Commenter</button>
+        {% if is_active %}
+        <button type="submit" formaction="{{ url_for('tasks.complete', task_id=task.id) }}"
+                formnovalidate class="btn btn-success btn-sm">
+          Terminer la tâche
+        </button>
+        {% endif %}
+      </div>
+      {% for e in comment_form.hours.errors %}
+      <div class="text-danger small mt-1">{{ e }}</div>
+      {% endfor %}
+      <p class="form-text small mb-0 mt-1">
+        Le temps saisi est comptabilisé comme bénévolat pour vous, que la tâche
+        soit terminée ou non.
+      </p>
     </form>
   </div>
 </section>

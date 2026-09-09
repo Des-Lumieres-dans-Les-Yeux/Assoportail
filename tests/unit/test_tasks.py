@@ -229,6 +229,83 @@ class TestTaskComments:
             ).scalar()
             assert count == 0
 
+    def test_comment_with_hours_credits_volunteer_time_without_closing(
+        self, app: Flask, auth_client: FlaskClient, member_user: UserInfo, bureau_user: UserInfo
+    ) -> None:
+        from app.models.volunteer_credit import VolunteerCredit
+
+        tid = _make_task(app, bureau_user.id)
+        auth_client.post(
+            f"/tasks/{tid}/comments",
+            data={"body": "1h30 passée à diagnostiquer", "hours": "1.5"},
+        )
+        with app.app_context():
+            t = _db.session.get(Task, tid)
+            assert t.status == TaskStatus.OPEN  # a comment never closes the task
+            credit = _db.session.execute(
+                _db.select(VolunteerCredit).where(VolunteerCredit.task_id == tid)
+            ).scalar_one()
+            assert credit.user_id == member_user.id
+            assert float(credit.hours) == 1.5
+
+
+# ---------------------------------------------------------------------------
+# Complete from the comment box
+# ---------------------------------------------------------------------------
+
+
+class TestTaskComplete:
+    def test_complete_closes_task_and_saves_comment(
+        self, app: Flask, auth_client: FlaskClient, member_user: UserInfo, bureau_user: UserInfo
+    ) -> None:
+        tid = _make_task(app, bureau_user.id)
+        response = auth_client.post(
+            f"/tasks/{tid}/complete",
+            data={"body": "Réparé, flipper testé.", "hours": "2"},
+            follow_redirects=False,
+        )
+        assert response.status_code in {301, 302}
+        with app.app_context():
+            from app.models.volunteer_credit import VolunteerCredit
+
+            t = _db.session.get(Task, tid)
+            assert t.status == TaskStatus.DONE
+            assert t.completed_at is not None
+            comment = _db.session.execute(
+                _db.select(TaskComment).where(TaskComment.task_id == tid)
+            ).scalar_one()
+            assert "Réparé" in comment.body
+            credit = _db.session.execute(
+                _db.select(VolunteerCredit).where(VolunteerCredit.task_id == tid)
+            ).scalar_one()
+            assert credit.user_id == member_user.id
+            assert float(credit.hours) == 2.0
+
+    def test_complete_without_comment_or_hours_just_closes(
+        self, app: Flask, auth_client: FlaskClient, bureau_user: UserInfo
+    ) -> None:
+        tid = _make_task(app, bureau_user.id)
+        auth_client.post(f"/tasks/{tid}/complete", data={"body": "", "hours": ""})
+        with app.app_context():
+            from app.models.volunteer_credit import VolunteerCredit
+
+            t = _db.session.get(Task, tid)
+            assert t.status == TaskStatus.DONE
+            assert (
+                _db.session.execute(
+                    _db.select(_db.func.count(TaskComment.id)).where(TaskComment.task_id == tid)
+                ).scalar()
+                == 0
+            )
+            assert (
+                _db.session.execute(
+                    _db.select(_db.func.count(VolunteerCredit.id)).where(
+                        VolunteerCredit.task_id == tid
+                    )
+                ).scalar()
+                == 0
+            )
+
 
 # ---------------------------------------------------------------------------
 # Priority ordering on list

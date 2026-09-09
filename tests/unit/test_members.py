@@ -132,6 +132,26 @@ class TestMemberList:
         assert "membre@test.com" in body
         assert "bureau@test.com" not in body
 
+    def test_volunteer_credits_count_toward_member_hours(
+        self, app: Flask, bureau_client: FlaskClient, member_user: UserInfo
+    ) -> None:
+        """Task/machine-credited hours are added into the member list total."""
+        from app.models.volunteer_credit import VolunteerCredit, VolunteerCreditSource
+
+        with app.app_context():
+            _db.session.add(
+                VolunteerCredit(
+                    user_id=member_user.id,
+                    hours=Decimal("2.5"),
+                    source=VolunteerCreditSource.TASK,
+                )
+            )
+            _db.session.commit()
+
+        response = bureau_client.get("/members/")
+        assert response.status_code == 200
+        assert "2.5" in response.data.decode()
+
 
 # ---------------------------------------------------------------------------
 # Member detail

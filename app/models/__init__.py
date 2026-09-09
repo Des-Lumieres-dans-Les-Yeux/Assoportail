@@ -32,6 +32,7 @@ from app.models.social import (
 from app.models.task import Task, TaskComment
 from app.models.treasury import Tag, Transaction
 from app.models.user import User
+from app.models.volunteer_credit import VolunteerCredit, VolunteerCreditSource
 
 __all__ = [
     "AssociationConfig",
@@ -66,6 +67,8 @@ __all__ = [
     "SocialPostProcessedImage",
     "SocialPublishLog",
     "VolunteerSlotAvailability",
+    "VolunteerCredit",
+    "VolunteerCreditSource",
     "Transaction",
     "User",
 ]

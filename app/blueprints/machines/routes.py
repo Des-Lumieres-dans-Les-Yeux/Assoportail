@@ -35,6 +35,7 @@ from app.models.machine import (
 )
 from app.models.task import Task
 from app.models.user import User, UserPermission
+from app.models.volunteer_credit import VolunteerCredit, VolunteerCreditSource
 from app.services.csv_io import export_machines_csv, parse_machines_csv
 
 logger = logging.getLogger(__name__)
@@ -357,6 +358,7 @@ def install(machine_id: int):
     form = InstallMachineForm()
     form.center_id.choices = [("", "—")] + _active_center_choices()
     form.hosted_by_id.choices = [("", "—")] + _member_choices()
+    form.volunteer_ids.choices = _member_choices()
 
     if not form.validate_on_submit():
         for errors in form.errors.values():
@@ -400,6 +402,7 @@ def install(machine_id: int):
             if center and center.status != CenterStatus.INACTIVE:
                 center.status = CenterStatus.INACTIVE
         machine.status = MachineStatus.STOCK
+        _credit_volunteers_for_install(form, machine_installation_id=None)
         db.session.commit()
         flash("Machine récupérée et remise en stock.", "success")
         next_url = request.form.get("_next", "")
@@ -453,6 +456,8 @@ def install(machine_id: int):
     machine.status = MachineStatus.INSTALLED
     db.session.add(installation)
     try:
+        db.session.flush()  # assigns installation.id for the credits below
+        _credit_volunteers_for_install(form, machine_installation_id=installation.id)
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
@@ -1415,3 +1420,27 @@ def _member_choices() -> list[tuple[int, str]]:
         db.select(User).where(User.is_active.is_(True)).order_by(User.last_name, User.first_name)
     ).all()
     return [(u.id, u.full_name) for u in users]
+
+
+def _credit_volunteers_for_install(
+    form: InstallMachineForm, machine_installation_id: int | None
+) -> None:
+    """Credit each selected volunteer with the hours logged on an install/move/retrieval.
+
+    No-op if no hours were entered. ``machine_installation_id`` is None for a
+    retrieval to stock (no resulting installation row).
+    Note: every selected volunteer is credited the *same* number of hours —
+    a joint effort, not hours split between participants.
+    """
+    if not form.hours.data:
+        return
+    for user_id in form.volunteer_ids.data:
+        db.session.add(
+            VolunteerCredit(
+                user_id=user_id,
+                hours=form.hours.data,
+                source=VolunteerCreditSource.MACHINE_INSTALLATION,
+                machine_installation_id=machine_installation_id,
+                created_by_id=current_user.id,
+            )
+        )

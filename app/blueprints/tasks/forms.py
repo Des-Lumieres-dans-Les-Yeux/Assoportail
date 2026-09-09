@@ -68,6 +68,12 @@ class TaskForm(FlaskForm):
     )
 
 
+_HOURS_VALIDATORS = [
+    Optional(),
+    NumberRange(min=0, max=999, message="Le temps doit être un nombre positif."),
+]
+
+
 class TaskCommentForm(FlaskForm):
     """Form for posting a comment on a task."""
 
@@ -78,6 +84,17 @@ class TaskCommentForm(FlaskForm):
             Length(max=2000),
         ],
     )
+    hours = DecimalField("Temps passé (h)", places=2, validators=_HOURS_VALIDATORS)
+
+
+class TaskCompleteForm(FlaskForm):
+    """Form for closing a task from the comment box: optional comment + time spent."""
+
+    body = TextAreaField(
+        "Commentaire",
+        validators=[Optional(), Length(max=2000)],
+    )
+    hours = DecimalField("Temps passé (h)", places=2, validators=_HOURS_VALIDATORS)
 
 
 class TaskClaimForm(FlaskForm):

@@ -147,6 +147,9 @@ class Task(db.Model):
         order_by="TaskComment.created_at",
         cascade="all, delete-orphan",
     )
+    volunteer_credits: Mapped[list] = relationship(
+        "VolunteerCredit", order_by="VolunteerCredit.created_at"
+    )
 
     def __repr__(self) -> str:
         return f"<Task {self.title!r} status={self.status.value}>"
