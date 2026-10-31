@@ -28,7 +28,7 @@ icalendar==7.3.0
 qrcode==8.2
 pyotp==2.10.0
 docx-mailmerge2==1.0.1
-pypdf==6.18.0
+pypdf==6.21.4
 Pillow==12.3.0
 bleach==6.4.0
 pywebpush==2.5.0
