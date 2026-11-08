@@ -78,6 +78,7 @@ class TestCenterCreate:
                 "contact_email": "",
                 "contact_phone": "",
                 "status": "prospect",
+                "blog_link": "https://blog.asso.example.org/centre-ste-marie",
                 "notes": "",
             },
             follow_redirects=False,
@@ -89,6 +90,7 @@ class TestCenterCreate:
             ).scalar_one_or_none()
             assert c is not None
             assert c.status == CenterStatus.PROSPECT
+            assert c.blog_link == "https://blog.asso.example.org/centre-ste-marie"
 
     def test_member_cannot_create_center(self, auth_client: FlaskClient) -> None:
         response = auth_client.get("/centers/new")
@@ -127,6 +129,7 @@ class TestCenterEdit:
                 "status": "active",
                 "pathology": "",
                 "target_audience": "",
+                "blog_link": "https://blog.asso.example.org/centre-chu-nord",
                 "latitude": "48.8566",
                 "longitude": "2.3522",
                 "notes": "",
@@ -135,6 +138,7 @@ class TestCenterEdit:
         with app.app_context():
             c = _db.session.get(Center, cid)
             assert c.status == CenterStatus.ACTIVE
+            assert c.blog_link == "https://blog.asso.example.org/centre-chu-nord"
 
 
 # ---------------------------------------------------------------------------
@@ -485,3 +489,20 @@ class TestCenterDetailPreselect:
         html = client.get("/vitrine/map").data.decode()
         assert "https://blog.asso.example.org/inauguration-chu-nord" in html
         assert "Billet du blog" in html
+
+    def test_vitrine_map_shows_center_blog_link_without_installation(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """A center-level blog link shows on the map even with no active
+        machine — the historical-installation case."""
+        cid = _make_center(app)
+        with app.app_context():
+            center = _db.session.get(Center, cid)
+            center.latitude = 48.8566
+            center.longitude = 2.3522
+            center.blog_link = "https://blog.asso.example.org/centre-historique"
+            _db.session.commit()
+
+        html = client.get("/vitrine/map").data.decode()
+        assert "https://blog.asso.example.org/centre-historique" in html
+        assert "Lien web du centre" in html

@@ -71,6 +71,13 @@
     <div class="form-text">Jours et heures où le centre est accessible.</div>
   </div>
 
+  <div class="mb-3">
+    <label for="{{ form.blog_link.id }}" class="form-label">{{ form.blog_link.label.text }}</label>
+    {{ form.blog_link(class="form-control", id=form.blog_link.id, type="url", placeholder="https://…") }}
+    {% for e in form.blog_link.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+    <div class="form-text">Affiché sur la carte des centres (popup du marqueur) — persiste même si la machine est déplacée ou retirée.</div>
+  </div>
+
   <div class="row g-3 mb-3">
     <div class="col-sm-6">
       <label for="{{ form.latitude.id }}" class="form-label">{{ form.latitude.label.text }}</label>

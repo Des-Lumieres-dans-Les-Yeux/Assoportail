@@ -68,6 +68,7 @@ def map_view():
                 "lng": c.longitude,
                 "machine_name": machine_name,
                 "web_link": active[0].web_link if active else None,
+                "blog_link": c.blog_link,
                 "pathology": c.pathology,
                 "target_audience": c.target_audience,
             }

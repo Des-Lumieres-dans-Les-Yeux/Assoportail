@@ -652,6 +652,7 @@ def create():
             latitude=form.latitude.data,
             longitude=form.longitude.data,
             opening_hours=(form.opening_hours.data or "").strip() or None,
+            blog_link=(form.blog_link.data or "").strip() or None,
             notes=(form.notes.data or "").strip() or None,
         )
 
@@ -693,6 +694,7 @@ def edit(center_id: int):
         center.pathology = form.pathology.data or None
         center.target_audience = form.target_audience.data or None
         center.opening_hours = (form.opening_hours.data or "").strip() or None
+        center.blog_link = (form.blog_link.data or "").strip() or None
         center.notes = (form.notes.data or "").strip() or None
 
         # Keep the submitted coordinates unless the address changed.
@@ -1431,6 +1433,7 @@ def approve_request(request_id: int):
             zip_code=form.zip_code.data.strip(),
             status=form.status.data,
             opening_hours=(form.opening_hours.data or "").strip() or None,
+            blog_link=(form.blog_link.data or "").strip() or None,
             notes=(form.notes.data or "").strip() or None,
         )
 

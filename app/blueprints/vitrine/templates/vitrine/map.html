@@ -58,7 +58,8 @@
             if (center.lat && center.lng) {
                 const marker = L.marker([center.lat, center.lng]).addTo(map);
 
-                const webLink = safeHttpUrl(center.web_link);
+                const installLink = safeHttpUrl(center.web_link);
+                const centerLink = safeHttpUrl(center.blog_link);
                 const meta = [];
                 if (center.pathology) {
                     meta.push('🩺 ' + center.pathology.charAt(0).toUpperCase() + center.pathology.slice(1));
@@ -73,7 +74,8 @@
                         <div class="popup-city">${esc(center.city)} (${esc(center.zip_code)})</div>
                         ${meta.length ? `<div style="font-size: 0.85em; color: #475569; margin-bottom: 8px;">${esc(meta.join(' • '))}</div>` : ''}
                         <div class="popup-badge">🕹️ ${esc(center.machine_name)}</div>
-                        ${webLink ? `<div class="popup-link"><a href="${esc(webLink)}" target="_blank" rel="noopener">📝 Billet du blog</a></div>` : ''}
+                        ${installLink ? `<div class="popup-link"><a href="${esc(installLink)}" target="_blank" rel="noopener">📝 Billet du blog</a></div>` : ''}
+                        ${centerLink ? `<div class="popup-link"><a href="${esc(centerLink)}" target="_blank" rel="noopener">🔗 Lien web du centre</a></div>` : ''}
                     </div>
                 `;
                 

@@ -66,6 +66,10 @@ class CenterForm(FlaskForm):
         "Horaires d'ouverture",
         validators=[Optional(), Length(max=500)],
     )
+    blog_link = StringField(
+        "Lien web du centre (blog, article…)",
+        validators=[Optional(), Length(max=500)],
+    )
     latitude = FloatField("Latitude", validators=[Optional()])
     longitude = FloatField("Longitude", validators=[Optional()])
     notes = TextAreaField("Notes internes", validators=[Optional(), Length(max=2000)])

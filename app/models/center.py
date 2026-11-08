@@ -61,6 +61,10 @@ class Center(db.Model):
     pathology: Mapped[str | None] = mapped_column(String(100), nullable=True)
     target_audience: Mapped[str | None] = mapped_column(String(50), nullable=True)
     opening_hours: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Permanent public link about the center (e.g. blog post) — shown on the
+    # vitrine map popup. Unlike MachineInstallation.web_link, it survives
+    # machine moves/removals and historical centers.
+    blog_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[CenterStatus] = mapped_column(
         Enum(
             CenterStatus, name="center_status", values_callable=lambda obj: [e.value for e in obj]
