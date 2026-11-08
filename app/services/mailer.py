@@ -19,7 +19,7 @@ import logging
 import mimetypes
 import smtplib
 from datetime import date, datetime
-from email.encoders import encode
+from email import encoders
 from email.mime.application import MIMEApplication
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -449,7 +449,7 @@ def _attach_files(msg: MIMEMultipart, attachments: list[tuple[str, bytes]]) -> N
             main_type, _, sub_type = mime_type.partition("/")
             part: MIMEBase = MIMEBase(main_type, sub_type, {"Name": safe_filename})
             part.set_payload(data)
-            encoders.encode(base64)
+            encoders.encode_base64(part)
         elif mime_type:
             part = MIMEApplication(data, _subtype=mime_type.split("/", 1)[1], Name=safe_filename)
         else:

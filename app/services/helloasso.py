@@ -241,9 +241,7 @@ def sync_helloasso_memberships(
                     ).scalar_one_or_none()
 
                     if not existing:
-                        email = (
-                            item.user.email if item.user else item.order.payer.email
-                        ).lower()
+                        email = (item.user.email if item.user else item.order.payer.email).lower()
 
                         user = db.session.execute(
                             db.select(User).filter_by(email=email)
@@ -251,15 +249,9 @@ def sync_helloasso_memberships(
 
                         if not user:
                             first = (
-                                item.user.first_name
-                                if item.user
-                                else item.order.payer.first_name
+                                item.user.first_name if item.user else item.order.payer.first_name
                             )
-                            last = (
-                                item.user.last_name
-                                if item.user
-                                else item.order.payer.last_name
-                            )
+                            last = item.user.last_name if item.user else item.order.payer.last_name
                             user = User(
                                 email=email,
                                 first_name=first,

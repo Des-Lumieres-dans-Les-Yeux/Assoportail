@@ -159,7 +159,7 @@ class User(UserMixin, db.Model):
             data = decrypt_token(raw)
             value = data.get("totp") if isinstance(data, dict) else None
         except Exception:
-            pass
+            logger.debug("TOTP payload not decryptable as a dict for user %s", self.email)
         if value is None:
             # Backwards compat: legacy secrets stored unencrypted (pre-migration)
             if len(raw) <= 64 and raw.isalnum():

@@ -19,7 +19,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(sa.text("ALTER TABLE machine_installations ADD COLUMN IF NOT EXISTS web_link VARCHAR(500)"))
+    op.execute(
+        sa.text("ALTER TABLE machine_installations ADD COLUMN IF NOT EXISTS web_link VARCHAR(500)")
+    )
 
 
 def downgrade() -> None:

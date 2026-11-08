@@ -1699,8 +1699,7 @@ def sign_document_download(token: str):
             # from doc.mime_type (legacy rows may hold the client claim).
             return Response(
                 data,
-                mimetype=mimetypes.guess_type(doc.stored_filename)[0]
-                or "application/octet-stream",
+                mimetype=mimetypes.guess_type(doc.stored_filename)[0] or "application/octet-stream",
                 headers={
                     "Content-Disposition": f'attachment; filename="{doc.original_filename}"',
                     "Cache-Control": "private, no-store",

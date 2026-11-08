@@ -382,14 +382,9 @@ def _send_recipients(campaign_id: int, client, *, batch_size: int | None = None)
                 # Lock the center row: a concurrent campaign's uncommitted
                 # token mint would otherwise overwrite ours (last-writer-wins
                 # race deadening the public links in already-sent emails).
-                center = (
-                    db.session.execute(
-                        db.select(Center)
-                        .where(Center.id == recipient.center.id)
-                        .with_for_update()
-                    )
-                    .scalar_one()
-                )
+                center = db.session.execute(
+                    db.select(Center).where(Center.id == recipient.center.id).with_for_update()
+                ).scalar_one()
                 import secrets
 
                 dirty = False

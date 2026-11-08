@@ -60,9 +60,7 @@ def subscribe():
 
     # Endpoint validation: HTTPS public host only (see _is_public_host).
     parsed = urlparse(endpoint)
-    if parsed.scheme != "https" or not parsed.hostname or not _is_public_host(
-        parsed.hostname
-    ):
+    if parsed.scheme != "https" or not parsed.hostname or not _is_public_host(parsed.hostname):
         return jsonify({"error": "Invalid endpoint host"}), 400
 
     sub = db.session.execute(
@@ -76,8 +74,9 @@ def subscribe():
 
     if sub is None:
         own_count = db.session.scalar(
-            db.select(db.func.count(PushSubscription.id))
-            .where(PushSubscription.user_id == current_user.id)
+            db.select(db.func.count(PushSubscription.id)).where(
+                PushSubscription.user_id == current_user.id
+            )
         )
         if own_count >= _MAX_SUBSCRIPTIONS_PER_USER:
             return jsonify({"error": "Too many push subscriptions"}), 400

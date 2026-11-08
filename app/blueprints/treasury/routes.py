@@ -338,7 +338,7 @@ def send_cerfa_email(transaction_id: int):
     if not sent:
         # Both channels failed silently (Gmail down + SMTP down): never mark
         # the receipt as sent — the donor has not received it.
-        logger.error("CERFA delivery failed (Gmail API and SMTP) for transaction %d", transaction_id)
+        logger.error("CERFA delivery failed (Gmail API + SMTP) for transaction %d", transaction_id)
         flash(
             "Échec de l'envoi du CERFA : Gmail API et SMTP indisponibles. "
             "Le reçu n'a pas été envoyé — réessayez.",
@@ -843,6 +843,4 @@ def _check_merge_fields(docx_bytes: bytes, required: set[str]) -> set[str]:
         return required - found
     except Exception:
         logger.warning("Could not inspect merge fields in uploaded DOCX", exc_info=True)
-        raise ValueError(
-            "Impossible d'inspecter les champs de fusion du DOCX téléversé."
-        ) from None
+        raise ValueError("Impossible d'inspecter les champs de fusion du DOCX téléversé.") from None

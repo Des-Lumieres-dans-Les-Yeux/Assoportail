@@ -8,6 +8,8 @@ from unittest.mock import patch
 from flask import Flask, url_for
 from flask.testing import FlaskClient
 
+# Importé pour que le target patch("app.services.mailer.…") se résolve.
+import app.services.mailer  # noqa: F401
 from app.extensions import db as _db
 from app.models.center import Center, CenterContact, CenterFeedback, CenterStatus
 from app.models.machine import Machine, MachineInstallation
@@ -459,8 +461,10 @@ class TestCenterDetailPreselect:
         cid = _make_center(app)
 
         html = bureau_client.get(f"/centers/{cid}").data.decode()
+        # No machine option is preselected — the center has no active installation.
         assert re.search(r'<option value="\d+" data-name="[^"]*"\s+selected>', html) is None
-        assert f'<option value="{cid}" selected>' not in html
+        # The center selector is preselected to the current center, unconditionally.
+        assert f'<option value="{cid}" selected>' in html
 
     def test_vitrine_map_shows_installation_web_link(self, app: Flask, client: FlaskClient) -> None:
         mid = _make_machine(app)

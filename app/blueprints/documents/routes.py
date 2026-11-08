@@ -425,8 +425,7 @@ def download(document_id: int):
             # from doc.mime_type (legacy rows may hold the client claim).
             return Response(
                 data,
-                mimetype=mimetypes.guess_type(doc.stored_filename)[0]
-                or "application/octet-stream",
+                mimetype=mimetypes.guess_type(doc.stored_filename)[0] or "application/octet-stream",
                 headers={"Cache-Control": "private, max-age=3600"},
             )
         except Exception:

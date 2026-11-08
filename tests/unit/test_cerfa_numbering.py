@@ -9,13 +9,14 @@ from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from app.extensions import db
-from app.models.treasury import Transaction, TransactionSource
+from app.models.treasury import Transaction, TransactionSource, TransactionType
 from app.services.cerfa import assign_cerfa_number
 from tests.conftest import UserInfo
 
 
 def _make_transaction(bureau_user: UserInfo) -> Transaction:
     txn = Transaction(
+        type=TransactionType.INCOME.value,
         amount=Decimal("100.00"),
         date=date(2026, 3, 1),
         description="don de test",
@@ -49,16 +50,17 @@ def test_assign_cerfa_number_retries_on_collision(app: Flask, bureau_user: UserI
     the next number, never reusing the colliding one."""
     with app.app_context():
         txn = _make_transaction(bureau_user)
-        original_flush = Session.flush
+        original_execute = Session.execute
         collided = {"done": False}
 
-        def racy_flush(self, *args, **kwargs):
-            if not collided["done"] and txn.cerfa_number == "DON-2026-00001":
+        def racy_execute(statement, *args, **kwargs):
+            if not collided["done"]:
                 # A second connection commits the candidate number, simulating
-                # a concurrent inserter between our scan and our flush.
+                # a concurrent inserter between our scan and our claim.
                 with db.engine.connect() as ghost:
                     ghost.execute(
                         insert(Transaction).values(
+                            type=TransactionType.INCOME.value,
                             amount=Decimal("10.00"),
                             date=date(2026, 3, 1),
                             description="don concurrent",
@@ -69,9 +71,9 @@ def test_assign_cerfa_number_retries_on_collision(app: Flask, bureau_user: UserI
                     )
                     ghost.commit()
                 collided["done"] = True
-            return original_flush(self, *args, **kwargs)
+            return original_execute(db.session(), statement, *args, **kwargs)
 
-        with patch.object(Session, "flush", side_effect=racy_flush):
+        with patch.object(Session, "execute", side_effect=racy_execute):
             number = assign_cerfa_number(txn)
 
         assert number == "DON-2026-00002"

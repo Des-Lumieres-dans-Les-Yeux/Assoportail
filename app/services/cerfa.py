@@ -480,6 +480,7 @@ def assign_cerfa_number(transaction: Transaction) -> str:
     if transaction.cerfa_number:
         return transaction.cerfa_number
 
+    from sqlalchemy import update
     from sqlalchemy.exc import IntegrityError
 
     from app.extensions import db
@@ -487,6 +488,8 @@ def assign_cerfa_number(transaction: Transaction) -> str:
 
     year = transaction.date.year
     prefix = f"DON-{year}-"
+    # The row must exist on this connection before the claim UPDATE can hit it.
+    db.session.flush()
     for _ in range(8):
         existing = db.session.scalars(
             db.select(Txn.cerfa_number).where(Txn.cerfa_number.like(f"{prefix}%"))
@@ -495,10 +498,16 @@ def assign_cerfa_number(transaction: Transaction) -> str:
         # (defensive against hand-edited values) instead of crashing on int().
         seqs = [int(s) for n in existing if (s := n.rsplit("-", 1)[-1]).isdigit()]
         candidate = f"{prefix}{max(seqs, default=0) + 1:05d}"
-        transaction.cerfa_number = candidate
         try:
-            with db.session.begin_nested():  # SAVEPOINT — isolates this flush
-                db.session.flush()
+            # Claim with a Core UPDATE on this session's connection. An ORM
+            # flush that fails inside a SAVEPOINT poisons the whole session
+            # (PendingRollbackError); a statement failure is contained by the
+            # savepoint rollback, so the retry loop can continue.
+            with db.session.begin_nested():
+                db.session.execute(
+                    update(Txn).where(Txn.id == transaction.id).values(cerfa_number=candidate)
+                )
+            transaction.cerfa_number = candidate
             return candidate
         except IntegrityError:
             transaction.cerfa_number = None

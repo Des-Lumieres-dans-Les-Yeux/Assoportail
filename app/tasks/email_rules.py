@@ -242,7 +242,6 @@ def _forward_to_within_daily_cap(rule_id: int) -> bool:
     from datetime import UTC, datetime
 
     import redis
-
     from flask import current_app
 
     try:

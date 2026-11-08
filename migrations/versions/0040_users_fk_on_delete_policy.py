@@ -67,6 +67,4 @@ def downgrade() -> None:
         clause = f"FOREIGN KEY ({column}) REFERENCES users(id)"
         if original:
             clause += f" ON DELETE {original}"
-        op.execute(
-            sa.text(f'ALTER TABLE "{table}" ADD CONSTRAINT "{_fk(table, column)}" {clause}')
-        )
+        op.execute(sa.text(f'ALTER TABLE "{table}" ADD CONSTRAINT "{_fk(table, column)}" {clause}'))

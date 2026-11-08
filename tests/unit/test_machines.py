@@ -229,7 +229,9 @@ class TestMachineInstallation:
             ).scalar_one()
             assert inst.web_link == "https://blog.asso.example.org/inauguration-chu-nord"
 
-    def test_install_same_location_updates_web_link(self, app: Flask, bureau_client: FlaskClient) -> None:
+    def test_install_same_location_updates_web_link(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
         """Re-submitting the pre-filled (machine, center) pair from the center
         page updates the installation's web link instead of failing."""
         mid = _make_machine(app)

@@ -6,6 +6,7 @@ import csv
 import io
 from typing import Any
 
+
 def _detect_delimiter(text: str) -> str | None:
     """Quote-aware delimiter for the header line, or None if none is found.
 
@@ -83,9 +84,9 @@ def parse_machines_csv(file_data: bytes) -> tuple[list[dict], list[str]]:
         return [], ["Fichier CSV vide."]
 
     # Delimiter detection
-    dialect = _detect_delimiter(text) or "excel"
+    delim = _detect_delimiter(text) or ","
 
-    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    reader = csv.DictReader(io.StringIO(text), delimiter=delim)
     if reader.fieldnames is None:
         return [], ["Fichier CSV sans en-têtes."]
 
@@ -209,9 +210,9 @@ def parse_centers_csv(file_data: bytes) -> tuple[list[dict], list[str]]:
         return [], ["Fichier CSV vide."]
 
     # Delimiter detection
-    dialect = _detect_delimiter(text) or "excel"
+    delim = _detect_delimiter(text) or ","
 
-    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    reader = csv.DictReader(io.StringIO(text), delimiter=delim)
     if reader.fieldnames is None:
         return [], ["Fichier CSV sans en-têtes."]
 
@@ -316,9 +317,9 @@ def parse_members_csv(file_data: bytes) -> tuple[list[dict], list[str]]:
     if not text.strip():
         return [], ["Fichier CSV vide."]
 
-    dialect = _detect_delimiter(text) or "excel"
+    delim = _detect_delimiter(text) or ","
 
-    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    reader = csv.DictReader(io.StringIO(text), delimiter=delim)
     if reader.fieldnames is None:
         return [], ["Fichier CSV sans en-têtes."]
 

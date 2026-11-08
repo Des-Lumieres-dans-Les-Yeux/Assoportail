@@ -478,7 +478,10 @@ def submit_expense(event_id: int):
 
                 detected = _detect_mime(data)
                 if detected != _ALLOWED_EXTENSIONS[ext]:
-                    flash("Format de justificatif non supporté (JPEG, PNG, GIF, WebP, PDF).", "warning")
+                    flash(
+                        "Format de justificatif non supporté (JPEG, PNG, GIF, WebP, PDF).",
+                        "warning",
+                    )
                 elif len(data) > receipt_max:
                     flash("Le justificatif dépasse 10 Mo.", "warning")
                 else:

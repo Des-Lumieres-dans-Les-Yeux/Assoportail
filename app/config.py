@@ -158,6 +158,11 @@ class DevelopmentConfig(Config):
     SQLALCHEMY_ECHO: bool = False  # set True locally to log SQL queries
 
 
+# .env.example placeholder for the first-run admin: pasting the example file
+# unmodified must not boot a production instance.
+_ENV_EXAMPLE_ADMIN_DEFAULT = "change-me-immediately"
+
+
 class ProductionConfig(Config):
     """Production configuration — HTTPS enforced, no debug."""
 
@@ -196,7 +201,7 @@ class ProductionConfig(Config):
                 "REDIS_PASSWORD must be set to a strong value in production "
                 "(it is embedded in REDIS_URL)."
             )
-        if cls.ADMIN_PASSWORD == "change-me-immediately":
+        if cls.ADMIN_PASSWORD == _ENV_EXAMPLE_ADMIN_DEFAULT:
             # .env.example placeholder: the seeded first-run admin would have
             # a publicly known password.
             raise RuntimeError("ADMIN_PASSWORD must be changed in production.")
