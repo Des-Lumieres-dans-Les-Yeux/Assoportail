@@ -22,7 +22,13 @@ from app.extensions import db
 from app.models.api_token import ApiToken
 from app.models.member import Membership, MembershipSource
 from app.models.task import Task, TaskStatus
-from app.models.user import BUREAU_DEFAULT_PERMISSIONS, MEMBER_DEFAULT_PERMISSIONS, User, UserRole
+from app.models.user import (
+    BUREAU_DEFAULT_PERMISSIONS,
+    MEMBER_DEFAULT_PERMISSIONS,
+    MEMBER_EXCLUDED_PERMISSIONS,
+    User,
+    UserRole,
+)
 from app.services.csv_io import export_members_csv, parse_members_csv
 
 # ---------------------------------------------------------------------------
@@ -580,7 +586,12 @@ def create():
             )
             return redirect(url_for("members.detail", user_id=user.id))
 
-    return render_template("members/form.html", form=form, title="Nouveau membre")
+    return render_template(
+        "members/form.html",
+        form=form,
+        title="Nouveau membre",
+        member_excluded=sorted(MEMBER_EXCLUDED_PERMISSIONS),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -607,7 +618,11 @@ def edit(user_id: int):
             if conflict:
                 form.email.errors.append("Cette adresse email est déjà utilisée.")
                 return render_template(
-                    "members/form.html", form=form, title="Modifier le membre", member=user
+                    "members/form.html",
+                    form=form,
+                    title="Modifier le membre",
+                    member=user,
+                    member_excluded=sorted(MEMBER_EXCLUDED_PERMISSIONS),
                 )
 
         user.first_name = form.first_name.data.strip()
@@ -623,7 +638,13 @@ def edit(user_id: int):
         flash("Profil mis à jour.", "success")
         return redirect(url_for("members.detail", user_id=user.id))
 
-    return render_template("members/form.html", form=form, title="Modifier le membre", member=user)
+    return render_template(
+        "members/form.html",
+        form=form,
+        title="Modifier le membre",
+        member=user,
+        member_excluded=sorted(MEMBER_EXCLUDED_PERMISSIONS),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,5 @@
 """Assoportail application factory."""
 
-import ipaddress
 import logging
 import os
 
@@ -9,39 +8,18 @@ from flask import Flask, render_template
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import config_by_name
-from app.extensions import csrf, db, limiter, login_manager, migrate, talisman
-
-logger = logging.getLogger(__name__)
-
-
-# Plages de documentation (RFC 5737 IPv4, RFC 3849 IPv6) : Python les classe
-# ``is_private``, mais ce sont des adresses d'exemple non routables — elles ne
-# doivent jamais être considérées comme internes/confiantes.
-_DOCUMENTATION_NETS = (
-    ipaddress.ip_network("192.0.2.0/24"),
-    ipaddress.ip_network("198.51.100.0/24"),
-    ipaddress.ip_network("203.0.113.0/24"),
-    ipaddress.ip_network("2001:db8::/32"),
+from app.extensions import (
+    _is_private_ip,
+    csrf,
+    db,
+    effective_client_ip,
+    limiter,
+    login_manager,
+    migrate,
+    talisman,
 )
 
-
-def _is_private_ip(ip: str | None) -> bool:
-    """Return True for loopback, link-local and RFC1918 private addresses.
-
-    Used to restrict internal endpoints (/health, /api/docs) to the local
-    network. With ProxyFix, ``request.remote_addr`` is rewritten to the real
-    client IP for proxied requests, so public internet callers are rejected
-    while the container-local orchestration healthcheck still works.
-    """
-    if not ip:
-        return False
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
-        return False
-    if any(addr in net for net in _DOCUMENTATION_NETS):
-        return False
-    return addr.is_loopback or addr.is_link_local or addr.is_private or addr.is_reserved
+logger = logging.getLogger(__name__)
 
 
 # Relaxed CSP applied only to the Swagger UI / ReDoc documentation pages
@@ -81,7 +59,16 @@ def create_app(config_name: str | None = None) -> Flask:
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config.from_object(config_obj)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+    # Capture the real socket peer *before* ProxyFix rewrites REMOTE_ADDR
+    # from X-Forwarded-For (forgeable by a direct caller): see
+    # effective_client_ip() in app/extensions.py.
+    _proxy = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+    def _capture_original_peer(environ, start_response):
+        environ["_ORIGINAL_PEER"] = environ.get("REMOTE_ADDR")
+        return _proxy(environ, start_response)
+
+    app.wsgi_app = _capture_original_peer
 
     # Registered before Talisman so it runs *after* Talisman's header is set
     # (Flask executes after_request callbacks in reverse registration order),
@@ -100,15 +87,17 @@ def create_app(config_name: str | None = None) -> Flask:
         from flask_login import current_user
 
         # /health is consumed by container orchestration from localhost. Reject
-        # public internet callers (ProxyFix rewrites remote_addr to the real IP).
-        if request.path == "/health" and not _is_private_ip(request.remote_addr):
+        # public internet callers. effective_client_ip() falls back to the
+        # original socket peer when it is not behind a trusted (private)
+        # proxy, so a forged X-Forwarded-For cannot pass the check.
+        if request.path == "/health" and not _is_private_ip(effective_client_ip()):
             abort(403)
 
         # /api/docs/* (Swagger/OpenAPI) expose the API surface. Bureau members
         # may consult them after login; otherwise only private-network callers.
         if request.path.startswith("/api/docs"):
             bureau_ok = current_user.is_authenticated and getattr(current_user, "is_bureau", False)
-            if not bureau_ok and not _is_private_ip(request.remote_addr):
+            if not bureau_ok and not _is_private_ip(effective_client_ip()):
                 abort(403)
         return None
 

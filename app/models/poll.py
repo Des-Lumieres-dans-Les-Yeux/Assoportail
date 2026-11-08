@@ -48,7 +48,7 @@ class Poll(db.Model):
     votes: Mapped[list[PollVote]] = relationship(
         "PollVote", back_populates="poll", cascade="all, delete-orphan"
     )
-    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_id])
     cover_document: Mapped[Document | None] = relationship(
         "Document", foreign_keys=[cover_document_id]
     )
@@ -111,4 +111,4 @@ class PollVote(db.Model):
 
     poll: Mapped[Poll] = relationship("Poll", back_populates="votes")
     option: Mapped[PollOption] = relationship("PollOption", back_populates="votes")
-    user: Mapped[User] = relationship("User")
+    user: Mapped[User | None] = relationship("User")

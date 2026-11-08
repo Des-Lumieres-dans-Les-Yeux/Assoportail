@@ -206,6 +206,58 @@ class TestMachineInstallation:
             machine = _db.session.get(Machine, mid)
             assert machine.status == MachineStatus.INSTALLED
 
+    def test_install_saves_web_link(self, app: Flask, bureau_client: FlaskClient) -> None:
+        mid = _make_machine(app)
+        cid = _make_center(app)
+
+        bureau_client.post(
+            f"/machines/{mid}/install",
+            data={
+                "center_id": str(cid),
+                "installed_at": date.today().strftime("%Y-%m-%d"),
+                "notes": "",
+                "web_link": "https://blog.asso.example.org/inauguration-chu-nord",
+            },
+        )
+
+        with app.app_context():
+            inst = _db.session.execute(
+                _db.select(MachineInstallation).where(
+                    MachineInstallation.machine_id == mid,
+                    MachineInstallation.removed_at.is_(None),
+                )
+            ).scalar_one()
+            assert inst.web_link == "https://blog.asso.example.org/inauguration-chu-nord"
+
+    def test_install_same_location_updates_web_link(self, app: Flask, bureau_client: FlaskClient) -> None:
+        """Re-submitting the pre-filled (machine, center) pair from the center
+        page updates the installation's web link instead of failing."""
+        mid = _make_machine(app)
+        cid = _make_center(app)
+        _install(app, mid, cid)
+
+        response = bureau_client.post(
+            f"/machines/{mid}/install",
+            data={
+                "center_id": str(cid),
+                "installed_at": date.today().strftime("%Y-%m-%d"),
+                "notes": "",
+                "web_link": "https://blog.asso.example.org/inauguration-chu-nord",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "lien web mis à jour" in response.data.decode()
+
+        with app.app_context():
+            inst = _db.session.execute(
+                _db.select(MachineInstallation).where(
+                    MachineInstallation.machine_id == mid,
+                    MachineInstallation.removed_at.is_(None),
+                )
+            ).scalar_one()
+            assert inst.web_link == "https://blog.asso.example.org/inauguration-chu-nord"
+
     def test_install_credits_selected_volunteers(
         self, app: Flask, bureau_client: FlaskClient, member_user, bureau_user
     ) -> None:

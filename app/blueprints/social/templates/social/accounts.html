@@ -89,7 +89,7 @@
       {% endif %}
       <br>
       <small class="text-muted">
-        Connecté par {{ account.connected_by.full_name }}
+        Connecté par {{ account.connected_by.full_name if account.connected_by else "—" }}
         le {{ account.connected_at.strftime('%d/%m/%Y') }}
       </small>
     </div>

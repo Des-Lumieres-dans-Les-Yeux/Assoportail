@@ -442,7 +442,15 @@ def install(machine_id: int):
         same_center = active.center_id is not None and active.center_id == center_id
         same_member = active.hosted_by_id is not None and active.hosted_by_id == hosted_by_id
         if same_center or same_member:
-            flash("Cette machine est déjà installée à cet emplacement.", "warning")
+            # Pre-filled from the center page: allow updating the web link of
+            # the existing installation without moving the machine.
+            new_link = (form.web_link.data or "").strip() or None
+            if new_link != active.web_link:
+                active.web_link = new_link
+                db.session.commit()
+                flash("Machine déjà installée ici — lien web mis à jour.", "success")
+            else:
+                flash("Cette machine est déjà installée à cet emplacement.", "warning")
             return redirect(url_for("machines.detail", machine_id=machine_id))
         active.removed_at = installed_at
 
@@ -452,6 +460,7 @@ def install(machine_id: int):
         hosted_by_id=hosted_by_id,
         installed_at=installed_at,
         notes=(form.notes.data or "").strip() or None,
+        web_link=(form.web_link.data or "").strip() or None,
     )
     machine.status = MachineStatus.INSTALLED
     db.session.add(installation)

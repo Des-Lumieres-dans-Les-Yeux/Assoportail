@@ -17,7 +17,7 @@
         <a href="{{ url_for('mailing.detail', campaign_id=c.id) }}"
            class="fw-semibold text-decoration-none">{{ c.name }}</a>
         <div class="text-muted small">{{ c.subject }}</div>
-        <small class="text-muted">Créée par {{ c.created_by.full_name }}</small>
+        <small class="text-muted">Créée par {{ c.created_by.full_name if c.created_by else "—" }}</small>
       </div>
       <div class="d-flex flex-column align-items-end gap-1 text-nowrap">
         <small class="text-muted">{{ c.created_at.strftime('%d/%m/%Y') }}</small>

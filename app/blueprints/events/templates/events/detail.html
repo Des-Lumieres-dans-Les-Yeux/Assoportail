@@ -91,7 +91,7 @@
         {% endif %}
         <li class="list-group-item d-flex justify-content-between py-2">
           <span class="text-muted">Organisateur</span>
-          <span>{{ event.created_by.full_name }}</span>
+          <span>{{ event.created_by.full_name if event.created_by else "—" }}</span>
         </li>
         {% set vh = event.volunteer_hours %}
         {% if vh > 0 %}
@@ -331,7 +331,7 @@
           </li>
           {% for entry in cb.entries %}
           <li class="d-flex justify-content-between">
-            <span>{{ entry.note or entry.type.value }} <small class="text-muted">{{ entry.recorded_by.first_name }}</small></span>
+            <span>{{ entry.note or entry.type.value }} {% if entry.recorded_by %}<small class="text-muted">{{ entry.recorded_by.first_name }}</small>{% endif %}</span>
             <span>{{ "%.2f"|format(entry.amount) }} €</span>
           </li>
           {% endfor %}

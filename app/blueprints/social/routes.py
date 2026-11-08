@@ -246,6 +246,7 @@ def upload_image(post_id: int):
         return redirect(url_for("social.detail", post_id=post_id))
 
     max_images = current_app.config.get("SOCIAL_MAX_IMAGES_PER_POST", 10)
+    max_image_bytes = 10 * 1024 * 1024
     existing_count = (
         db.session.scalar(
             db.select(db.func.count(SocialPostImage.id)).where(SocialPostImage.post_id == post_id)
@@ -279,6 +280,9 @@ def upload_image(post_id: int):
             continue
 
         data = file.read()
+        if len(data) > max_image_bytes:
+            flash(f"« {safe_name} » ignoré (dépasse 10 Mo).", "warning")
+            continue
         detected_mime = _detect_image_mime(data)
         if detected_mime not in _ALLOWED_IMAGE_MIMES:
             flash(f"« {safe_name} » ignoré (contenu non reconnu comme image).", "warning")
@@ -542,6 +546,12 @@ def add_account():
             return redirect(url_for("social.list_accounts"))
 
         creds = _build_credentials(form)
+        # SSRF guard: the publish tasks POST to site_url from the worker,
+        # so only a public HTTPS host may be stored (same check as the test
+        # route).
+        if platform == "wordpress" and not _is_safe_url(creds.get("site_url", "")):
+            flash("L'URL du site doit être une adresse publique HTTPS.", "danger")
+            return render_template("social/account_form.html", form=form, account=None)
         from app.services.gmail import encrypt_token
 
         account = SocialAccount(
@@ -581,6 +591,12 @@ def edit_account(account_id: int):
 
     if form.validate_on_submit():
         creds = _build_credentials(form)
+        # SSRF guard: the publish tasks POST to site_url from the worker,
+        # so only a public HTTPS host may be stored (same check as the test
+        # route).
+        if account.platform == "wordpress" and not _is_safe_url(creds.get("site_url", "")):
+            flash("L'URL du site doit être une adresse publique HTTPS.", "danger")
+            return render_template("social/account_form.html", form=form, account=account)
         from app.services.gmail import encrypt_token
 
         account.display_name = form.display_name.data.strip()

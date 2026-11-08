@@ -39,6 +39,7 @@ class UserPermission(enum.StrEnum):
 
 BUREAU_DEFAULT_PERMISSIONS: frozenset[str] = frozenset(p.value for p in UserPermission)
 _MEMBER_EXCLUDED = {UserPermission.TREASURY, UserPermission.MEMBERS, UserPermission.MAILING}
+MEMBER_EXCLUDED_PERMISSIONS: frozenset[str] = frozenset(p.value for p in _MEMBER_EXCLUDED)
 MEMBER_DEFAULT_PERMISSIONS: frozenset[str] = frozenset(
     p.value for p in UserPermission if p not in _MEMBER_EXCLUDED
 )
@@ -58,6 +59,14 @@ class UserGender(enum.StrEnum):
     FEMALE = "female"
     OTHER = "other"
     NOT_SPECIFIED = "not_specified"
+
+
+class TotpSecretError(RuntimeError):
+    """The user is enrolled in 2FA but the stored TOTP secret is unusable.
+
+    Callers must fail closed (refuse the operation) instead of falling back
+    to no-crypto behaviour.
+    """
 
 
 class User(UserMixin, db.Model):
@@ -118,6 +127,8 @@ class User(UserMixin, db.Model):
         onupdate=lambda: datetime.now(UTC),
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # SHA-256 of the currently valid password-reset token (one-time use).
+    reset_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
 
     memberships: Mapped[list[Membership]] = relationship(
         "Membership",
@@ -132,21 +143,36 @@ class User(UserMixin, db.Model):
 
     @property
     def totp_secret(self) -> str | None:
-        """Decrypt and return the TOTP secret, or None."""
+        """Decrypt and return the TOTP secret, or None if not enrolled.
+
+        Raises:
+            TotpSecretError: A secret is stored but cannot be decrypted —
+                callers must fail closed instead of silently skipping 2FA.
+        """
         raw = self.totp_secret_encrypted
         if not raw:
             return None
+        value = None
         try:
             from app.services.gmail import decrypt_token
 
             data = decrypt_token(raw)
-            return data.get("totp")
+            value = data.get("totp") if isinstance(data, dict) else None
         except Exception:
-            # Backwards compat: if stored unencrypted (pre-migration), return as-is
+            pass
+        if value is None:
+            # Backwards compat: legacy secrets stored unencrypted (pre-migration)
             if len(raw) <= 64 and raw.isalnum():
                 return raw
-            logger.warning("Failed to decrypt TOTP secret for user %s", self.email)
-            return None
+        if not value:
+            logger.warning("TOTP secret enrolled but undecryptable for user %s", self.email)
+            raise TotpSecretError(f"TOTP secret undecryptable for user {self.id}")
+        return value
+
+    @property
+    def totp_enrolled(self) -> bool:
+        """True when a TOTP secret is stored (template-safe, never raises)."""
+        return bool(self.totp_secret_encrypted)
 
     @totp_secret.setter
     def totp_secret(self, value: str | None) -> None:

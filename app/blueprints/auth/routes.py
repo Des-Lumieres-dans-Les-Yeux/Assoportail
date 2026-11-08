@@ -1,5 +1,7 @@
 """Authentication blueprint routes — login, logout, user creation (admin), password change, 2FA."""
 
+import hashlib
+import hmac
 import logging
 import secrets
 from datetime import UTC, datetime
@@ -12,7 +14,7 @@ from app.blueprints.auth import bp
 from app.blueprints.auth.forms import ChangePasswordForm, CreateUserForm, LoginForm, TotpCodeForm
 from app.decorators import bureau_required
 from app.extensions import db, limiter
-from app.models.user import User, UserRole
+from app.models.user import TotpSecretError, User, UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,11 @@ def _record_failed_attempt(email: str) -> None:
         r = _get_redis()
         pipe = r.pipeline()
         pipe.incr(key)
-        pipe.expire(key, _LOCKOUT_WINDOW_SECONDS)
+        # EXPIRE NX: set the TTL only if the key has none, pinning the
+        # 15-minute window at the first failure. A plain EXPIRE would slide
+        # the window on every attempt, letting an attacker keep a victim
+        # locked out indefinitely with a low-rate stream of bad passwords.
+        pipe.expire(key, _LOCKOUT_WINDOW_SECONDS, nx=True)
         pipe.execute()
     except Exception:
         logger.warning("Could not record failed login attempt in Redis")
@@ -97,7 +103,18 @@ def login():
 
         # If the user has 2FA enabled, go through the TOTP verification step
         # before calling login_user().
-        if user.totp_secret:
+        try:
+            has_totp = bool(user.totp_secret)
+        except TotpSecretError:
+            # Enrolled but the secret is undecryptable: fail closed — a
+            # password-only login would silently remove the second factor.
+            flash(
+                "Vos paramètres 2FA sont incohérents : contactez l'administrateur "
+                "pour réactiver l'authentification à deux facteurs.",
+                "danger",
+            )
+            return render_template("auth/login.html", form=form)
+        if has_totp:
             session["pending_2fa_user_id"] = user.id
             session["pending_2fa_remember"] = form.remember_me.data
             return redirect(url_for("auth.verify_2fa"))
@@ -131,7 +148,23 @@ def verify_2fa():
         return redirect(url_for("auth.login"))
 
     user = db.session.get(User, user_id)
-    if user is None or not user.totp_secret:
+    if user is None:
+        session.pop("pending_2fa_user_id", None)
+        session.pop("pending_2fa_remember", None)
+        return redirect(url_for("auth.login"))
+
+    try:
+        totp_secret = user.totp_secret
+    except TotpSecretError:
+        session.pop("pending_2fa_user_id", None)
+        session.pop("pending_2fa_remember", None)
+        flash(
+            "Vos paramètres 2FA sont incohérents : contactez l'administrateur "
+            "pour réactiver l'authentification à deux facteurs.",
+            "danger",
+        )
+        return redirect(url_for("auth.login"))
+    if not totp_secret:
         session.pop("pending_2fa_user_id", None)
         session.pop("pending_2fa_remember", None)
         return redirect(url_for("auth.login"))
@@ -140,7 +173,7 @@ def verify_2fa():
     if form.validate_on_submit():
         import pyotp
 
-        totp = pyotp.TOTP(user.totp_secret)
+        totp = pyotp.TOTP(totp_secret)
         if totp.verify(form.code.data.strip(), valid_window=1):
             session.pop("pending_2fa_user_id", None)
             remember = session.pop("pending_2fa_remember", False)
@@ -186,6 +219,23 @@ def setup_totp():
     # Generate QR code as a base64-encoded SVG data URI
     qr_data_uri = _totp_qr_data_uri(provisioning_uri)
 
+    # Step-up: replacing an already enrolled secret requires proving
+    # possession of the current authenticator, so a hijacked session cannot
+    # point the victim's 2FA at an attacker's device.
+    if request.method == "POST" and current_user.totp_enrolled:
+        old_secret = None
+        try:
+            old_secret = current_user.totp_secret
+        except TotpSecretError:
+            old_secret = None  # corrupt secret: no working 2FA to step up from
+        if old_secret and not pyotp.TOTP(old_secret).verify(
+            (form.current_code.data or "").strip(), valid_window=1
+        ):
+            flash("Code actuel invalide — la 2FA n'a pas été modifiée.", "danger")
+            return render_template(
+                "auth/totp_setup.html", form=form, secret=secret, qr_data_uri=qr_data_uri
+            )
+
     if form.validate_on_submit():
         totp = pyotp.TOTP(secret)
         if totp.verify(form.code.data.strip(), valid_window=1):
@@ -207,7 +257,32 @@ def setup_totp():
 @bp.route("/totp-disable", methods=["POST"])
 @login_required
 def disable_totp():
-    """Disable TOTP 2FA for the current user."""
+    """Disable TOTP 2FA for the current user.
+
+    Step-up: requires a valid code from the currently enrolled
+    authenticator, so a hijacked session cannot drop the second factor.
+    """
+    if not current_user.totp_enrolled:
+        return redirect(url_for("dashboard.index"))
+
+    import pyotp
+
+    form = TotpCodeForm()
+    if not form.validate():
+        flash("Saisissez le code à 6 chiffres de votre authentificateur.", "danger")
+        return redirect(url_for("dashboard.index"))
+    try:
+        totp = pyotp.TOTP(current_user.totp_secret)
+    except TotpSecretError:
+        flash(
+            "Vos paramètres 2FA sont incohérents : contactez l'administrateur.",
+            "danger",
+        )
+        return redirect(url_for("dashboard.index"))
+    if not totp.verify(form.code.data.strip(), valid_window=1):
+        flash("Code invalide — la 2FA n'a pas été désactivée.", "danger")
+        return redirect(url_for("dashboard.index"))
+
     current_user.totp_secret = None
     db.session.commit()
     flash("Authentification à deux facteurs désactivée.", "info")
@@ -319,6 +394,10 @@ def forgot_password():
 
         if user and user.is_active:
             token = _generate_reset_token(user.id)
+            # One-time use: record this token's hash; a new request
+            # invalidates every earlier link.
+            user.reset_token_hash = hashlib.sha256(token.encode()).hexdigest()
+            db.session.commit()
             reset_url = url_for("auth.reset_password", token=token, _external=True)
             from app.tasks.notifications import send_password_reset_task
 
@@ -357,10 +436,18 @@ def reset_password(token: str):
         flash("Lien de réinitialisation invalide ou expiré.", "danger")
         return redirect(url_for("auth.forgot_password"))
 
+    # One-time token: must match the recorded hash, so a used link or a link
+    # superseded by a newer request is rejected.
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    if not user.reset_token_hash or not hmac.compare_digest(user.reset_token_hash, token_hash):
+        flash("Lien de réinitialisation invalide ou expiré.", "danger")
+        return redirect(url_for("auth.forgot_password"))
+
     form = ResetPasswordForm()
     if form.validate_on_submit():
         user.set_password(form.new_password.data)
         user.must_change_password = False
+        user.reset_token_hash = None
         db.session.commit()
         _clear_lockout(user.email)
         flash("Votre mot de passe a été réinitialisé. Vous pouvez vous connecter.", "success")

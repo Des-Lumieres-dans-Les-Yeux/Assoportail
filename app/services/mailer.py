@@ -16,9 +16,12 @@ from __future__ import annotations
 
 import base64
 import logging
+import mimetypes
 import smtplib
 from datetime import date, datetime
+from email.encoders import encode
 from email.mime.application import MIMEApplication
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -250,8 +253,11 @@ def send_cerfa_receipt_email(
     amount: str,
     receipt_filename: str,
     docx_bytes: bytes,
-) -> None:
-    """Send a filled CERFA DOCX receipt to a donor as an email attachment."""
+) -> bool:
+    """Send a filled CERFA receipt to a donor as an email attachment.
+
+    Returns whether the message was actually delivered (Gmail API or SMTP).
+    """
     asso_name = _association_name()
     subject = f"Votre reçu fiscal — {amount}"
     body = (
@@ -261,7 +267,7 @@ def send_cerfa_receipt_email(
         f"Cordialement,\n"
         f"L'équipe {asso_name}"
     )
-    _deliver_with_attachment(to_email, subject, body, receipt_filename, docx_bytes)
+    return _deliver_with_attachment(to_email, subject, body, receipt_filename, docx_bytes)
 
 
 def send_welcome_email(
@@ -369,9 +375,14 @@ def _deliver_with_attachment(
     body: str,
     attachment_filename: str,
     attachment_bytes: bytes,
-) -> None:
-    """Try Gmail API with attachment; fall back to SMTP on any exception."""
-    _deliver_with_attachments(to_email, subject, body, [(attachment_filename, attachment_bytes)])
+) -> bool:
+    """Try Gmail API with attachment; fall back to SMTP on any exception.
+
+    Returns whether the message was actually delivered.
+    """
+    return _deliver_with_attachments(
+        to_email, subject, body, [(attachment_filename, attachment_bytes)]
+    )
 
 
 def _deliver_with_attachments(
@@ -431,7 +442,18 @@ def _send_via_smtp(to_email: str, subject: str, body: str) -> None:
 def _attach_files(msg: MIMEMultipart, attachments: list[tuple[str, bytes]]) -> None:
     for filename, data in attachments:
         safe_filename = _clean_header(filename).replace('"', "'")
-        part = MIMEApplication(data, Name=safe_filename)
+        # Real content type when guessable (PDF, DOCX, ...) — a blanket
+        # application/octet-stream makes mail clients warn on open.
+        mime_type = mimetypes.guess_type(safe_filename)[0]
+        if mime_type and not mime_type.startswith("application/"):
+            main_type, _, sub_type = mime_type.partition("/")
+            part: MIMEBase = MIMEBase(main_type, sub_type, {"Name": safe_filename})
+            part.set_payload(data)
+            encoders.encode(base64)
+        elif mime_type:
+            part = MIMEApplication(data, _subtype=mime_type.split("/", 1)[1], Name=safe_filename)
+        else:
+            part = MIMEApplication(data, Name=safe_filename)
         part["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
         msg.attach(part)
 

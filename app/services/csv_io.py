@@ -6,6 +6,28 @@ import csv
 import io
 from typing import Any
 
+def _detect_delimiter(text: str) -> str | None:
+    """Quote-aware delimiter for the header line, or None if none is found.
+
+    ``csv.Sniffer`` counts delimiters raw — including inside quoted fields —
+    and can pick the wrong one on quoted headers; count only unquoted ones.
+    """
+    line = text.splitlines()[0] if text else ""
+    best_delim: str | None = None
+    best_count = 0
+    for delim in (",", ";", "\t"):
+        in_quotes = False
+        count = 0
+        for ch in line:
+            if ch == '"':
+                in_quotes = not in_quotes
+            elif ch == delim and not in_quotes:
+                count += 1
+        if count > best_count:
+            best_count, best_delim = count, delim
+    return best_delim
+
+
 # ---------------------------------------------------------------------------
 # Machine CSV
 # ---------------------------------------------------------------------------
@@ -61,10 +83,7 @@ def parse_machines_csv(file_data: bytes) -> tuple[list[dict], list[str]]:
         return [], ["Fichier CSV vide."]
 
     # Delimiter detection
-    try:
-        dialect = csv.Sniffer().sniff(text[:1024], delimiters=",;\t")
-    except csv.Error:
-        dialect = "excel"  # fallback to default
+    dialect = _detect_delimiter(text) or "excel"
 
     reader = csv.DictReader(io.StringIO(text), dialect=dialect)
     if reader.fieldnames is None:
@@ -190,10 +209,7 @@ def parse_centers_csv(file_data: bytes) -> tuple[list[dict], list[str]]:
         return [], ["Fichier CSV vide."]
 
     # Delimiter detection
-    try:
-        dialect = csv.Sniffer().sniff(text[:1024], delimiters=",;\t")
-    except csv.Error:
-        dialect = "excel"
+    dialect = _detect_delimiter(text) or "excel"
 
     reader = csv.DictReader(io.StringIO(text), dialect=dialect)
     if reader.fieldnames is None:
@@ -300,10 +316,7 @@ def parse_members_csv(file_data: bytes) -> tuple[list[dict], list[str]]:
     if not text.strip():
         return [], ["Fichier CSV vide."]
 
-    try:
-        dialect = csv.Sniffer().sniff(text[:1024], delimiters=",;\t")
-    except csv.Error:
-        dialect = "excel"
+    dialect = _detect_delimiter(text) or "excel"
 
     reader = csv.DictReader(io.StringIO(text), dialect=dialect)
     if reader.fieldnames is None:

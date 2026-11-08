@@ -1,19 +1,24 @@
 """Vitrine blueprint routes — public association showcase page."""
 
-import json
 from datetime import UTC, datetime
 
 from flask import render_template
 from sqlalchemy.orm import selectinload
 
 from app.blueprints.vitrine import bp
-from app.extensions import db
+from app.config import Config
+from app.extensions import db, talisman
 from app.models.center import Center, CenterStatus
 from app.models.event import Event, EventStatus
 from app.models.machine import MachineInstallation
 
+# The vitrine pages are the only frameable pages of the app (WordPress
+# embed). The view-level CSP replaces the global one, so it must be complete.
+_VITRINE_CSP = Config.VITRINE_TALISMAN_CSP
+
 
 @bp.route("/")
+@talisman(content_security_policy=_VITRINE_CSP)
 def index():
     """Public-facing association showcase — no authentication required."""
     active_centers = db.session.scalars(
@@ -40,6 +45,7 @@ def index():
 
 
 @bp.route("/map")
+@talisman(content_security_policy=_VITRINE_CSP)
 def map_view():
     """Standalone map view for embedding (e.g. in WordPress)."""
     centers = db.session.scalars(
@@ -61,6 +67,7 @@ def map_view():
                 "lat": c.latitude,
                 "lng": c.longitude,
                 "machine_name": machine_name,
+                "web_link": active[0].web_link if active else None,
                 "pathology": c.pathology,
                 "target_audience": c.target_audience,
             }
@@ -68,5 +75,5 @@ def map_view():
 
     return render_template(
         "vitrine/map.html",
-        centers_json=json.dumps(centers_data),
+        centers_data=centers_data,
     )

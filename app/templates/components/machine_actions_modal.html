@@ -11,6 +11,8 @@
      ma_move_url      — url_for('machines.install', machine_id=0)
      ma_panne_url     — url_for('machines.add_maintenance', machine_id=0)
      ma_default_tab   — 'move' ou 'panne'
+      ma_preselect_machine_id — id pré-sélectionné dans les sélecteurs machine (page centre)
+      ma_preselect_center_id  — id pré-sélectionné dans le sélecteur centre (page centre)
    Chaque bouton d'ouverture doit porter data-ma-id (+ optionnel data-ma-tab,
    data-ma-name). Le JS renseigne les actions des formulaires. #}
 {% set _ma_modal_id = ma_modal_id or 'machineActionsModal' %}
@@ -59,7 +61,8 @@
                         class="form-select" required>
                   <option value="">— choisir une machine —</option>
                   {% for m in ma_machines %}
-                  <option value="{{ m.id }}" data-name="{{ m.display_name }}">{{ m.display_name }}</option>
+                  <option value="{{ m.id }}" data-name="{{ m.display_name }}"
+                          {% if ma_preselect_machine_id == m.id %}selected{% endif %}>{{ m.display_name }}</option>
                   {% endfor %}
                 </select>
               </div>
@@ -81,7 +84,7 @@
                 <select id="{{ _ma_modal_id }}-center" name="center_id" class="form-select">
                   <option value="">— choisir un centre —</option>
                   {% for cid, cname in ma_centers %}
-                  <option value="{{ cid }}">{{ cname }}</option>
+                  <option value="{{ cid }}" {% if ma_preselect_center_id == cid %}selected{% endif %}>{{ cname }}</option>
                   {% endfor %}
                 </select>
               </div>
@@ -105,6 +108,14 @@
                 <label class="form-label" for="{{ _ma_modal_id }}-notes">Notes</label>
                 <textarea id="{{ _ma_modal_id }}-notes" name="notes"
                           class="form-control" rows="2" maxlength="500"></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="{{ _ma_modal_id }}-web-link">
+                  Lien web de l'installation <span class="text-muted">(optionnel)</span>
+                </label>
+                <input type="url" id="{{ _ma_modal_id }}-web-link" name="web_link"
+                       class="form-control" maxlength="500" placeholder="https://…">
+                <div class="form-text">Billet de blog de l'installation — affiché sur la carte des centres.</div>
               </div>
               <div class="form-check" id="{{ _ma_modal_id }}-inactive-group">
                 <input class="form-check-input" type="checkbox" value="y"
@@ -155,7 +166,8 @@
                         class="form-select" required>
                   <option value="">— choisir une machine —</option>
                   {% for m in ma_machines %}
-                  <option value="{{ m.id }}" data-name="{{ m.display_name }}">{{ m.display_name }}</option>
+                  <option value="{{ m.id }}" data-name="{{ m.display_name }}"
+                          {% if ma_preselect_machine_id == m.id %}selected{% endif %}>{{ m.display_name }}</option>
                   {% endfor %}
                 </select>
               </div>
@@ -350,7 +362,8 @@
     var fixedId = {{ (ma_machine.id if ma_machine else "")|tojson }};
     var fixedName = {{ (ma_machine.display_name if ma_machine else "")|tojson }};
     var machineId = fixedId || machineIdFrom() || (moveMachineSel ? moveMachineSel.value : null);
-    var name = fixedName || machineNameFrom();
+    var preopt = moveMachineSel && moveMachineSel.options[moveMachineSel.selectedIndex];
+    var name = fixedName || machineNameFrom() || (preopt && preopt.dataset.name) || null;
     var status = (e.relatedTarget && e.relatedTarget.dataset.maStatus) || null;
     if (resolveNext) resolveNext.value = (e.relatedTarget && e.relatedTarget.dataset.maNext) || '';
     if (moveMachineSel) {

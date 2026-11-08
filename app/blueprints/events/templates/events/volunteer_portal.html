@@ -46,7 +46,7 @@
           {% if event.location %}
           <span><i class="bi bi-geo-alt me-1" aria-hidden="true"></i>{{ event.location }}</span>
           {% endif %}
-          <span><i class="bi bi-person me-1" aria-hidden="true"></i>{{ event.created_by.full_name }}</span>
+          <span><i class="bi bi-person me-1" aria-hidden="true"></i>{{ event.created_by.full_name if event.created_by else "—" }}</span>
         </div>
         {% if event.description %}
         <p class="mb-0 small" style="white-space: pre-wrap;">{{ event.description }}</p>

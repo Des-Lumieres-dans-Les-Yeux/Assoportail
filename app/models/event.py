@@ -80,14 +80,14 @@ class Event(db.Model):
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     website: Mapped[str | None] = mapped_column(String(500), nullable=True)
     volunteer_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
-    created_by_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    created_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
-    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_id])
     attendees: Mapped[list[User]] = relationship(
         "User", secondary=event_attendees, order_by="User.last_name"
     )
@@ -221,8 +221,8 @@ class Expense(db.Model):
     event_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
@@ -348,13 +348,15 @@ class CashEntry(db.Model):
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    recorded_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    recorded_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
     cashbox: Mapped[CashBox] = relationship("CashBox", back_populates="entries")
-    recorded_by: Mapped[User] = relationship("User", foreign_keys=[recorded_by_id])
+    recorded_by: Mapped[User | None] = relationship("User", foreign_keys=[recorded_by_id])
 
     def __repr__(self) -> str:
         return f"<CashEntry {self.amount}€ type={self.type}>"
@@ -381,8 +383,8 @@ class EventMachine(db.Model):
         Integer, ForeignKey("machines.id", ondelete="CASCADE"), primary_key=True
     )
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    added_by_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
+    added_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     added_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
@@ -390,7 +392,7 @@ class EventMachine(db.Model):
 
     event: Mapped[Event] = relationship("Event", back_populates="event_machines")
     machine: Mapped[Machine] = relationship("Machine", back_populates="event_machines")
-    added_by: Mapped[User] = relationship("User", foreign_keys=[added_by_id])
+    added_by: Mapped[User | None] = relationship("User", foreign_keys=[added_by_id])
 
     def __repr__(self) -> str:
         return f"<EventMachine event={self.event_id} machine={self.machine_id}>"

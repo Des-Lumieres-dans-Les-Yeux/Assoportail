@@ -49,7 +49,7 @@
   <ul class="list-group list-group-flush border rounded" style="max-width: 30rem;">
     <li class="list-group-item d-flex justify-content-between">
       <span class="text-muted">Créée par</span>
-      <span>{{ task.created_by.full_name }}</span>
+      <span>{{ task.created_by.full_name if task.created_by else "—" }}</span>
     </li>
     <li class="list-group-item d-flex justify-content-between">
       <span class="text-muted">Assignée à</span>
@@ -266,7 +266,7 @@
     {% for comment in task.comments %}
     <li class="list-group-item">
       <div class="d-flex justify-content-between mb-1">
-        <strong class="small">{{ comment.author.full_name }}</strong>
+        <strong class="small">{{ comment.author.full_name if comment.author else "—" }}</strong>
         <small class="text-muted">{{ comment.created_at.strftime('%d/%m/%Y à %H:%M') }}</small>
       </div>
       <p class="mb-0" style="white-space: pre-wrap;">{{ comment.body }}</p>

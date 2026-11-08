@@ -127,7 +127,7 @@ class Task(db.Model):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_id])
     assigned_to: Mapped[User | None] = relationship("User", foreign_keys=[assigned_to_id])
     source_center: Mapped[Center | None] = relationship("Center", foreign_keys=[source_center_id])
     source_email: Mapped[InboundEmail | None] = relationship(
@@ -181,7 +181,7 @@ class TaskComment(db.Model):
     )
 
     task: Mapped[Task] = relationship("Task", back_populates="comments")
-    author: Mapped[User] = relationship("User", foreign_keys=[author_id])
+    author: Mapped[User | None] = relationship("User", foreign_keys=[author_id])
 
     def __repr__(self) -> str:
         return f"<TaskComment task={self.task_id} author={self.author_id}>"

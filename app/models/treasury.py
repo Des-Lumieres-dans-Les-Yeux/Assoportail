@@ -96,8 +96,8 @@ class Transaction(db.Model):
     date: Mapped[date] = mapped_column(Date, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    created_by_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
+    created_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     source: Mapped[str] = mapped_column(
         String(20), nullable=False, default=TransactionSource.MANUAL.value
@@ -128,7 +128,7 @@ class Transaction(db.Model):
     cerfa_drive_file_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     cerfa_drive_web_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_id])
     tags: Mapped[list[Tag]] = relationship(
         "Tag", secondary=transaction_tags, back_populates="transactions", order_by="Tag.label"
     )

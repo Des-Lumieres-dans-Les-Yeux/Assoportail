@@ -2,7 +2,6 @@
 
 from flask_wtf import FlaskForm
 from wtforms import (
-    DateField,
     FloatField,
     HiddenField,
     SelectField,
@@ -101,16 +100,6 @@ class BreakdownReportForm(FlaskForm):
         "Priorité",
         choices=_PRIORITY_CHOICES,
         default=TaskPriority.HIGH.value,
-    )
-
-
-class InstallMachineForm(FlaskForm):
-    """Form for installing a machine into a center (bureau only)."""
-
-    machine_id = SelectField("Machine", coerce=int, validators=[DataRequired()])
-    installed_at = DateField(
-        "Date d'installation",
-        validators=[DataRequired(message="La date est obligatoire.")],
     )
 
 

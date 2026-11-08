@@ -5,6 +5,7 @@ Image processing runs first, then each platform is published independently.
 
 from __future__ import annotations
 
+import html
 import logging
 import os
 import secrets
@@ -52,49 +53,61 @@ def publish_social_post(self, post_id: int) -> dict:
     post.status = SocialPostStatus.PUBLISHING.value
     db.session.commit()
 
-    # 1. Process images
     try:
-        _process_post_images(post_id)
-    except Exception:
-        logger.exception("Image processing failed for post %d", post_id)
-
-    # 2. Publish to each platform
-    results: dict[str, str] = {}
-    for platform in post.platforms:
-        log = SocialPublishLog(
-            post_id=post_id,
-            platform=platform,
-            status=PublishLogStatus.PENDING.value,
-        )
-        db.session.add(log)
-        db.session.flush()
-
+        # 1. Process images
         try:
-            result = _dispatch_publish(post_id, platform)
-            log.status = PublishLogStatus.SUCCESS.value
-            log.remote_id = result.get("remote_id")
-            log.remote_url = result.get("remote_url")
-            results[platform] = "success"
-        except Exception as exc:
-            logger.exception("Publish to %s failed for post %d", platform, post_id)
-            log.status = PublishLogStatus.FAILED.value
-            log.error_message = str(exc)[:1000]
-            results[platform] = "failed"
+            _process_post_images(post_id)
+        except Exception:
+            logger.exception("Image processing failed for post %d", post_id)
 
+        # 2. Publish to each platform
+        results: dict[str, str] = {}
+        for platform in post.platforms:
+            log = SocialPublishLog(
+                post_id=post_id,
+                platform=platform,
+                status=PublishLogStatus.PENDING.value,
+            )
+            db.session.add(log)
+            db.session.flush()
+
+            try:
+                result = _dispatch_publish(post_id, platform)
+                log.status = PublishLogStatus.SUCCESS.value
+                log.remote_id = result.get("remote_id")
+                log.remote_url = result.get("remote_url")
+                results[platform] = "success"
+            except Exception as exc:
+                logger.exception("Publish to %s failed for post %d", platform, post_id)
+                log.status = PublishLogStatus.FAILED.value
+                log.error_message = str(exc)[:1000]
+                results[platform] = "failed"
+
+            db.session.commit()
+
+        # 3. Determine final status
+        post = db.session.get(SocialPost, post_id)
+        statuses = set(results.values())
+        if statuses == {"success"}:
+            post.status = SocialPostStatus.PUBLISHED.value
+        elif statuses == {"failed"}:
+            post.status = SocialPostStatus.FAILED.value
+        else:
+            post.status = SocialPostStatus.PARTIAL.value
         db.session.commit()
 
-    # 3. Determine final status
-    post = db.session.get(SocialPost, post_id)
-    statuses = set(results.values())
-    if statuses == {"success"}:
-        post.status = SocialPostStatus.PUBLISHED.value
-    elif statuses == {"failed"}:
-        post.status = SocialPostStatus.FAILED.value
-    else:
-        post.status = SocialPostStatus.PARTIAL.value
-    db.session.commit()
-
-    return results
+        return results
+    except Exception as exc:
+        # A crash mid-publish (soft time limit, worker kill, ...) must not
+        # leave the post stuck in PUBLISHING forever: is_editable excludes
+        # that status, so the post would be uneditable and unretryable.
+        logger.exception("Publish task crashed for post %d: %s", post_id, exc)
+        db.session.rollback()
+        post = db.session.get(SocialPost, post_id)
+        if post is not None:
+            post.status = SocialPostStatus.FAILED.value
+            db.session.commit()
+        return {"error": str(exc)[:200]}
 
 
 # ---------------------------------------------------------------------------
@@ -391,7 +404,9 @@ def _publish_wordpress(post_id: int) -> dict:
                 featured_media_id = media_id
 
             if media_url:
-                alt = img.original_filename
+                # original_filename is user-supplied (bureau upload or
+                # volunteer media): escape before it lands in an HTML attribute.
+                alt = html.escape(img.original_filename)
                 gallery_urls.append(
                     f'<figure class="wp-block-image"><img src="{media_url}" alt="{alt}"/></figure>'
                 )

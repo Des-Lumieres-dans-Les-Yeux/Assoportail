@@ -73,7 +73,7 @@
     </li>
     <li class="list-group-item d-flex justify-content-between">
       <span class="text-muted">Enregistrée par</span>
-      <span>{{ transaction.created_by.full_name }}</span>
+      <span>{{ transaction.created_by.full_name if transaction.created_by else "—" }}</span>
     </li>
     {% if transaction.tags %}
     <li class="list-group-item">

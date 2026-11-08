@@ -1,6 +1,7 @@
 """Documents blueprint routes — gallery, upload, download, delete."""
 
 import logging
+import mimetypes
 import os
 import re
 from datetime import date
@@ -420,9 +421,12 @@ def download(document_id: int):
             from app.services.drive import DriveService
 
             data = DriveService.from_db().download_file(doc.drive_file_id)
+            # Content-Type is derived from the server-stored filename, never
+            # from doc.mime_type (legacy rows may hold the client claim).
             return Response(
                 data,
-                mimetype=doc.mime_type or "application/octet-stream",
+                mimetype=mimetypes.guess_type(doc.stored_filename)[0]
+                or "application/octet-stream",
                 headers={"Cache-Control": "private, max-age=3600"},
             )
         except Exception:

@@ -41,7 +41,7 @@
     {% endif %}
     <li class="list-group-item d-flex justify-content-between">
       <span class="text-muted">Organisateur</span>
-      <span>{{ meeting.created_by.full_name }}</span>
+      <span>{{ meeting.created_by.full_name if meeting.created_by else "—" }}</span>
     </li>
   </ul>
 </section>

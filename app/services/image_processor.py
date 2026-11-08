@@ -24,6 +24,11 @@ PLATFORM_SPECS: dict[str, dict[str, int]] = {
     "linkedin": {"width": 1200, "height": 627},
 }
 
+# Hard cap on the source pixel area (~40 MP). A tiny lossless file can
+# declare absurd dimensions; without this bound the resize/save below would
+# allocate proportionally (memory amplification in the worker).
+_MAX_SOURCE_PIXELS = 40_000_000
+
 
 def process_image(
     image_bytes: bytes,
@@ -49,6 +54,11 @@ def process_image(
 
     img = Image.open(BytesIO(image_bytes))
     img = ImageOps.exif_transpose(img)  # Fix orientation from EXIF
+    if img.width * img.height > _MAX_SOURCE_PIXELS:
+        raise ValueError(
+            f"Image too large to process: {img.width}x{img.height} "
+            f"(max {_MAX_SOURCE_PIXELS} pixels)"
+        )
     if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGB")
 

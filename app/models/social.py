@@ -90,7 +90,7 @@ class SocialAccount(db.Model):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    connected_by: Mapped[User] = relationship("User", foreign_keys=[connected_by_id])
+    connected_by: Mapped[User | None] = relationship("User", foreign_keys=[connected_by_id])
 
     def __repr__(self) -> str:
         return f"<SocialAccount {self.platform} active={self.is_active}>"
@@ -147,7 +147,7 @@ class SocialPost(db.Model):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_id])
     images: Mapped[list[SocialPostImage]] = relationship(
         "SocialPostImage",
         back_populates="post",

@@ -60,7 +60,7 @@ class Meeting(db.Model):
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
-    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_id])
     attendees: Mapped[list[User]] = relationship(
         "User", secondary=meeting_attendees, order_by="User.last_name"
     )

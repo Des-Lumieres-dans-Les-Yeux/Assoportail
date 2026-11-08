@@ -30,6 +30,20 @@
         <h2 class="h6 mb-3">Étape 2 — Confirmez avec un code</h2>
         <form method="post" action="{{ url_for('auth.setup_totp') }}" novalidate>
           {{ form.hidden_tag() }}
+          {% if current_user.totp_enrolled %}
+          <div class="mb-3">
+            {{ form.current_code.label(class="form-label") }}
+            {{ form.current_code(
+                  class="form-control",
+                  autocomplete="one-time-code",
+                  inputmode="numeric",
+                  pattern="[0-9]{6}",
+                  maxlength="6",
+                  placeholder="000000"
+               ) }}
+            <div class="form-text">Requis pour remplacer votre 2FA existante.</div>
+          </div>
+          {% endif %}
           <div class="mb-3">
             {{ form.code.label(class="form-label") }}
             {{ form.code(

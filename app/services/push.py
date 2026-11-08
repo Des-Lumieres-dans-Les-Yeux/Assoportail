@@ -62,6 +62,9 @@ def send_push_notification(
                 data=payload,
                 vapid_private_key=private_key_pem,
                 vapid_claims={"sub": f"mailto:{claims_email}"},
+                # Bounded delivery: an endpoint that never answers must not
+                # stall the fan-out (and the request/worker behind it).
+                timeout=10,
             )
         except WebPushException as exc:
             status = exc.response.status_code if exc.response is not None else None

@@ -155,6 +155,8 @@ class MachineInstallation(db.Model):
         installed_at: Date the machine was delivered.
         removed_at: Date the machine was retrieved (nullable → still installed).
         notes: Optional notes about this installation period.
+        web_link: Optional public link (e.g. blog post) about this installation,
+            shown on the centers map.
     """
 
     __tablename__ = "machine_installations"
@@ -181,6 +183,7 @@ class MachineInstallation(db.Model):
     installed_at: Mapped[date] = mapped_column(Date, nullable=False)
     removed_at: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    web_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     machine: Mapped[Machine] = relationship("Machine", back_populates="installations")
     center: Mapped[Center | None] = relationship("Center", back_populates="installations")

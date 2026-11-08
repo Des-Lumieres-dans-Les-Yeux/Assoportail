@@ -36,7 +36,7 @@
 
     {# Meta #}
     <p class="text-muted small mb-3">
-      <i class="bi bi-person me-1" aria-hidden="true"></i>{{ poll.created_by.first_name }} {{ poll.created_by.last_name }}
+      <i class="bi bi-person me-1" aria-hidden="true"></i>{{ poll.created_by.full_name if poll.created_by else "—" }}
       &nbsp;·&nbsp;<i class="bi bi-calendar me-1" aria-hidden="true"></i>{{ poll.created_at.strftime('%d/%m/%Y') }}
       {% if poll.deadline %}
       &nbsp;·&nbsp;<i class="bi bi-clock me-1" aria-hidden="true"></i>Deadline : {{ poll.deadline.strftime('%d/%m/%Y à %H:%M') }}

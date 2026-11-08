@@ -167,7 +167,9 @@ def _event_to_out(event: Event) -> EventOut:
         end_date=event.end_date,
         location=event.location,
         website=event.website,
-        volunteer_token=event.volunteer_token,
+        # The volunteer token grants access to the volunteer portal: bureau
+        # callers only (a member token must not open the portal of an event).
+        volunteer_token=event.volunteer_token if g.api_user.is_bureau else None,
         created_by_id=event.created_by_id,
         created_at=event.created_at,
         slots=slots,
@@ -221,7 +223,12 @@ def create_event():
 
     Exige la permission ``events``. Accepte les créneaux et dates
     non-consécutives optionnels dans le corps JSON.
+
+    Réservé au bureau (les routes web équivalentes sont @bureau_required).
     """
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
     raw = request.get_json(silent=True)
     if raw is None:
         return _json_error("Corps JSON attendu.", 400, "bad_request")
@@ -360,6 +367,9 @@ def get_event(event_id: int):
 )
 def add_slot(event_id: int):
     """Ajoute un créneau horaire à un événement."""
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
     event = db.session.get(Event, event_id)
     if event is None:
         return _json_error("Événement introuvable.", 404, "not_found")
@@ -406,15 +416,19 @@ def list_volunteers(event_id: int):
     if event is None:
         return _json_error("Événement introuvable.", 404, "not_found")
 
+    is_bureau = g.api_user.is_bureau
     out = [
         VolunteerOut(
             id=v.id,
             name=v.name,
-            email=v.email,
+            # Non-bureau callers: confirmed volunteers only, no emails
+            # (mirrors what the public event pages show).
+            email=v.email if is_bureau else None,
             confirmed=v.confirmed,
             registered_at=v.registered_at,
         ).model_dump(mode="json")
         for v in event.volunteers
+        if is_bureau or v.confirmed
     ]
     return jsonify(out), 200
 
@@ -626,6 +640,9 @@ def set_availability(event_id: int, slot_id: int):
 )
 def set_volunteer_availability(event_id: int, slot_id: int):
     """Déclare ou met à jour la disponibilité d'un bénévole externe sur un créneau."""
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
     slot = db.session.get(EventSlot, slot_id)
     if slot is None or slot.event_id != event_id:
         return _json_error("Créneau introuvable.", 404, "not_found")
@@ -708,6 +725,9 @@ def set_volunteer_availability(event_id: int, slot_id: int):
 )
 def update_event(event_id: int):
     """Met à jour un événement (modification partielle)."""
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
     event = db.session.get(Event, event_id)
     if event is None:
         return _json_error("Événement introuvable.", 404, "not_found")
@@ -759,6 +779,9 @@ def update_event(event_id: int):
 )
 def delete_event(event_id: int):
     """Supprime un événement."""
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
     event = db.session.get(Event, event_id)
     if event is None:
         return _json_error("Événement introuvable.", 404, "not_found")
@@ -785,6 +808,9 @@ def delete_event(event_id: int):
 )
 def update_slot(event_id: int, slot_id: int):
     """Met à jour un créneau horaire."""
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
     slot = db.session.get(EventSlot, slot_id)
     if slot is None or slot.event_id != event_id:
         return _json_error("Créneau introuvable.", 404, "not_found")
@@ -832,6 +858,9 @@ def update_slot(event_id: int, slot_id: int):
 )
 def delete_slot(event_id: int, slot_id: int):
     """Supprime un créneau horaire."""
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
     slot = db.session.get(EventSlot, slot_id)
     if slot is None or slot.event_id != event_id:
         return _json_error("Créneau introuvable.", 404, "not_found")
@@ -912,6 +941,9 @@ def get_slot_availabilities(event_id: int, slot_id: int):
 )
 def confirm_volunteer(event_id: int, volunteer_id: int):
     """Confirme l'inscription d'un bénévole manuellement (sans email)."""
+    if not g.api_user.is_bureau:
+        return _json_error("Accès réservé au bureau de l'association.", 403, "forbidden")
+
     volunteer = db.session.get(EventVolunteer, volunteer_id)
     if volunteer is None or volunteer.event_id != event_id:
         return _json_error("Bénévole introuvable.", 404, "not_found")

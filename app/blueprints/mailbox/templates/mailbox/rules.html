@@ -36,7 +36,7 @@
         <small class="text-muted">
           {{ rule.conditions | length }} condition{{ 's' if rule.conditions | length != 1 }} ·
           {{ rule.actions | length }} action{{ 's' if rule.actions | length != 1 }}
-          · Créée par {{ rule.created_by.full_name }}
+          · Créée par {{ rule.created_by.full_name if rule.created_by else "—" }}
         </small>
       </div>
       <div class="d-flex gap-1 flex-shrink-0">

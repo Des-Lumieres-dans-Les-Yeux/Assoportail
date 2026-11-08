@@ -223,7 +223,7 @@ def _execute_action(action: dict, email: InboundEmail, rule: EmailRule) -> dict:
         return {"category": category}
 
     if action_type == "forward_to":
-        return _action_forward_to(action, email)
+        return _action_forward_to(action, email, rule)
 
     if action_type == "mark_as_read":
         return _action_mark_as_read(email)
@@ -232,12 +232,39 @@ def _execute_action(action: dict, email: InboundEmail, rule: EmailRule) -> dict:
     return {}
 
 
-def _action_forward_to(action: dict, email: InboundEmail) -> dict:
+# Daily cap on forward_to actions: the trigger is untrusted inbound mail and
+# every send draws on the shared Gmail quota (campaigns + notifications too).
+_FORWARD_TO_DAILY_CAP = 200
+
+
+def _forward_to_within_daily_cap(rule_id: int) -> bool:
+    """Redis daily counter per rule; fails open if the store is unavailable."""
+    from datetime import UTC, datetime
+
+    import redis
+
+    from flask import current_app
+
+    try:
+        uri = current_app.config.get("RATELIMIT_STORAGE_URI", "redis://localhost:6379/0")
+        r = redis.from_url(uri)
+        key = f"email_rule_forward:{rule_id}:{datetime.now(UTC):%Y%m%d}"
+        if r.incr(key) > _FORWARD_TO_DAILY_CAP:
+            return False
+        r.expire(key, 90000, nx=True)
+        return True
+    except Exception:
+        logger.warning("forward_to cap check failed — fail-open", exc_info=True)
+        return True
+
+
+def _action_forward_to(action: dict, email: InboundEmail, rule: EmailRule) -> dict:
     """Forward an email to an external address via Gmail.
 
     Args:
         action: Action dict with key ``email`` (target address).
         email: The inbound email to forward.
+        rule: The rule that triggered the action (used for the daily cap).
 
     Returns:
         Dict with ``forwarded_to`` and ``message_id``.
@@ -252,6 +279,15 @@ def _action_forward_to(action: dict, email: InboundEmail) -> dict:
     if not to_address:
         logger.warning("forward_to action missing 'email' key")
         return {}
+
+    if not _forward_to_within_daily_cap(rule.id):
+        logger.warning(
+            "forward_to daily cap (%d/day) reached for rule %r — skipping email %d",
+            _FORWARD_TO_DAILY_CAP,
+            rule.name,
+            email.id,
+        )
+        return {"forwarded_to": to_address, "error": "daily cap reached"}
 
     msg = MIMEMultipart()
     msg["To"] = to_address

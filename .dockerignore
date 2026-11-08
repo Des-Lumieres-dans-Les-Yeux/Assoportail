@@ -1,0 +1,23 @@
+# Secrets / local env — never bake into the image (COPY . .)
+.env
+.env.*
+!.env.example
+.flaskenv
+
+# VCS / CI
+.git/
+.github/
+.gitattributes
+.gitignore
+
+# Python venvs and bytecode
+.venv/
+__pycache__/
+*.py[cod]
+
+# Not needed in the image
+tests/
+screenshots/
+requirements-dev.txt
+docker-compose.yml
+docker-compose.dev.yml

@@ -472,7 +472,16 @@ def submit_expense(event_id: int):
             ext = os.path.splitext(safe_name)[1].lower()
             if ext in receipt_exts:
                 data = file.read()
-                if len(data) <= receipt_max:
+                # Magic-byte check: the client-claimed content type is not
+                # trusted (same rule as the documents blueprint).
+                from app.blueprints.documents.routes import _ALLOWED_EXTENSIONS, _detect_mime
+
+                detected = _detect_mime(data)
+                if detected != _ALLOWED_EXTENSIONS[ext]:
+                    flash("Format de justificatif non supporté (JPEG, PNG, GIF, WebP, PDF).", "warning")
+                elif len(data) > receipt_max:
+                    flash("Le justificatif dépasse 10 Mo.", "warning")
+                else:
                     slug = (
                         re.sub(r"[^a-z0-9]+", "-", os.path.splitext(safe_name)[0].lower()).strip(
                             "-"
@@ -485,7 +494,7 @@ def submit_expense(event_id: int):
                         stored_filename=stored_name,
                         type=DocumentType.RECEIPT.value,
                         category="receipt",
-                        mime_type=file.content_type or "application/octet-stream",
+                        mime_type=detected,
                         size_bytes=len(data),
                         uploaded_by_id=current_user.id,
                         description=f"Justificatif — {form.description.data.strip()[:100]}",
@@ -514,8 +523,6 @@ def submit_expense(event_id: int):
                             fh.write(data)
 
                     expense.receipt_document_id = doc.id
-                else:
-                    flash("Le justificatif dépasse 10 Mo.", "warning")
             else:
                 flash("Format de justificatif non supporté (JPEG, PNG, GIF, WebP, PDF).", "warning")
 
@@ -1626,7 +1633,16 @@ def volunteer_upload_media(personal_token: str):
         flash(f"Le fichier dépasse la limite de {max_size // (1024 * 1024)} Mo.", "danger")
         return redirect(back)
 
-    doc_type = DocumentType.VIDEO.value if ext in (".mp4", ".webm") else DocumentType.PHOTO.value
+    # Magic-byte check: the client-claimed content type is not trusted on a
+    # token-gated public route (same rule as the documents blueprint).
+    from app.blueprints.documents.routes import _PHOTO_MIMES, _VIDEO_MIMES, _detect_mime
+
+    detected = _detect_mime(data)
+    if detected not in (_PHOTO_MIMES | _VIDEO_MIMES):
+        flash("Seuls les photos et vidéos sont autorisés.", "danger")
+        return redirect(back)
+
+    doc_type = DocumentType.VIDEO.value if detected in _VIDEO_MIMES else DocumentType.PHOTO.value
     import re
 
     slug = (
@@ -1639,7 +1655,7 @@ def volunteer_upload_media(personal_token: str):
         original_filename=file.filename,
         stored_filename=stored_name,
         type=doc_type,
-        mime_type=file.content_type or "application/octet-stream",
+        mime_type=detected,
         size_bytes=len(data),
         uploaded_by_id=event.created_by_id,
         description=f"Ajouté par {volunteer.name}",

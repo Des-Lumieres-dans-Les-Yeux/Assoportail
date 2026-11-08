@@ -142,14 +142,14 @@ class EmailRule(db.Model):
     match_mode: Mapped[str] = mapped_column(String(10), nullable=False, default=MatchMode.ALL.value)
     conditions: Mapped[list] = mapped_column(JSON, nullable=False)
     actions: Mapped[list] = mapped_column(JSON, nullable=False)
-    created_by_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
+    created_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
-    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_id])
 
     def __repr__(self) -> str:
         return f"<EmailRule {self.name!r} active={self.is_active}>"

@@ -99,6 +99,10 @@ class InstallMachineForm(FlaskForm):
         default=date.today,
     )
     notes = TextAreaField("Notes", validators=[Optional(), Length(max=500)])
+    web_link = StringField(
+        "Lien web de l'installation",
+        validators=[Optional(), Length(max=500)],
+    )
     mark_center_inactive = BooleanField(
         "Marquer le centre comme inactif",
         validators=[Optional()],

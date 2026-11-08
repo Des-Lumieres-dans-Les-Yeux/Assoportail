@@ -55,7 +55,7 @@
     {% endif %}
   </dd>
   <dt class="col-sm-4">Créé par</dt>
-  <dd class="col-sm-8">{{ post.created_by.full_name }} — {{ post.created_at.strftime('%d/%m/%Y %H:%M') }}</dd>
+  <dd class="col-sm-8">{{ post.created_by.full_name if post.created_by else "—" }} — {{ post.created_at.strftime('%d/%m/%Y %H:%M') }}</dd>
   {% if post.scheduled_at %}
   <dt class="col-sm-4">Planifié le</dt>
   <dd class="col-sm-8">{{ post.scheduled_at.strftime('%d/%m/%Y à %H:%M') }}</dd>

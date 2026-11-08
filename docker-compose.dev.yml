@@ -14,7 +14,9 @@ services:
       POSTGRES_PASSWORD: devpassword
       POSTGRES_DB: assoportail_dev
     ports:
-      - "${DB_PORT:-5432}:5432"
+      # 127.0.0.1 only: dev Postgres/Redis must not be reachable from the LAN
+      # (unauthenticated in dev; the app connects via the host interface).
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata_dev:/var/lib/postgresql/data
     healthcheck:
@@ -26,7 +28,8 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # 127.0.0.1 only: see the db service above.
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
 
 volumes:
   pgdata_dev:

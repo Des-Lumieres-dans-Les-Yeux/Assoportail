@@ -95,7 +95,21 @@ class Config:
 
     # Talisman keyword arguments unpacked in create_app()
     TALISMAN_FORCE_HTTPS: bool = False
+    # Origin allowed to embed the vitrine pages in an iframe (e.g. the
+    # association's WordPress site). No other page is frameable.
     WORDPRESS_URL: str = os.environ.get("WORDPRESS_URL", "")
+    _FRAME_ANCESTORS_EXTRA: list = []
+    if WORDPRESS_URL:
+        if "https://www." in WORDPRESS_URL:
+            _FRAME_ANCESTORS_EXTRA = [
+                WORDPRESS_URL,
+                WORDPRESS_URL.replace("https://www.", "https://"),
+            ]
+        else:
+            _FRAME_ANCESTORS_EXTRA = [
+                WORDPRESS_URL,
+                WORDPRESS_URL.replace("https://", "https://www."),
+            ]
     TALISMAN_CSP: dict = {
         "default-src": "'self'",
         "script-src": ["'self'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
@@ -120,17 +134,15 @@ class Config:
         ],
         "connect-src": ["'self'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
         "worker-src": "'self'",
-        "frame-ancestors": ["'self'"]
-        + (
-            [
-                os.environ.get("WORDPRESS_URL"),
-                os.environ.get("WORDPRESS_URL").replace("https://www.", "https://")
-                if "https://www." in os.environ.get("WORDPRESS_URL")
-                else os.environ.get("WORDPRESS_URL").replace("https://", "https://www."),
-            ]
-            if os.environ.get("WORDPRESS_URL")
-            else []
-        ),
+        # Site-wide framing is self-only; the WordPress origin is granted to
+        # the vitrine pages alone (VITRINE_TALISMAN_CSP below).
+        "frame-ancestors": "'self'",
+    }
+    # CSP for the public vitrine pages: the global one plus the documented
+    # WordPress iframe origin (README: "Origine iframe autorisée pour la vitrine").
+    VITRINE_TALISMAN_CSP: dict = {
+        **TALISMAN_CSP,
+        "frame-ancestors": ["'self'", *_FRAME_ANCESTORS_EXTRA],
     }
 
 
@@ -158,7 +170,16 @@ class ProductionConfig(Config):
 
     @classmethod
     def _validate(cls) -> None:
-        insecure_defaults = {"dev-secret-key-change-me", "dev-csrf-key-change-me", "", None}
+        insecure_defaults = {
+            "dev-secret-key-change-me",
+            "dev-csrf-key-change-me",
+            # .env.example placeholders: pasting the example file unmodified
+            # must not boot a production instance.
+            "change-me-to-a-long-random-string",
+            "change-me-to-another-long-random-string",
+            "",
+            None,
+        }
         if cls.SECRET_KEY in insecure_defaults:
             raise RuntimeError("SECRET_KEY must be set to a strong random value in production.")
         if cls.WTF_CSRF_SECRET_KEY in insecure_defaults:
@@ -169,6 +190,16 @@ class ProductionConfig(Config):
             raise RuntimeError("ENCRYPTION_KEYS must be set in production.")
         if not cls.SQLALCHEMY_DATABASE_URI:
             raise RuntimeError("DATABASE_URL must be set in production.")
+        redis_url = cls.RATELIMIT_STORAGE_URI or ""
+        if "changeme" in redis_url or "redis://:@" in redis_url:
+            raise RuntimeError(
+                "REDIS_PASSWORD must be set to a strong value in production "
+                "(it is embedded in REDIS_URL)."
+            )
+        if cls.ADMIN_PASSWORD == "change-me-immediately":
+            # .env.example placeholder: the seeded first-run admin would have
+            # a publicly known password.
+            raise RuntimeError("ADMIN_PASSWORD must be changed in production.")
 
 
 class TestingConfig(Config):

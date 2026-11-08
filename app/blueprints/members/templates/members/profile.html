@@ -42,16 +42,21 @@
        style="max-width: 30rem;">
     <div>
       <strong class="d-block">Authentification à deux facteurs (2FA)</strong>
-      {% if member.totp_secret %}
+      {% if member.totp_enrolled %}
       <span class="text-success small"><i class="bi bi-shield-check me-1" aria-hidden="true"></i>Activée</span>
       {% else %}
       <span class="text-muted small"><i class="bi bi-shield me-1" aria-hidden="true"></i>Désactivée</span>
       {% endif %}
     </div>
-    {% if member.totp_secret %}
+    {% if member.totp_enrolled %}
     <form method="post" action="{{ url_for('auth.disable_totp') }}"
-          data-confirm="Désactiver la 2FA ? Votre compte sera moins sécurisé.">
+          data-confirm="Désactiver la 2FA ? Votre compte sera moins sécurisé."
+          class="d-flex align-items-center gap-2">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="text" name="code" pattern="[0-9]{6}" autocomplete="one-time-code"
+             inputmode="numeric" maxlength="6" required
+             class="form-control form-control-sm" style="width: 6.5rem;"
+             placeholder="Code 2FA" aria-label="Code 2FA">
       <button type="submit" class="btn btn-outline-danger btn-sm">Désactiver</button>
     </form>
     {% else %}

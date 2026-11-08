@@ -173,6 +173,13 @@ def preview(campaign_id: int):
     # ── Center-specific URLs (empty when audience has no center recipients) ─────
 
     if selected_center:
+        from app.models.center import Center
+
+        # Same row lock as the send task: the preview's lazy mint must not
+        # race with a concurrent campaign minting this center's tokens.
+        selected_center = db.session.execute(
+            db.select(Center).where(Center.id == selected_center.id).with_for_update()
+        ).scalar_one()
         dirty = False
         if not selected_center.feedback_token:
             selected_center.feedback_token = _secrets.token_urlsafe(32)

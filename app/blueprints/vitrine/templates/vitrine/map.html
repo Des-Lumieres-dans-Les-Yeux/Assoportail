@@ -11,15 +11,18 @@
         .popup-content { font-family: sans-serif; min-width: 150px; }
         .popup-title { font-weight: bold; font-size: 1.1em; color: #1e40af; margin-bottom: 4px; }
         .popup-city { color: #64748b; font-size: 0.9em; margin-bottom: 8px; }
-        .popup-badge { 
-            display: inline-block; 
-            background: #dcfce7; 
-            color: #166534; 
-            padding: 2px 8px; 
-            border-radius: 9999px; 
-            font-size: 0.8em; 
+        .popup-badge {
+            display: inline-block;
+            background: #dcfce7;
+            color: #166534;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 0.8em;
             font-weight: 600;
         }
+        .popup-link { margin-top: 8px; font-size: 0.85em; }
+        .popup-link a { color: #1e40af; font-weight: 600; text-decoration: none; }
+        .popup-link a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -35,23 +38,42 @@
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        const centers = {{ centers_json | safe }};
+        // Les champs des centres sont des données non fiables (saisies par
+        // des membres) : échappement HTML systématique, aucun HTML brut.
+        function esc(value) {
+            const span = document.createElement('span');
+            span.textContent = value == null ? '' : String(value);
+            return span.innerHTML;
+        }
+
+        // Lien web : uniquement http(s) (pas de javascript: ni relatif).
+        function safeHttpUrl(value) {
+            return typeof value === 'string' && /^https?:\/\//i.test(value) ? value : null;
+        }
+
+        const centers = {{ centers_data | tojson }};
         const markers = [];
 
         centers.forEach(center => {
             if (center.lat && center.lng) {
                 const marker = L.marker([center.lat, center.lng]).addTo(map);
-                
+
+                const webLink = safeHttpUrl(center.web_link);
+                const meta = [];
+                if (center.pathology) {
+                    meta.push('🩺 ' + center.pathology.charAt(0).toUpperCase() + center.pathology.slice(1));
+                }
+                if (center.target_audience) {
+                    meta.push('👥 ' + center.target_audience.charAt(0).toUpperCase() + center.target_audience.slice(1));
+                }
+
                 const popupHtml = `
                     <div class="popup-content">
-                        <div class="popup-title">${center.name}</div>
-                        <div class="popup-city">${center.city} (${center.zip_code})</div>
-                        <div style="font-size: 0.85em; color: #475569; margin-bottom: 8px;">
-                            ${center.pathology ? '🩺 ' + center.pathology.charAt(0).toUpperCase() + center.pathology.slice(1) : ''}
-                            ${center.pathology && center.target_audience ? ' • ' : ''}
-                            ${center.target_audience ? '👥 ' + center.target_audience.charAt(0).toUpperCase() + center.target_audience.slice(1) : ''}
-                        </div>
-                        <div class="popup-badge">🕹️ ${center.machine_name}</div>
+                        <div class="popup-title">${esc(center.name)}</div>
+                        <div class="popup-city">${esc(center.city)} (${esc(center.zip_code)})</div>
+                        ${meta.length ? `<div style="font-size: 0.85em; color: #475569; margin-bottom: 8px;">${esc(meta.join(' • '))}</div>` : ''}
+                        <div class="popup-badge">🕹️ ${esc(center.machine_name)}</div>
+                        ${webLink ? `<div class="popup-link"><a href="${esc(webLink)}" target="_blank" rel="noopener">📝 Billet du blog</a></div>` : ''}
                     </div>
                 `;
                 
@@ -60,7 +82,15 @@
                     offset: L.point(0, -20)
                 });
 
-                marker.on('mouseover', function(e) {
+                // Aperçu au survol seulement quand aucune bulle n'est ouverte :
+                // une bulle ouverte reste stable et son lien reste cliquable.
+                marker.on('mouseover', function() {
+                    if (!map._popup) this.openPopup();
+                });
+
+                // Clic : bulle stable et lien cliquable. Le clic par défaut de Leaflet
+                // referme une bulle déjà ouverte (toggle) ; on la rouvre à chaque clic.
+                marker.on('click', function() {
                     this.openPopup();
                 });
                 

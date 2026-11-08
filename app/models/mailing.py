@@ -67,8 +67,8 @@ class MailingCampaign(db.Model):
     )
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_by_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
+    created_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
@@ -80,7 +80,7 @@ class MailingCampaign(db.Model):
     stats_bounced: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     stats_opened: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_id])
     recipients: Mapped[list[MailingRecipient]] = relationship(
         "MailingRecipient", back_populates="campaign", cascade="all, delete-orphan"
     )

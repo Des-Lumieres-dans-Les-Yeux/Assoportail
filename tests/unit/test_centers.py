@@ -1,5 +1,6 @@
 """Unit tests for centers — CRUD, breakdown reporting, feedback moderation."""
 
+import re
 import secrets
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import patch
@@ -426,3 +427,57 @@ class TestSendDocuments:
         with patch("app.services.mailer.send_center_documents_email") as mock_send:
             bureau_client.post(f"/centers/{cid}/send-documents", data={}, follow_redirects=True)
         mock_send.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Machine actions modal preselect + vitrine map web link
+# ---------------------------------------------------------------------------
+
+
+class TestCenterDetailPreselect:
+    def test_modal_preselects_installed_machine_and_center(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
+        """On a center page, the machine in place and the center itself are
+        preselected in the move/panne modal selectors."""
+        mid = _make_machine(app)
+        cid = _make_center(app)
+        _install(app, mid, cid)
+
+        html = bureau_client.get(f"/centers/{cid}").data.decode()
+
+        # Both machine selectors (move + panne tabs) preselect the installed machine.
+        machine_opts = re.findall(rf'<option value="{mid}" data-name="[^"]*"\s+selected>', html)
+        assert len(machine_opts) == 2
+        # The center selector preselects the current center.
+        assert f'<option value="{cid}" selected>' in html
+
+    def test_modal_not_preselected_without_active_installation(
+        self, app: Flask, bureau_client: FlaskClient
+    ) -> None:
+        _mid = _make_machine(app)
+        cid = _make_center(app)
+
+        html = bureau_client.get(f"/centers/{cid}").data.decode()
+        assert re.search(r'<option value="\d+" data-name="[^"]*"\s+selected>', html) is None
+        assert f'<option value="{cid}" selected>' not in html
+
+    def test_vitrine_map_shows_installation_web_link(self, app: Flask, client: FlaskClient) -> None:
+        mid = _make_machine(app)
+        cid = _make_center(app)
+        with app.app_context():
+            center = _db.session.get(Center, cid)
+            center.latitude = 48.8566
+            center.longitude = 2.3522
+            inst = MachineInstallation(
+                machine_id=mid,
+                center_id=cid,
+                installed_at=date.today(),
+                web_link="https://blog.asso.example.org/inauguration-chu-nord",
+            )
+            _db.session.add(inst)
+            _db.session.commit()
+
+        html = client.get("/vitrine/map").data.decode()
+        assert "https://blog.asso.example.org/inauguration-chu-nord" in html
+        assert "Billet du blog" in html

@@ -80,7 +80,7 @@
     {{ form.address(class="form-control", id=form.address.id, autocomplete="street-address") }}
   </div>
 
-  <div id="permissions-section" class="card mb-3 {% if form.role.data == 'bureau' %}d-none{% endif %}">
+  <div id="permissions-section" class="card mb-3 {% if form.role.data == 'bureau' %}d-none{% endif %}" data-member-excluded='{{ member_excluded | tojson }}'>
     <div class="card-header py-2">
       <h2 class="h6 mb-0">{{ form.permissions.label.text }}</h2>
     </div>

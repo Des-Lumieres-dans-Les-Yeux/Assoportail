@@ -113,6 +113,12 @@ def send_campaign(self, campaign_id: int) -> dict:
         batch_size = current_app.config.get("MAILING_BATCH_SIZE", 10) if rate_limit > 0 else None
 
         result = _send_recipients(campaign_id, client, batch_size=batch_size)
+    except Exception as exc:
+        # Unexpected crash (DB hiccup, ...): retry the whole batch a couple of
+        # times (max_retries=2). Progress is committed per recipient, so a
+        # retry never re-sends an email.
+        logger.exception("Campaign %d crashed unexpectedly", campaign_id)
+        raise self.retry(exc=exc, countdown=300) from exc
     finally:
         lock_conn.exec_driver_sql(
             "SELECT pg_advisory_unlock(%s, %s)", (_LOCK_NAMESPACE, campaign_id)
@@ -273,6 +279,22 @@ def _resolve_recipients(campaign: MailingCampaign) -> None:
                 )
 
 
+def _is_transient_send_error(exc: Exception) -> bool:
+    """True when a send failure is worth retrying instead of a permanent bounce.
+
+    Gmail quota (429), server errors (5xx) and network failures are transient:
+    the recipient must stay PENDING so the next rescheduled batch retries it.
+    Any other HTTP 4xx is a definitive rejection of this recipient (invalid
+    address, blocked account, ...) → mark BOUNCED.
+    """
+    status = getattr(exc, "status", None)
+    if status is None:
+        status = getattr(getattr(exc, "resp", None), "status", None)
+    if isinstance(status, int):
+        return status == 429 or 500 <= status < 600
+    return True  # no HTTP status (network, socket, unknown) → retry
+
+
 def _send_recipients(campaign_id: int, client, *, batch_size: int | None = None) -> dict:
     """Send emails for up to ``batch_size`` pending recipients.
 
@@ -355,7 +377,19 @@ def _send_recipients(campaign_id: int, client, *, batch_size: int | None = None)
             recipient_body = body_html
 
             if recipient.center:
-                center = recipient.center
+                from app.models.center import Center
+
+                # Lock the center row: a concurrent campaign's uncommitted
+                # token mint would otherwise overwrite ours (last-writer-wins
+                # race deadening the public links in already-sent emails).
+                center = (
+                    db.session.execute(
+                        db.select(Center)
+                        .where(Center.id == recipient.center.id)
+                        .with_for_update()
+                    )
+                    .scalar_one()
+                )
                 import secrets
 
                 dirty = False
@@ -418,11 +452,21 @@ def _send_recipients(campaign_id: int, client, *, batch_size: int | None = None)
             recipient.sent_at = datetime.now(UTC)
             sent += 1
 
-        except Exception:
-            logger.exception("Failed to send to %r for campaign %d", recipient.email, campaign_id)
-            recipient.status = RecipientStatus.BOUNCED.value
-            recipient.bounced_at = datetime.now(UTC)
-            bounced += 1
+        except Exception as exc:
+            if _is_transient_send_error(exc):
+                logger.warning(
+                    "Transient send failure for %r (campaign %d) — kept PENDING for the next batch",
+                    recipient.email,
+                    campaign_id,
+                )
+            else:
+                logger.exception(
+                    "Failed to send to %r for campaign %d", recipient.email, campaign_id
+                )
+                recipient.status = RecipientStatus.BOUNCED.value
+                recipient.bounced_at = datetime.now(UTC)
+                recipient.bounce_type = "hard"
+                bounced += 1
 
         # Commit after each recipient to save progress and avoid long-running
         # transactions. Throttling between sends is handled by the caller

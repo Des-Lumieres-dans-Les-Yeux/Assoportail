@@ -305,7 +305,17 @@ document.addEventListener('DOMContentLoaded', function () {
   var section = document.getElementById('permissions-section');
   if (!section) return;
   var checkboxes = section.querySelectorAll('input[type="checkbox"]');
+  // Source of truth is server-side (models/user.py), rendered as JSON in the
+  // section's data attribute; the hardcoded list below is only a fallback.
   var memberExcluded = ['treasury', 'members', 'mailing'];
+  var excludedJson = section.getAttribute('data-member-excluded');
+  if (excludedJson) {
+    try {
+      memberExcluded = JSON.parse(excludedJson);
+    } catch (e) {
+      /* keep the fallback list */
+    }
+  }
 
   roleSelect.addEventListener('change', function () {
     if (roleSelect.value === 'bureau') {

@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac as _hmac
 import logging
+import mimetypes
 import os
 import re
 import secrets
@@ -21,10 +22,9 @@ from app.blueprints.centers.forms import (
     CenterForm,
     FeedbackForm,
     InstallationRequestForm,
-    InstallMachineForm,
 )
 from app.blueprints.documents.routes import _detect_mime
-from app.decorators import any_permission_required, bureau_required, permission_required
+from app.decorators import bureau_required, permission_required
 from app.extensions import db, limiter
 from app.models.center import (
     Center,
@@ -220,7 +220,10 @@ def detail(center_id: int):
 
     breakdown_form = BreakdownReportForm()
     contact_form = CenterContactForm()
-    install_form = InstallMachineForm()
+
+    # Pre-fill the machine-actions modal with this center's current machine.
+    active_installations = center.active_installations
+    preselect_machine_id = active_installations[0].machine_id if active_installations else None
 
     # Machines not currently installed anywhere (status=STOCK)
     available_machines = db.session.scalars(
@@ -228,10 +231,6 @@ def detail(center_id: int):
         .where(Machine.status == MachineStatus.STOCK)
         .order_by(Machine.manufacturer, Machine.model)
     ).all()
-    install_form.machine_id.choices = [
-        (m.id, m.display_name + (f" [{m.internal_number}]" if m.internal_number else ""))
-        for m in available_machines
-    ]
 
     # Options for the unified machine-actions modal (move + breakdown).
     centers_choices = [
@@ -260,11 +259,11 @@ def detail(center_id: int):
         center=center,
         breakdown_form=breakdown_form,
         contact_form=contact_form,
-        install_form=install_form,
         available_machines=available_machines,
         centers_choices=centers_choices,
         members_choices=members_choices,
         modal_machines=all_machines,
+        preselect_machine_id=preselect_machine_id,
         today=date.today().isoformat(),
     )
 
@@ -628,55 +627,6 @@ def detach_photo(center_id: int, document_id: int):
     )
     db.session.commit()
     flash("Photo détachée.", "info")
-    return redirect(url_for("centers.detail", center_id=center_id))
-
-
-# ---------------------------------------------------------------------------
-# Machine installation — bureau only
-# ---------------------------------------------------------------------------
-
-
-@bp.route("/<int:center_id>/install", methods=["POST"])
-@any_permission_required(UserPermission.CENTERS, UserPermission.MACHINES)
-def install_machine(center_id: int):
-    """Install an available machine into a center and activate the center."""
-    center = db.session.get(Center, center_id)
-    if center is None:
-        abort(404)
-
-    # Rebuild choices so validation works
-    available_machines = db.session.scalars(
-        db.select(Machine)
-        .where(Machine.status == MachineStatus.STOCK)
-        .order_by(Machine.manufacturer, Machine.model)
-    ).all()
-    install_form = InstallMachineForm()
-    install_form.machine_id.choices = [(m.id, m.display_name) for m in available_machines]
-
-    if install_form.validate_on_submit():
-        machine = db.session.get(Machine, install_form.machine_id.data)
-        if machine is None or machine.status != MachineStatus.STOCK:
-            flash("Machine introuvable ou déjà installée.", "danger")
-            return redirect(url_for("centers.detail", center_id=center_id))
-
-        installation = MachineInstallation(
-            machine_id=machine.id,
-            center_id=center_id,
-            installed_at=install_form.installed_at.data,
-        )
-        machine.status = MachineStatus.INSTALLED
-        center.status = CenterStatus.ACTIVE
-        db.session.add(installation)
-        db.session.commit()
-        flash(
-            f"{machine.display_name} installée. Le centre est maintenant actif.",
-            "success",
-        )
-    else:
-        for field_errors in install_form.errors.values():
-            for error in field_errors:
-                flash(error, "danger")
-
     return redirect(url_for("centers.detail", center_id=center_id))
 
 
@@ -1745,9 +1695,12 @@ def sign_document_download(token: str):
             from app.services.drive import DriveService
 
             data = DriveService.from_db().download_file(doc.drive_file_id)
+            # Content-Type is derived from the server-stored filename, never
+            # from doc.mime_type (legacy rows may hold the client claim).
             return Response(
                 data,
-                mimetype=doc.mime_type or "application/octet-stream",
+                mimetype=mimetypes.guess_type(doc.stored_filename)[0]
+                or "application/octet-stream",
                 headers={
                     "Content-Disposition": f'attachment; filename="{doc.original_filename}"',
                     "Cache-Control": "private, no-store",

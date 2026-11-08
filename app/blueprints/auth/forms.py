@@ -2,7 +2,7 @@
 
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, EmailField, PasswordField, SelectField, StringField
-from wtforms.validators import DataRequired, Email, EqualTo, Length
+from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional
 
 
 class LoginForm(FlaskForm):
@@ -58,7 +58,11 @@ class CreateUserForm(FlaskForm):
 
 
 class TotpCodeForm(FlaskForm):
-    """Form for entering a 6-digit TOTP code (setup confirmation and login verification)."""
+    """Form for entering a 6-digit TOTP code (setup confirmation and login verification).
+
+    ``current_code`` is only used by the setup route when a secret is already
+    enrolled (step-up before replacing it); the other consumers ignore it.
+    """
 
     code = StringField(
         "Code à 6 chiffres",
@@ -66,6 +70,10 @@ class TotpCodeForm(FlaskForm):
             DataRequired(message="Le code est requis."),
             Length(min=6, max=6, message="Le code doit contenir exactement 6 chiffres."),
         ],
+    )
+    current_code = StringField(
+        "Code de votre authentificateur actuel",
+        validators=[Optional()],
     )
 
 

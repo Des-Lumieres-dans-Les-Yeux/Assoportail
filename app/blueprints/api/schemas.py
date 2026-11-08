@@ -67,11 +67,14 @@ class SlotOut(_Base):
 
 
 class VolunteerOut(_Base):
-    """Représentation d'un bénévole inscrit."""
+    """Représentation d'un bénévole inscrit.
+
+    ``email`` est optionnel : il n'est rempli que pour les appels du bureau.
+    """
 
     id: int
     name: str
-    email: str
+    email: str | None = None
     confirmed: bool
     registered_at: datetime
 

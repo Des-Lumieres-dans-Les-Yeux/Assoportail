@@ -38,7 +38,7 @@
     {% endif %}
     <td style="padding:6px 10px; border:1px solid #bbb;">
       <div style="font-size:7px; text-transform:uppercase; letter-spacing:0.7px; color:#777; font-weight:bold;">Organisateur</div>
-      <div style="font-size:10px; font-weight:bold;">{{ event.created_by.full_name }}</div>
+      <div style="font-size:10px; font-weight:bold;">{{ event.created_by.full_name if event.created_by else "—" }}</div>
     </td>
     <td width="10%" style="padding:6px 10px; border:1px solid #bbb;">
       <div style="font-size:7px; text-transform:uppercase; letter-spacing:0.7px; color:#777; font-weight:bold;">Inscrits</div>

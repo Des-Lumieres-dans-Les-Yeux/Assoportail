@@ -119,8 +119,8 @@ class Document(db.Model):
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
-    uploaded_by_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
+    uploaded_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
@@ -129,7 +129,7 @@ class Document(db.Model):
     drive_file_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     drive_web_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    uploaded_by: Mapped[User] = relationship("User", foreign_keys=[uploaded_by_id])
+    uploaded_by: Mapped[User | None] = relationship("User", foreign_keys=[uploaded_by_id])
 
     @property
     def subdir(self) -> str:

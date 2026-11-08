@@ -234,43 +234,66 @@ def sync_helloasso_memberships(
 
             order_id = str(item.order.id)
 
-            existing = db.session.execute(
-                db.select(Membership).filter_by(helloasso_order_id=order_id)
-            ).scalar_one_or_none()
-            if existing:
+            try:
+                with db.session.begin_nested():
+                    existing = db.session.execute(
+                        db.select(Membership).filter_by(helloasso_order_id=order_id)
+                    ).scalar_one_or_none()
+
+                    if not existing:
+                        email = (
+                            item.user.email if item.user else item.order.payer.email
+                        ).lower()
+
+                        user = db.session.execute(
+                            db.select(User).filter_by(email=email)
+                        ).scalar_one_or_none()
+
+                        if not user:
+                            first = (
+                                item.user.first_name
+                                if item.user
+                                else item.order.payer.first_name
+                            )
+                            last = (
+                                item.user.last_name
+                                if item.user
+                                else item.order.payer.last_name
+                            )
+                            user = User(
+                                email=email,
+                                first_name=first,
+                                last_name=last,
+                                role=UserRole.MEMBER,
+                                is_active=True,
+                            )
+                            user.set_password(_random_password())
+                            db.session.add(user)
+                            db.session.flush()  # populate user.id before the FK insert
+
+                        started = item.order.date.date()
+                        membership = Membership(
+                            user_id=user.id,
+                            source=MembershipSource.HELLOASSO,
+                            amount=Decimal(item.amount) / 100,
+                            started_at=started,
+                            expires_at=started + timedelta(days=MEMBERSHIP_DURATION_DAYS),
+                            helloasso_order_id=order_id,
+                            is_pending=False,
+                        )
+                        db.session.add(membership)
+                        created += 1
+                        logger.info(
+                            "Imported HelloAsso membership for %s (order %s)",
+                            email,
+                            order_id,
+                        )
+            except Exception:
+                # One malformed donor item (e.g. name/email too long for the
+                # columns) must not roll back the whole run: the savepoint
+                # undoes only this item, the next is processed normally.
+                logger.exception("Skipping malformed HelloAsso item (order %s)", order_id)
                 continue
-
-            email = (item.user.email if item.user else item.order.payer.email).lower()
-
-            user = db.session.execute(db.select(User).filter_by(email=email)).scalar_one_or_none()
-
-            if not user:
-                first = item.user.first_name if item.user else item.order.payer.first_name
-                last = item.user.last_name if item.user else item.order.payer.last_name
-                user = User(
-                    email=email,
-                    first_name=first,
-                    last_name=last,
-                    role=UserRole.MEMBER,
-                    is_active=True,
-                )
-                user.set_password(_random_password())
-                db.session.add(user)
-                db.session.flush()  # populate user.id before the FK insert
-
-            started = item.order.date.date()
-            membership = Membership(
-                user_id=user.id,
-                source=MembershipSource.HELLOASSO,
-                amount=Decimal(item.amount) / 100,
-                started_at=started,
-                expires_at=started + timedelta(days=MEMBERSHIP_DURATION_DAYS),
-                helloasso_order_id=order_id,
-                is_pending=False,
-            )
-            db.session.add(membership)
-            created += 1
-            logger.info("Imported HelloAsso membership for %s (order %s)", email, order_id)
 
         if page >= page_data.total_pages:
             break

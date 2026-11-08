@@ -323,7 +323,7 @@ def send_cerfa_email(transaction_id: int):
             " ".join(filter(None, [transaction.donor_first_name, transaction.donor_name]))
             or "Donateur"
         )
-        send_cerfa_receipt_email(
+        sent = send_cerfa_receipt_email(
             to_email=to_email,
             donor_name=donor_display,
             amount=f"{transaction.amount:.2f} €",
@@ -333,6 +333,17 @@ def send_cerfa_email(transaction_id: int):
     except Exception as exc:
         logger.exception("CERFA email send failed for transaction %d", transaction_id)
         flash(f"Échec de l'envoi du CERFA : {exc}", "danger")
+        return redirect(url_for("treasury.detail", transaction_id=transaction_id))
+
+    if not sent:
+        # Both channels failed silently (Gmail down + SMTP down): never mark
+        # the receipt as sent — the donor has not received it.
+        logger.error("CERFA delivery failed (Gmail API and SMTP) for transaction %d", transaction_id)
+        flash(
+            "Échec de l'envoi du CERFA : Gmail API et SMTP indisponibles. "
+            "Le reçu n'a pas été envoyé — réessayez.",
+            "danger",
+        )
         return redirect(url_for("treasury.detail", transaction_id=transaction_id))
 
     transaction.cerfa_sent_at = datetime.now(UTC)
@@ -396,7 +407,11 @@ def upload_cerfa_template(tpl_type: str):
 
     # Validate merge fields (in-kind letter: no "Montant_perçu" — uses "Don")
     required_fields = {"IDRECU", "Date", "Nom", "Don"}
-    missing = _check_merge_fields(data, required_fields)
+    try:
+        missing = _check_merge_fields(data, required_fields)
+    except ValueError:
+        flash("Le fichier DOCX est illisible — modèle non enregistré.", "danger")
+        return redirect(url_for("treasury.association_config"))
     if missing:
         flash(
             f"Champs de fusion manquants dans le modèle : {', '.join(sorted(missing))}. "
@@ -582,7 +597,7 @@ def export_xlsx():
         ws.cell(row=row_num, column=4, value=tx.description)
         ws.cell(row=row_num, column=5, value=tx.category or "")
         ws.cell(row=row_num, column=6, value=source_labels.get(tx.source, tx.source))
-        ws.cell(row=row_num, column=7, value=tx.created_by.full_name)
+        ws.cell(row=row_num, column=7, value=tx.created_by.full_name if tx.created_by else "")
         ws.cell(row=row_num, column=8, value=", ".join(t.label for t in tx.tags))
 
     for col in ws.columns:
@@ -748,6 +763,7 @@ def _known_donors() -> list[dict]:
             Transaction.donor_name.isnot(None),
         )
         .order_by(Transaction.date.desc(), Transaction.created_at.desc())
+        .limit(2000)  # carnet d'adresses: les 2000 dernières lignes suffisent
     ).all()
     donors: dict[str, dict] = {}
     for t in rows:
@@ -803,7 +819,12 @@ def _apply_donor_fields(form: TransactionForm, transaction: Transaction) -> None
 
 
 def _check_merge_fields(docx_bytes: bytes, required: set[str]) -> set[str]:
-    """Return the set of required merge fields missing from a DOCX template."""
+    """Return the set of required merge fields missing from a DOCX template.
+
+    Raises ValueError when the document cannot be inspected at all — the caller
+    must reject the upload (fail closed): an unreadable template would fail
+    later at receipt time, weeks after it was stored.
+    """
     import tempfile
 
     try:
@@ -821,5 +842,7 @@ def _check_merge_fields(docx_bytes: bytes, required: set[str]) -> set[str]:
             os.unlink(tmp_path)
         return required - found
     except Exception:
-        logger.warning("Could not inspect merge fields in uploaded DOCX")
-        return set()  # allow upload if inspection fails
+        logger.warning("Could not inspect merge fields in uploaded DOCX", exc_info=True)
+        raise ValueError(
+            "Impossible d'inspecter les champs de fusion du DOCX téléversé."
+        ) from None
