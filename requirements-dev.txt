@@ -7,5 +7,5 @@ bandit==1.8.0
 pip-audit==2.8.0
 testcontainers[postgres]==4.9.1
 playwright==1.49.0
-pytest-playwright==0.6.2
+pytest-playwright==0.9.0
 axe-playwright-python==0.1.3
