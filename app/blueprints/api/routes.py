@@ -203,6 +203,13 @@ def _json_error(message: str, status: int, code: str | None = None) -> tuple:
     return jsonify(body), status
 
 
+def _validation_error(exc: Exception) -> tuple:
+    """422 ``validation_error`` : message générique côté client, détail
+    complet (schéma, champ, valeur) loggé côté serveur uniquement (CWE-209)."""
+    logger.warning("API validation error: %s", exc)
+    return _json_error("Données invalides.", 422, "validation_error")
+
+
 # ---------------------------------------------------------------------------
 # POST /api/v1/events
 # ---------------------------------------------------------------------------
@@ -236,7 +243,7 @@ def create_event():
     try:
         payload = EventCreateIn.model_validate(raw)
     except Exception as exc:
-        return _json_error(str(exc), 422, "validation_error")
+        return _validation_error(exc)
 
     event = Event(
         title=payload.title.strip(),
@@ -290,7 +297,7 @@ def list_events():
     try:
         query = EventListQuery.model_validate(request.args.to_dict())
     except Exception as exc:
-        return _json_error(str(exc), 422, "validation_error")
+        return _validation_error(exc)
 
     stmt = db.select(Event).options(
         selectinload(Event.slots)
@@ -381,7 +388,7 @@ def add_slot(event_id: int):
     try:
         slot_in = SlotIn.model_validate(raw)
     except Exception as exc:
-        return _json_error(str(exc), 422, "validation_error")
+        return _validation_error(exc)
 
     slot = EventSlot(
         event_id=event_id,
@@ -508,7 +515,7 @@ def register_volunteer(event_id: int):
     try:
         payload = VolunteerIn.model_validate(raw)
     except Exception as exc:
-        return _json_error(str(exc), 422, "validation_error")
+        return _validation_error(exc)
 
     email = str(payload.email).strip().lower()
 
@@ -601,7 +608,7 @@ def set_availability(event_id: int, slot_id: int):
     try:
         payload = MemberAvailabilityIn.model_validate(raw)
     except Exception as exc:
-        return _json_error(str(exc), 422, "validation_error")
+        return _validation_error(exc)
 
     if not g.api_user.is_bureau:
         return _json_error("Affecter un membre est réservé au bureau.", 403, "forbidden")
@@ -654,7 +661,7 @@ def set_volunteer_availability(event_id: int, slot_id: int):
     try:
         payload = VolunteerAvailabilityIn.model_validate(raw)
     except Exception as exc:
-        return _json_error(str(exc), 422, "validation_error")
+        return _validation_error(exc)
 
     status = SlotAvailabilityStatus(payload.status)
 
@@ -739,7 +746,7 @@ def update_event(event_id: int):
     try:
         payload = EventPatchIn.model_validate(raw)
     except Exception as exc:
-        return _json_error(str(exc), 422, "validation_error")
+        return _validation_error(exc)
 
     # exclude_unset : distingue « champ absent » de « champ mis à null » (effacement).
     # Les champs NOT NULL (title, status, event_date) ne sont jamais effaçables.
@@ -822,7 +829,7 @@ def update_slot(event_id: int, slot_id: int):
     try:
         payload = SlotPatchIn.model_validate(raw)
     except Exception as exc:
-        return _json_error(str(exc), 422, "validation_error")
+        return _validation_error(exc)
 
     # exclude_unset : distingue « champ absent » de « champ mis à null » (effacement).
     fields = payload.model_dump(exclude_unset=True)
@@ -834,7 +841,7 @@ def update_slot(event_id: int, slot_id: int):
         if "end_time" in fields:
             slot.end_time = _parse_time(fields["end_time"])
     except ValueError as exc:
-        return _json_error(str(exc), 422, "validation_error")
+        return _validation_error(exc)
     if "label" in fields:
         slot.label = fields["label"]
 

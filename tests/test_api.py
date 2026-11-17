@@ -252,6 +252,57 @@ class TestCreateEvent:
 
 
 # ---------------------------------------------------------------------------
+# Hygiène des erreurs de validation (CWE-209) : le corps 422 renvoyé au
+# client ne doit exposer ni le nom du schéma Pydantic, ni le champ, ni la
+# valeur saisie — le détail complet reste loggé côté serveur.
+# ---------------------------------------------------------------------------
+
+
+class TestValidationErrorHygiene:
+    def test_malformed_limit_does_not_leak_schema_or_input(
+        self, client: FlaskClient, events_token: str
+    ) -> None:
+        resp = client.get(
+            "/api/v1/events?limit=abc", headers=_bearer(events_token)
+        )
+        assert resp.status_code == 422
+        body = resp.get_json()
+        assert body["error"] == "validation_error"
+        message = body["message"]
+        # Aucune fuite de structure interne ni d'écho de l'input.
+        assert "EventListQuery" not in message
+        assert "limit" not in message
+        assert "abc" not in message
+        assert "int_parsing" not in message
+
+    def test_invalid_body_does_not_leak_schema_or_input(
+        self, client: FlaskClient, events_token: str
+    ) -> None:
+        resp = client.post(
+            "/api/v1/events",
+            json={"title": "Test", "event_date": "2026-10-01T09:00:00", "status": "zzz_bogus"},
+            headers=_bearer(events_token),
+        )
+        assert resp.status_code == 422
+        body = resp.get_json()
+        assert body["error"] == "validation_error"
+        message = body["message"]
+        assert "EventCreateIn" not in message
+        assert "status" not in message
+        assert "zzz_bogus" not in message
+        assert "Valeurs acceptées" not in message
+
+    def test_validation_detail_is_logged_server_side(
+        self, client: FlaskClient, events_token: str, caplog
+    ) -> None:
+        with caplog.at_level("WARNING"):
+            client.get("/api/v1/events?limit=abc", headers=_bearer(events_token))
+        # Le détail Pydantic (schéma + champ) est bien loggé côté serveur.
+        assert any("EventListQuery" in r.message for r in caplog.records)
+        assert any("limit" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
 # 4. GET /api/v1/events
 # ---------------------------------------------------------------------------
 
