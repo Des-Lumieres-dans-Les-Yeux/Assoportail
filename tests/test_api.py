@@ -262,9 +262,7 @@ class TestValidationErrorHygiene:
     def test_malformed_limit_does_not_leak_schema_or_input(
         self, client: FlaskClient, events_token: str
     ) -> None:
-        resp = client.get(
-            "/api/v1/events?limit=abc", headers=_bearer(events_token)
-        )
+        resp = client.get("/api/v1/events?limit=abc", headers=_bearer(events_token))
         assert resp.status_code == 422
         body = resp.get_json()
         assert body["error"] == "validation_error"
